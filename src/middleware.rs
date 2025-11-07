@@ -1,0 +1,109 @@
+use crate::{
+    error::AppError,
+    models::{Claims, CurrentUser},
+    state::AppState,
+};
+use axum::{
+    extract::{Request, State},
+    http::HeaderMap,
+    middleware::Next,
+    response::Response,
+};
+use casbin::CoreApi;
+use jsonwebtoken::{decode, Validation};
+
+pub async fn mw_authenticate(
+    State(state): State<AppState>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, AppError> {
+    let token = extract_token(req.headers())
+        .ok_or_else(|| AppError::Unauthorized("Token não encontrado".to_string()))?;
+
+    let token_data = decode::<Claims>(&token, &state.decoding_key, &Validation::default())
+        .map_err(|e| {
+            tracing::debug!("Erro ao validar token: {}", e);
+            AppError::Unauthorized("Token inválido ou expirado".to_string())
+        })?;
+
+    let current_user = CurrentUser {
+        id: token_data.claims.sub,
+    };
+
+    req.extensions_mut().insert(current_user);
+
+    Ok(next.run(req).await)
+}
+
+fn extract_token(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get("Authorization")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .map(|s| s.to_string())
+}
+
+/// Middleware de Autorização usando Casbin
+pub async fn mw_authorize(
+    State(state): State<AppState>,
+    req: Request,
+    next: Next,
+) -> Result<Response, AppError> {
+    let user = req
+        .extensions()
+        .get::<CurrentUser>()
+        .ok_or_else(|| anyhow::anyhow!("CurrentUser não encontrado nas extensões"))?;
+
+    let subject = user.id.to_string();
+    let object = req.uri().path().to_string();
+    let action = req.method().to_string();
+
+    let cache_key = format!("{}:{}:{}", subject, object, action);
+
+    let cached_decision = {
+        let cache = state.policy_cache.read().await;
+        cache.get(&cache_key).copied()
+    };
+
+    let allowed = match cached_decision {
+        Some(decision) => {
+            tracing::debug!("Cache hit para: {}", cache_key);
+            decision
+        }
+        None => {
+            tracing::debug!("Cache miss para: {}", cache_key);
+
+            let decision = {
+                let enforcer_guard = state.enforcer.read().await;
+                enforcer_guard
+                    .enforce(vec![subject.clone(), object.clone(), action.clone()])
+                    .map_err(|e| anyhow::anyhow!("Erro no Casbin Enforcer: {}", e))?
+            };
+
+            {
+                let mut cache = state.policy_cache.write().await;
+                cache.insert(cache_key.clone(), decision);
+            }
+
+            decision
+        }
+    };
+
+    if !allowed {
+        tracing::warn!(
+            "Acesso negado: sub={}, obj={}, act={}",
+            subject,
+            object,
+            action
+        );
+        return Err(AppError::Forbidden);
+    }
+
+    tracing::info!(
+        "Acesso permitido: sub={}, obj={}, act={}",
+        subject,
+        object,
+        action
+    );
+    Ok(next.run(req).await)
+}

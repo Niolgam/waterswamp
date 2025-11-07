@@ -1,0 +1,87 @@
+# ---------------------------------------
+# Makefile.toml compatível com cargo-make 0.37.x
+# Carrega o .env manualmente antes das tasks
+# ---------------------------------------
+
+[tasks]
+
+# --- Tarefa para CRIAR o banco AUTH ---
+[tasks.create-db-auth]
+description = "Cria o banco de dados 'auth_db' (definido em WS_AUTH_DATABASE_URL)"
+script = [
+ "set -a",
+ # Garante que o .env seja carregado (assumindo que está na raiz)
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ # Exporta a URL específica para o sqlx-cli
+ "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "echo 'Criando banco de dados AUTH: $DATABASE_URL'",
+ # Roda o comando de criação
+ "sqlx database create"
+]
+
+# --- Tarefa para RODAR migração AUTH ---
+[tasks.migrate-auth]
+description = "Executa migrações do banco AUTH"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "echo 'Rodando migrações AUTH com $DATABASE_URL'",
+ # Roda o comando de migração
+ "sqlx migrate run --source migrations_auth"
+]
+
+# --- Tarefa para CRIAR nova migração de AUTENTICAÇÃO ---
+[tasks.new-migration-auth]
+description = "Cria um novo arquivo de migração SQL para o banco AUTH"
+# O cargo-make irá pedir pelo argumento 'name'
+# Ex: cargo make new-migration-auth name="nome_da_migration"
+script_runner = "@shell"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "echo 'Criando migração AUTH na pasta migrations_auth/'",
+ # O $1 pega o primeiro argumento passado na linha de comando (o 'name=')
+ "sqlx migrate add -r \"$@\" --source migrations_auth"
+]
+
+# --- Tarefa para CRIAR o banco LOGS ---
+[tasks.create-db-logs]
+description = "Cria o banco de dados 'logs_db' (definido em WS_LOGS_DATABASE_URL)"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_LOGS_DATABASE_URL",
+ "echo 'Criando banco de dados LOGS: $DATABASE_URL'",
+ "sqlx database create"
+]
+
+# --- Tarefa para RODAR migração LOGS ---
+[tasks.migrate-logs]
+description = "Executa migrações do banco LOGS"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_LOGS_DATABASE_URL",
+ "echo 'Rodando migrações LOGS com $DATABASE_URL'",
+ "sqlx migrate run --source migrations_logs"
+]
+
+# --- Tarefa para CRIAR nova migração de LOGS ---
+[tasks.new-migration-logs]
+description = "Cria um novo arquivo de migração SQL para o banco LOGS"
+script_runner = "@shell"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_LOGS_DATABASE_URL",
+ "echo 'Criando migração LOGS na pasta migrations_logs/'",
+ "sqlx migrate add -r \"$@\" --source migrations_logs"
+]
