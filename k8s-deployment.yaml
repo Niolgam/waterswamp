@@ -1,0 +1,314 @@
+# =============================================================================
+# KUBERNETES MANIFESTS - WATERSWAMP API
+# =============================================================================
+# Este arquivo contém todos os recursos Kubernetes necessários para deploy
+# em produção da Waterswamp API
+#
+# Recursos incluídos:
+# - Namespace
+# - ConfigMap (configurações não-sensíveis)
+# - Secret (configurações sensíveis - JWT, senhas DB)
+# - Deployment (API)
+# - Service (Load Balancer interno)
+# - HorizontalPodAutoscaler (auto-scaling baseado em CPU)
+# - PodDisruptionBudget (garante disponibilidade durante updates)
+#
+# =============================================================================
+---
+# -----------------------------------------------------------------------------
+# NAMESPACE - Isola recursos da aplicação
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: waterswamp
+  labels:
+    name: waterswamp
+    environment: production
+
+---
+# -----------------------------------------------------------------------------
+# CONFIGMAP - Configurações não-sensíveis
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waterswamp-config
+  namespace: waterswamp
+data:
+  ENVIRONMENT: "production"
+  RUST_LOG: "info"
+  RUST_LOG_FORMAT: "json"
+  CORS_ALLOW_ORIGINS: "https://app.seudominio.com,https://admin.seudominio.com"
+  DISABLE_RATE_LIMIT: "false"
+
+---
+# -----------------------------------------------------------------------------
+# SECRET - Configurações sensíveis (Base64 encoded)
+# -----------------------------------------------------------------------------
+# ⚠️ IMPORTANTE: Em produção, use um gerenciador de secrets como:
+#    - Kubernetes External Secrets
+#    - HashiCorp Vault
+#    - AWS Secrets Manager
+#    - Google Secret Manager
+#
+# Para gerar secrets base64:
+#   echo -n "seu_valor_aqui" | base64
+#
+apiVersion: v1
+kind: Secret
+metadata:
+  name: waterswamp-secrets
+  namespace: waterswamp
+type: Opaque
+data:
+  # ⚠️ ESTES SÃO VALORES DE EXEMPLO - SUBSTITUA EM PRODUÇÃO!
+  # JWT Secret (128 caracteres hex, base64 encoded)
+  WS_JWT_SECRET: M2QzZDc2MTcyY2I0MGJkZDQwOTczMTczNWJjOTY1ZmE2ZGVkNTFhZDE2NzdiMGExNjA0ZWY1ZmNlZjM3ZTE1OGU4N2E4NjkxMmE3YTJjMDY3ZGFiNzQ0NmZlYTdkMjMzY2Y0MWM1YzIzY2FiNTYxYjRlNDhhMTVmMjJlNzgxNDM=
+  
+  # Database URLs (formato: postgres://user:pass@host:port/db)
+  WS_AUTH_DATABASE_URL: cG9zdGdyZXM6Ly9wb3N0Z3JlczpwYXNzd29yZEBkYi1hdXRoLXNlcnZpY2U6NTQzMi9hdXRoX2Ri
+  WS_LOGS_DATABASE_URL: cG9zdGdyZXM6Ly9wb3N0Z3JlczpwYXNzd29yZEBkYi1sb2dzLXNlcnZpY2U6NTQzMi9sb2dzX2Ri
+
+---
+# -----------------------------------------------------------------------------
+# DEPLOYMENT - Definição da aplicação
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waterswamp-api
+  namespace: waterswamp
+  labels:
+    app: waterswamp-api
+    version: v1
+spec:
+  replicas: 3  # Começa com 3 réplicas (pode escalar automaticamente)
+  
+  # Estratégia de atualização rolling (zero downtime)
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Permite 1 pod extra durante update
+      maxUnavailable: 0  # Nunca deixa nenhum pod indisponível
+  
+  selector:
+    matchLabels:
+      app: waterswamp-api
+  
+  template:
+    metadata:
+      labels:
+        app: waterswamp-api
+        version: v1
+      annotations:
+        # Força restart quando ConfigMap ou Secret mudar
+        checksum/config: "{{ include (print $.Template.BasePath \"/configmap.yaml\") . | sha256sum }}"
+        checksum/secret: "{{ include (print $.Template.BasePath \"/secret.yaml\") . | sha256sum }}"
+    
+    spec:
+      # Security context (container rodando como não-root)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      containers:
+      - name: api
+        image: waterswamp-api:1.0.0  # ⚠️ Substitua pela sua imagem real
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        
+        # Variáveis de ambiente do ConfigMap
+        envFrom:
+        - configMapRef:
+            name: waterswamp-config
+        
+        # Variáveis de ambiente do Secret
+        env:
+        - name: WS_JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: waterswamp-secrets
+              key: WS_JWT_SECRET
+        - name: WS_AUTH_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: waterswamp-secrets
+              key: WS_AUTH_DATABASE_URL
+        - name: WS_LOGS_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: waterswamp-secrets
+              key: WS_LOGS_DATABASE_URL
+        
+        # Recursos (requests = garantido, limits = máximo)
+        resources:
+          requests:
+            cpu: 100m      # 0.1 core
+            memory: 128Mi
+          limits:
+            cpu: 500m      # 0.5 core
+            memory: 512Mi
+        
+        # Readiness Probe (quando começar a receber tráfego)
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Liveness Probe (quando reiniciar o pod)
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Startup Probe (dá mais tempo para inicialização)
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: 3000
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30  # 30 tentativas = 5 minutos
+        
+        # Security context do container
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+
+---
+# -----------------------------------------------------------------------------
+# SERVICE - Expõe a aplicação internamente no cluster
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: waterswamp-api-service
+  namespace: waterswamp
+  labels:
+    app: waterswamp-api
+spec:
+  type: ClusterIP  # Interno ao cluster (use Ingress ou LoadBalancer para expor)
+  selector:
+    app: waterswamp-api
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3000
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# -----------------------------------------------------------------------------
+# HORIZONTAL POD AUTOSCALER - Auto-scaling baseado em métricas
+# -----------------------------------------------------------------------------
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: waterswamp-api-hpa
+  namespace: waterswamp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: waterswamp-api
+  
+  minReplicas: 3   # Mínimo de pods sempre rodando
+  maxReplicas: 10  # Máximo de pods permitidos
+  
+  metrics:
+  # CPU: Escala quando CPU média passar de 70%
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  
+  # Memória: Escala quando memória média passar de 80%
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0    # Escala imediatamente
+      policies:
+      - type: Percent
+        value: 100  # Dobra o número de pods (máx)
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Aguarda 5min antes de reduzir
+      policies:
+      - type: Percent
+        value: 50   # Remove metade dos pods (máx)
+        periodSeconds: 60
+
+---
+# -----------------------------------------------------------------------------
+# POD DISRUPTION BUDGET - Garante disponibilidade durante manutenções
+# -----------------------------------------------------------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: waterswamp-api-pdb
+  namespace: waterswamp
+spec:
+  minAvailable: 2  # Garante pelo menos 2 pods sempre disponíveis
+  selector:
+    matchLabels:
+      app: waterswamp-api
+
+---
+# =============================================================================
+# COMO APLICAR
+# =============================================================================
+#
+# 1. Aplicar todos os recursos:
+#    kubectl apply -f k8s-deployment.yaml
+#
+# 2. Verificar status:
+#    kubectl get all -n waterswamp
+#    kubectl get pods -n waterswamp -w
+#
+# 3. Ver logs:
+#    kubectl logs -n waterswamp -l app=waterswamp-api --tail=100 -f
+#
+# 4. Escalar manualmente:
+#    kubectl scale deployment waterswamp-api -n waterswamp --replicas=5
+#
+# 5. Atualizar imagem:
+#    kubectl set image deployment/waterswamp-api api=waterswamp-api:1.1.0 -n waterswamp
+#
+# 6. Rollback:
+#    kubectl rollout undo deployment/waterswamp-api -n waterswamp
+#
+# 7. Deletar tudo:
+#    kubectl delete namespace waterswamp
+#
+# =============================================================================

@@ -27,6 +27,16 @@ tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["full"] }
 tower_governor = "0.8"
 governor = "0.10"
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+
+utoipa = { version = "5.3", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "8.1", features = ["axum"] }
+utoipa-rapidoc = { version = "4.0", features = ["axum"] }
+utoipa-redoc = { version = "4.0", features = ["axum"] }
+
+prometheus = { version = "0.13", features = ["process"] }
+lazy_static = "1.5"
 
 [dev-dependencies]
 axum-test = "18.1.0"

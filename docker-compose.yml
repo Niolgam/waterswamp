@@ -1,0 +1,95 @@
+version: '3.8'
+
+# Docker Compose - Waterswamp API (Desenvolvimento)
+
+services:
+  # Banco de Dados - Autenticação
+  db_auth:
+    image: postgres:16-alpine
+    container_name: waterswamp_db_auth
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_AUTH_PASSWORD:-dev_password_auth}
+      POSTGRES_DB: auth_db
+    ports:
+      - "${DB_AUTH_PORT:-5432}:5432"
+    volumes:
+      - auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - waterswamp_network
+
+  # Banco de Dados - Logs
+  db_logs:
+    image: postgres:16-alpine
+    container_name: waterswamp_db_logs
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_LOGS_PASSWORD:-dev_password_logs}
+      POSTGRES_DB: logs_db
+    ports:
+      - "${DB_LOGS_PORT:-5433}:5432"
+    volumes:
+      - logs_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - waterswamp_network
+
+  # API - Waterswamp
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: waterswamp_api
+    environment:
+      ENVIRONMENT: development
+      RUST_LOG: ${RUST_LOG:-debug}
+      RUST_LOG_FORMAT: ${RUST_LOG_FORMAT:-text}
+      CORS_ALLOW_ORIGINS: "http://localhost:3000,http://localhost:4200,http://localhost:5173"
+      WS_AUTH_DATABASE_URL: "postgres://postgres:${DB_AUTH_PASSWORD:-dev_password_auth}@db_auth:5432/auth_db"
+      WS_LOGS_DATABASE_URL: "postgres://postgres:${DB_LOGS_PASSWORD:-dev_password_logs}@db_logs:5432/logs_db"
+      WS_JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_please_change_in_production}
+      DISABLE_RATE_LIMIT: "false"
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      db_auth:
+        condition: service_healthy
+      db_logs:
+        condition: service_healthy
+    networks:
+      - waterswamp_network
+    restart: unless-stopped
+
+  # Adminer - Gerenciador de DB
+  adminer:
+    image: adminer:latest
+    container_name: waterswamp_adminer
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db_auth
+    depends_on:
+      - db_auth
+      - db_logs
+    networks:
+      - waterswamp_network
+    restart: unless-stopped
+
+volumes:
+  auth_data:
+    driver: local
+  logs_data:
+    driver: local
+
+networks:
+  waterswamp_network:
+    driver: bridge

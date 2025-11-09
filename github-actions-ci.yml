@@ -1,0 +1,266 @@
+name: CI/CD Pipeline
+
+# =============================================================================
+# GITHUB ACTIONS WORKFLOW - CI/CD COMPLETO
+# =============================================================================
+# Este workflow executa:
+# - Testes automatizados (unit, integration, security)
+# - Análise de código (clippy, fmt)
+# - Build da imagem Docker
+# - Push para registry (Docker Hub / GitHub Container Registry)
+# - Deploy automático em staging/produção (opcional)
+#
+# =============================================================================
+
+on:
+  push:
+    branches: [ main, develop, staging ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # JOB 1: TESTES E QUALIDADE DE CÓDIGO
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    services:
+      # PostgreSQL para testes de integração
+      postgres_auth:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: auth_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      postgres_logs:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: logs_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        components: clippy, rustfmt
+    
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev cmake clang
+    
+    - name: Install sqlx-cli
+      run: cargo install sqlx-cli --no-default-features --features postgres
+    
+    - name: Run database migrations
+      env:
+        WS_AUTH_DATABASE_URL: postgres://postgres:test_password@localhost:5432/auth_db
+        WS_LOGS_DATABASE_URL: postgres://postgres:test_password@localhost:5433/logs_db
+      run: |
+        sqlx database create --database-url $WS_AUTH_DATABASE_URL
+        sqlx migrate run --source migrations_auth --database-url $WS_AUTH_DATABASE_URL
+        sqlx database create --database-url $WS_LOGS_DATABASE_URL
+        sqlx migrate run --source migrations_logs --database-url $WS_LOGS_DATABASE_URL
+    
+    - name: Check code formatting
+      run: cargo fmt --all -- --check
+    
+    - name: Run Clippy lints
+      run: cargo clippy --all-targets --all-features -- -D warnings
+    
+    - name: Run unit tests
+      run: cargo test --lib
+    
+    - name: Run integration tests
+      env:
+        WS_AUTH_DATABASE_URL: postgres://postgres:test_password@localhost:5432/auth_db
+        WS_LOGS_DATABASE_URL: postgres://postgres:test_password@localhost:5433/logs_db
+        WS_JWT_SECRET: test_jwt_secret_for_ci
+        DISABLE_RATE_LIMIT: true
+      run: cargo test --test '*' -- --nocapture
+    
+    - name: Run security audit
+      run: |
+        cargo install cargo-audit
+        cargo audit
+    
+    - name: Generate code coverage (opcional)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        cargo install cargo-tarpaulin
+        cargo tarpaulin --out Xml --output-dir coverage
+    
+    - name: Upload coverage to Codecov (opcional)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage/cobertura.xml
+        fail_ci_if_error: false
+
+  # ---------------------------------------------------------------------------
+  # JOB 2: BUILD E PUSH DA IMAGEM DOCKER
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' || github.event_name == 'release'
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+
+  # ---------------------------------------------------------------------------
+  # JOB 3: DEPLOY EM STAGING (Automático em push para 'develop')
+  # ---------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging-api.seudominio.com
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+    
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+    
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl set image deployment/waterswamp-api \
+          api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:develop \
+          -n waterswamp-staging
+        kubectl rollout status deployment/waterswamp-api -n waterswamp-staging
+
+  # ---------------------------------------------------------------------------
+  # JOB 4: DEPLOY EM PRODUÇÃO (Manual em releases)
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'release'
+    environment:
+      name: production
+      url: https://api.seudominio.com
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+    
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+    
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl set image deployment/waterswamp-api \
+          api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.release.tag_name }} \
+          -n waterswamp
+        kubectl rollout status deployment/waterswamp-api -n waterswamp
+    
+    - name: Verify deployment
+      run: |
+        kubectl get pods -n waterswamp -l app=waterswamp-api
+        kubectl logs -n waterswamp -l app=waterswamp-api --tail=50
+
+# =============================================================================
+# SECRETS NECESSÁRIOS NO GITHUB
+# =============================================================================
+#
+# Configurar em: Settings → Secrets and variables → Actions
+#
+# 1. GITHUB_TOKEN (automático, não precisa configurar)
+#
+# 2. KUBECONFIG_STAGING (opcional, para deploy em staging)
+#    - Gerar: cat ~/.kube/config | base64
+#
+# 3. KUBECONFIG_PRODUCTION (opcional, para deploy em prod)
+#    - Gerar: cat ~/.kube/config-prod | base64
+#
+# 4. CODECOV_TOKEN (opcional, para coverage)
+#    - Obter em: https://codecov.io
+#
+# =============================================================================

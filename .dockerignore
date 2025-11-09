@@ -1,0 +1,82 @@
+# Diretórios de Build Rust
+target/
+**/target/
+
+# Cache do Cargo
+**/.cargo/
+
+# Dependências Node
+node_modules/
+**/node_modules/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Ambientes virtuais Python
+venv/
+env/
+.venv/
+
+# IDEs e Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Configurações de Ambiente
+.env
+.env.local
+.env.*.local
+
+# Documentação
+README.md
+docs/
+*.md
+
+# Testes
+tests/
+**/tests/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+azure-pipelines.yml
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Backups e temporários
+*.bak
+*.tmp
+*.temp
+.cache/
+
+# Arquivos de sistema
+Thumbs.db
+desktop.ini
+
+# Ferramentas de desenvolvimento
+Makefile.toml
+justfile
+
+# Coverage reports
+coverage/
+*.profdata
+*.profraw
+
+# Benchmarks
+benches/
+
+# Exemplos
+examples/

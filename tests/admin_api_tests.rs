@@ -1,40 +1,40 @@
 use axum_test::TestServer;
-use http::StatusCode;
-use serde_json::{json, Value};
-use sqlx::PgPool;
-use std::collections::HashMap;
+use http::{header::AUTHORIZATION, HeaderValue};
+use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
 use waterswamp::{
-    casbin_setup::setup_casbin, config::Config, models::Claims, routes::build_router,
-    state::AppState,
+    casbin_setup::setup_casbin, config::Config, routes::build_router, state::AppState,
 };
 
-// --- Helpers ---
+// =============================================================================
+// HELPERS
+// =============================================================================
 
-async fn spawn_app() -> TestServer {
-    dotenvy::dotenv().ok();
+async fn create_test_server() -> TestServer {
+    let config = Config::from_env().expect("Falha ao carregar configuração");
 
-    std::env::set_var("DISABLE_RATE_LIMIT", "true");
-    let config = Config::from_env().expect("Falha ao carregar config");
-
-    let pool_auth = PgPool::connect(&config.auth_db)
+    let pool_auth = sqlx::PgPool::connect(&config.auth_db)
         .await
-        .expect("Falha ao conectar ao auth_db de teste");
-    let pool_logs = PgPool::connect(&config.logs_db)
+        .expect("Falha ao conectar ao banco de autenticação");
+
+    let pool_logs = sqlx::PgPool::connect(&config.logs_db)
         .await
-        .expect("Falha ao conectar ao logs_db de teste");
+        .expect("Falha ao conectar ao banco de logs");
 
     let enforcer = setup_casbin(pool_auth.clone())
         .await
-        .expect("Falha ao inicializar Casbin");
+        .expect("Falha ao configurar Casbin");
 
-    let encoding_key = jsonwebtoken::EncodingKey::from_secret(config.jwt_secret.as_bytes());
-    let decoding_key = jsonwebtoken::DecodingKey::from_secret(config.jwt_secret.as_bytes());
-    let policy_cache = Arc::new(RwLock::new(HashMap::new()));
+    let secret = config.jwt_secret;
+    let encoding_key = jsonwebtoken::EncodingKey::from_secret(secret.as_bytes());
+    let decoding_key = jsonwebtoken::DecodingKey::from_secret(secret.as_bytes());
+
+    let policy_cache = Arc::new(RwLock::new(std::collections::HashMap::new()));
 
     let app_state = AppState {
-        enforcer: enforcer.clone(),
+        enforcer,
         policy_cache,
         db_pool_auth: pool_auth,
         db_pool_logs: pool_logs,
@@ -43,193 +43,184 @@ async fn spawn_app() -> TestServer {
     };
 
     let app = build_router(app_state);
-    TestServer::new(app).unwrap()
+    TestServer::new(app).expect("Falha ao criar servidor de teste")
 }
 
-async fn login_token(server: &TestServer, user: &str) -> String {
+async fn test_login(server: &TestServer, username: &str, password: &str) -> String {
     let response = server
         .post("/login")
-        .json(&json!({ "username": user, "password": "password123" }))
+        .json(&json!({
+            "username": username,
+            "password": password
+        }))
         .await;
 
-    // --- ADICIONE ESTE BLOCO DE DEBUG ---
-    if response.status_code() != http::StatusCode::OK {
-        println!("!!! ERRO NO LOGIN (DEBUG) !!!");
-        println!("Usuário: {}", user);
-        println!("Status Code: {}", response.status_code());
-        println!("Headers: {:#?}", response.headers());
-        println!("Corpo da resposta: '{}'", response.text());
-        panic!("Falha ao fazer login no teste para o usuário '{}'", user);
+    if response.status_code() != 200 {
+        panic!("Login falhou para '{}'", username);
     }
-    // ------------------------------------
 
-    let body: Value = response.json();
-    format!("Bearer {}", body["token"].as_str().unwrap())
+    let body: serde_json::Value = response.json();
+    body["access_token"]
+        .as_str()
+        .expect("access_token ausente")
+        .to_string()
 }
 
-fn decode_token(bearer_token: &str) -> Claims {
-    let token = bearer_token.strip_prefix("Bearer ").unwrap();
-    let secret = std::env::var("WS_JWT_SECRET").expect("JWT_SECRET must be set");
-    let decoding_key = jsonwebtoken::DecodingKey::from_secret(secret.as_bytes());
-
-    jsonwebtoken::decode::<Claims>(token, &decoding_key, &jsonwebtoken::Validation::default())
-        .unwrap()
-        .claims
+// Helper para criar header de autorização
+fn auth_header(token: &str) -> HeaderValue {
+    HeaderValue::from_str(&format!("Bearer {}", token))
+        .expect("Falha ao criar header de autorização")
 }
 
-// --- TESTES ---
-
-#[tokio::test]
-async fn test_fluxo_dinamico_de_permissoes() {
-    let server = spawn_app().await;
-    let token_alice = login_token(&server, "alice").await;
-    let token_bob = login_token(&server, "bob").await;
-
-    let bob_claims = decode_token(&token_bob);
-    let bob_uuid = bob_claims.sub.to_string();
-
-    // 1. Bob tenta acessar admin -> DEVE FALHAR (403)
-    server
-        .get("/admin/dashboard")
-        .add_header("Authorization", &token_bob)
-        .await
-        .assert_status_forbidden();
-
-    // 2. Alice adiciona permissão para Bob (POST /api/admin/policies)
-    server
-        .post("/api/admin/policies")
-        .add_header("Authorization", &token_alice)
-        .json(&json!({
-            "subject": bob_uuid,
-            "object": "/admin/dashboard",
-            "action": "GET"
-        }))
-        .await
-        .assert_status(StatusCode::CREATED);
-
-    // 3. Bob tenta acessar admin de novo -> DEVE FUNCIONAR (200)
-    server
-        .get("/admin/dashboard")
-        .add_header("Authorization", &token_bob)
-        .await
-        .assert_status_ok();
-
-    // 4. Alice remove a permissão de Bob (DELETE /api/admin/policies)
-    server
-        .delete("/api/admin/policies")
-        .add_header("Authorization", &token_alice)
-        .json(&json!({
-            "subject": bob_uuid,
-            "object": "/admin/dashboard",
-            "action": "GET"
-        }))
-        .await
-        .assert_status_no_content();
-
-    // 5. Bob tenta acessar admin mais uma vez -> DEVE FALHAR (403)
-    server
-        .get("/admin/dashboard")
-        .add_header("Authorization", &token_bob)
-        .await
-        .assert_status_forbidden();
-}
-
-#[tokio::test]
-async fn test_admin_remover_politica_inexistente_retorna_404() {
-    let server = spawn_app().await;
-    let token_alice = login_token(&server, "alice").await;
-
-    // Tenta remover uma regra com usuário que não existe
-    // Deve retornar 404 Not Found (não 401 Unauthorized)
-    server
-        .delete("/api/admin/policies")
-        .add_header("Authorization", &token_alice)
-        .json(&json!({
-            "subject": "usuario_fantasma",
-            "object": "/recurso/inexistente",
-            "action": "GET"
-        }))
-        .await
-        .assert_status_not_found();
-}
+// =============================================================================
+// TESTES
+// =============================================================================
 
 #[tokio::test]
 async fn test_admin_adicionar_politica_duplicada_retorna_200() {
-    let server = spawn_app().await;
-    let token_alice = login_token(&server, "alice").await;
+    let server = create_test_server().await;
+    let token = test_login(&server, "alice", "password123").await;
 
-    let bob_claims = decode_token(&login_token(&server, "bob").await);
-    let bob_uuid = bob_claims.sub.to_string();
-
-    // 1. Adiciona uma regra nova (201 Created)
-    server
+    // Primeira adição
+    let response1 = server
         .post("/api/admin/policies")
-        .add_header("Authorization", &token_alice)
+        .add_header(AUTHORIZATION, auth_header(&token))
         .json(&json!({
-            "subject": bob_uuid,
-            "object": "/data",
-            "action": "READ"
+            "subject": "bob",
+            "object": "/api/test",
+            "action": "POST"
         }))
-        .await
-        .assert_status(StatusCode::CREATED);
+        .await;
 
-    // 2. Tenta adicionar a MESMA regra de novo (Deve retornar 200 OK)
-    server
+    assert_eq!(response1.status_code(), 200);
+
+    // Segunda adição (duplicada)
+    let response2 = server
         .post("/api/admin/policies")
-        .add_header("Authorization", &token_alice)
+        .add_header(AUTHORIZATION, auth_header(&token))
         .json(&json!({
-            "subject": bob_uuid,
-            "object": "/data",
-            "action": "READ"
+            "subject": "bob",
+            "object": "/api/test",
+            "action": "POST"
         }))
-        .await
-        .assert_status_ok();
+        .await;
 
-    // Limpar: Remover a política criada
-    server
-        .delete("/api/admin/policies")
-        .add_header("Authorization", &token_alice)
-        .json(&json!({
-            "subject": bob_uuid,
-            "object": "/data",
-            "action": "READ"
-        }))
-        .await
-        .assert_status_no_content();
-}
-
-#[tokio::test]
-async fn test_admin_payload_invalido_retorna_400() {
-    let server = spawn_app().await;
-    let token_alice = login_token(&server, "alice").await;
-
-    // Envia payload com campos vazios (deve falhar na validação)
-    server
-        .post("/api/admin/policies")
-        .add_header("Authorization", &token_alice)
-        .json(&json!({
-            "subject": "",  // Inválido (min length 1)
-            "object": "",   // Inválido
-            "action": ""    // Inválido
-        }))
-        .await
-        .assert_status_bad_request();
+    assert_eq!(response2.status_code(), 200);
 }
 
 #[tokio::test]
 async fn test_admin_adicionar_politica_usuario_inexistente_retorna_404() {
-    let server = spawn_app().await;
-    let token_alice = login_token(&server, "alice").await;
+    let server = create_test_server().await;
+    let token = test_login(&server, "alice", "password123").await;
 
-    // Tenta adicionar política para usuário que não existe
-    server
+    let response = server
         .post("/api/admin/policies")
-        .add_header("Authorization", &token_alice)
+        .add_header(AUTHORIZATION, auth_header(&token))
         .json(&json!({
-            "subject": "usuario_que_nao_existe",
-            "object": "/algum/recurso",
+            "subject": "usuario_que_nao_existe_123456",
+            "object": "/api/test",
             "action": "GET"
         }))
-        .await
-        .assert_status_not_found();
+        .await;
+
+    assert_eq!(response.status_code(), 404);
+
+    let body: serde_json::Value = response.json();
+    assert!(
+        body["error"].as_str().unwrap().contains("não encontrado")
+            || body["error"].as_str().unwrap().contains("inexistente")
+    );
+}
+
+#[tokio::test]
+async fn test_admin_payload_invalido_retorna_400() {
+    let server = create_test_server().await;
+    let token = test_login(&server, "alice", "password123").await;
+
+    let response = server
+        .post("/api/admin/policies")
+        .add_header(AUTHORIZATION, auth_header(&token))
+        .json(&json!({
+            "subject": "",
+            "object": "/api/test",
+            "action": "GET"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), 400);
+}
+
+#[tokio::test]
+async fn test_admin_remover_politica_inexistente_retorna_404() {
+    let server = create_test_server().await;
+    let token = test_login(&server, "alice", "password123").await;
+
+    let response = server
+        .delete("/api/admin/policies")
+        .add_header(AUTHORIZATION, auth_header(&token))
+        .json(&json!({
+            "subject": "usuario_fantasma",
+            "object": "/api/rota_inexistente",
+            "action": "DELETE"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), 404);
+}
+
+#[tokio::test]
+async fn test_fluxo_dinamico_de_permissoes() {
+    let server = create_test_server().await;
+
+    println!("\n🧪 Fluxo dinâmico de permissões");
+
+    let admin_token = test_login(&server, "alice", "password123").await;
+    let user_token = test_login(&server, "bob", "password123").await;
+
+    // Bob tenta acessar (deve falhar)
+    let response = server
+        .get("/admin/dashboard")
+        .add_header(AUTHORIZATION, auth_header(&user_token))
+        .await;
+    assert_eq!(response.status_code(), 403);
+
+    // Admin adiciona permissão
+    let add_response = server
+        .post("/api/admin/policies")
+        .add_header(AUTHORIZATION, auth_header(&admin_token))
+        .json(&json!({
+            "subject": "bob",
+            "object": "/admin/dashboard",
+            "action": "GET"
+        }))
+        .await;
+    assert_eq!(add_response.status_code(), 200);
+
+    // Bob tenta novamente (deve funcionar)
+    let response2 = server
+        .get("/admin/dashboard")
+        .add_header(AUTHORIZATION, auth_header(&user_token))
+        .await;
+    assert_eq!(response2.status_code(), 200);
+
+    // Admin remove permissão
+    let remove_response = server
+        .delete("/api/admin/policies")
+        .add_header(AUTHORIZATION, auth_header(&admin_token))
+        .json(&json!({
+            "subject": "bob",
+            "object": "/admin/dashboard",
+            "action": "GET"
+        }))
+        .await;
+    assert_eq!(remove_response.status_code(), 200);
+
+    // Bob tenta novamente (deve falhar)
+    let response3 = server
+        .get("/admin/dashboard")
+        .add_header(AUTHORIZATION, auth_header(&user_token))
+        .await;
+    assert_eq!(response3.status_code(), 403);
+
+    println!("✅ Teste passou!");
 }

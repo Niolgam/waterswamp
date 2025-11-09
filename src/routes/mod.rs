@@ -1,4 +1,5 @@
 use crate::{
+    metrics,
     middleware::{mw_authenticate, mw_authorize},
     rate_limit::{admin_rate_limiter, api_rate_limiter, login_rate_limiter},
     security::{cors_development, cors_production, security_headers},
@@ -13,8 +14,8 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 
 mod admin_handler;
-mod auth_handler;
-mod health_handler;
+pub mod auth_handler;
+pub mod health_handler;
 mod protected;
 mod public;
 
@@ -23,12 +24,15 @@ pub fn build_router(app_state: AppState) -> Router {
     let public_routes = Router::new()
         .route("/public", get(public::handler_public))
         .route("/health", get(health_handler::handler_health))
-        // --- ADICIONADO: Rotas de Liveness e Readiness ---
         .route("/health/live", get(health_handler::handler_liveness))
         .route("/health/ready", get(health_handler::handler_ready))
-        // -------------------------------------------------
-        // Login com rate limiting mais agressivo (proteção contra brute-force)
+        // ⭐ NOVO: Métricas Prometheus
+        .route("/metrics", get(metrics::handler_metrics))
+        // Login com rate limiting mais agressivo
         .route("/login", post(auth_handler::handler_login))
+        // ⭐ NOVO: Refresh token e logout
+        .route("/refresh-token", post(auth_handler::handler_refresh_token))
+        .route("/logout", post(auth_handler::handler_logout))
         .layer(login_rate_limiter());
 
     // --- Rotas Protegidas (requerem autenticação E autorização) ---
@@ -75,6 +79,8 @@ pub fn build_router(app_state: AppState) -> Router {
         // Camada de serviços globais (aplicados a TODAS as rotas)
         .layer(
             ServiceBuilder::new()
+                // ⭐ NOVO: Middleware de métricas
+                .layer(middleware::from_fn(metrics::metrics_middleware))
                 // Tracing para observabilidade
                 .layer(TraceLayer::new_for_http())
                 // CORS
