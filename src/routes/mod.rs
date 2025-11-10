@@ -40,6 +40,11 @@ pub fn build_router(app_state: AppState) -> Router {
         // Rotas de admin com rate limiting dedicado
         .route("/api/admin/policies", post(admin_handler::add_policy))
         .route("/api/admin/policies", delete(admin_handler::remove_policy))
+        .route("/api/admin/users", get(admin_handler::list_users))
+        .route("/api/admin/users", post(admin_handler::create_user))
+        .route("/api/admin/users/:id", get(admin_handler::get_user))
+        .route("/api/admin/users/:id", put(admin_handler::update_user))
+        .route("/api/admin/users/:id", delete(admin_handler::delete_user))
         .layer(admin_rate_limiter())
         // Middlewares de autenticação e autorização (ordem importa!)
         .route_layer(middleware::from_fn_with_state(

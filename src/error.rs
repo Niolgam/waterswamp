@@ -21,6 +21,13 @@ pub enum AppError {
     #[error("Não encontrado: {0}")]
     NotFound(String),
 
+    // Novos erros para regras de negócio
+    #[error("Conflito: {0}")]
+    Conflict(String),
+
+    #[error("Requisição inválida: {0}")]
+    BadRequest(String),
+
     #[error("Erro interno: {0}")]
     Anyhow(#[from] anyhow::Error),
 
@@ -35,13 +42,19 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         // 1. Log do erro real no servidor (para nós, desenvolvedores)
-        tracing::error!("Erro na requisição: {:?}", self);
+        // Erros 4xx não precisam ser logados como ERROR, podem ser INFO ou WARN
+        match &self {
+            AppError::Database(_) | AppError::Anyhow(_) => {
+                tracing::error!("Erro interno na requisição: {:?}", self)
+            }
+            _ => tracing::info!("Erro cliente na requisição: {:?}", self),
+        }
 
         // 2. Determina o status code e a mensagem segura para o cliente
         let (status, error_message) = match self {
             AppError::Database(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Erro interno no servidor.".to_string(), // Não mostre detalhes do SQL para o cliente!
+                "Erro interno no servidor.".to_string(),
             ),
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
             AppError::InvalidPassword => (
@@ -53,11 +66,13 @@ impl IntoResponse for AppError {
                 "Você não tem permissão para acessar este recurso.".to_string(),
             ),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+            AppError::Validation(e) => (StatusCode::BAD_REQUEST, e.to_string()),
             AppError::Anyhow(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Erro interno inesperado.".to_string(),
             ),
-            AppError::Validation(e) => (StatusCode::BAD_REQUEST, e.to_string()),
         };
 
         // 3. Cria o corpo da resposta JSON

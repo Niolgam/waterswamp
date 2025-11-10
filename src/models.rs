@@ -140,3 +140,48 @@ pub struct PolicyRequest {
     #[validate(length(min = 1))]
     pub action: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ListUsersQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+}
+
+/// DTO de usuário (sem informações sensíveis)
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct UserDto {
+    pub id: Uuid,
+    pub username: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Resposta paginada de usuários
+#[derive(Debug, Serialize)]
+pub struct PaginatedUsers {
+    pub users: Vec<UserDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+/// Payload para criar usuário (admin)
+#[derive(Debug, Validate, Deserialize)]
+pub struct CreateUserPayload {
+    #[validate(length(min = 3, max = 50))]
+    pub username: String,
+
+    #[validate(length(min = 8))]
+    pub password: String,
+}
+
+/// Payload para atualizar usuário
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateUserPayload {
+    #[validate(length(min = 3, max = 50))]
+    pub username: Option<String>,
+
+    #[validate(length(min = 8))]
+    pub password: Option<String>,
+}

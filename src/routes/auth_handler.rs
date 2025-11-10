@@ -18,7 +18,7 @@ use crate::{
 
 // Constantes de expiração
 const ACCESS_TOKEN_EXPIRY_SECONDS: i64 = 3600; // 1 hora
-const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30; // 30 dias
+                                               // const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30; // 30 dias (usado diretamente na query SQL)
 
 /// POST /login
 /// Autentica usuário e retorna access token + refresh token
@@ -194,93 +194,31 @@ fn hash_token(token: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-/// Job de limpeza: Remove refresh tokens expirados
-pub async fn cleanup_expired_tokens(pool: &sqlx::PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        r#"
-        DELETE FROM refresh_tokens
-        WHERE expires_at < NOW()
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    let deleted_count = result.rows_affected();
-
-    if deleted_count > 0 {
-        tracing::info!(
-            deleted_count = deleted_count,
-            event_type = "token_cleanup",
-            "Refresh tokens expirados removidos"
-        );
-    }
-
-    Ok(deleted_count)
-}
-
-/// Helper: Revoga todos os refresh tokens de um usuário
-pub async fn revoke_all_user_tokens(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        r#"
-        UPDATE refresh_tokens
-        SET revoked = TRUE, updated_at = NOW()
-        WHERE user_id = $1 AND revoked = FALSE
-        "#,
-    )
-    .bind(user_id)
-    .execute(pool)
-    .await?;
-
-    let revoked_count = result.rows_affected();
-
-    if revoked_count > 0 {
-        tracing::warn!(
-            user_id = %user_id,
-            revoked_count = revoked_count,
-            event_type = "revoke_all_tokens",
-            "Todos os refresh tokens do usuário foram revogados"
-        );
-    }
-
-    Ok(revoked_count)
-}
-
-/// POST /auth/register
+/// POST /register
 /// Cria um novo usuário e retorna tokens
 pub async fn handler_register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterPayload>,
 ) -> Result<Json<LoginResponse>, AppError> {
-    tracing::info!("=== REGISTER DEBUG ===");
-    tracing::info!("Username: {}", payload.username);
-    tracing::info!("Password length: {}", payload.password.len());
-
-    // 1. Validar payload
+    // 1. Validar payload básico (tamanho, required)
     payload.validate()?;
-    tracing::info!("✓ Validação básica OK");
 
-    // 2. Validar username
+    // 2. Validar formato do username
+    // Adicionado '-' para permitir UUIDs ou nomes compostos comuns
     if !payload
         .username
         .chars()
-        .all(|c| c.is_alphanumeric() || c == '_')
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
     {
-        tracing::warn!("✗ Username inválido");
-        return Err(AppError::Anyhow(anyhow::anyhow!(
-            "Username inválido (apenas letras, números e _)"
-        )));
+        return Err(AppError::BadRequest(
+            "Username inválido (apenas letras, números, '_' e '-')".to_string(),
+        ));
     }
-    tracing::info!("✓ Username válido");
 
-    // 3. Validar senha
+    // 3. Validar força da senha
     if let Err(e) = crate::security::validate_password_strength(&payload.password) {
-        tracing::warn!("✗ Senha fraca: {}", e);
-        return Err(AppError::Anyhow(anyhow::anyhow!(e)));
+        return Err(AppError::BadRequest(e));
     }
-    tracing::info!("✓ Senha forte");
 
     // 4. Verificar se username já existe
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
@@ -289,16 +227,16 @@ pub async fn handler_register(
         .await?;
 
     if exists {
-        return Err(AppError::Anyhow(anyhow::anyhow!("Username já está em uso")));
+        return Err(AppError::Conflict("Username já está em uso".to_string()));
     }
 
-    // 5. Hash da senha
+    // 5. Hash da senha (CPU-bound, executado em thread separada)
     let password_clone = payload.password.clone();
     let password_hash =
         tokio::task::spawn_blocking(move || bcrypt::hash(password_clone, bcrypt::DEFAULT_COST))
             .await
             .context("Falha ao executar hash de senha")?
-            .map_err(|_| AppError::Anyhow(anyhow::anyhow!("Erro ao fazer hash da senha")))?;
+            .context("Erro ao gerar hash bcrypt")?;
 
     // 6. Inserir usuário no banco
     let user_id: Uuid = sqlx::query_scalar(
@@ -329,7 +267,7 @@ pub async fn handler_register(
     let access_token = encode(&Header::default(), &access_claims, &state.encoding_key)
         .context("Falha ao codificar access token JWT")?;
 
-    // 8. Gerar refresh token
+    // 8. Gerar refresh token inicial
     let refresh_token_raw = Uuid::new_v4().to_string();
     let refresh_token_hash = hash_token(&refresh_token_raw);
 
@@ -351,7 +289,6 @@ pub async fn handler_register(
         "Novo usuário registrado com sucesso"
     );
 
-    // 9. Retornar resposta
     Ok(Json(LoginResponse::new(
         access_token,
         refresh_token_raw,

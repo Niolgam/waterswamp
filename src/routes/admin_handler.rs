@@ -1,4 +1,13 @@
-use crate::{error::AppError, models::PolicyRequest, state::AppState};
+use std::path::Path;
+
+use crate::{
+    error::AppError,
+    models::{
+        CreateUserPayload, CurrentUser, ListUsersQuery, PaginatedUsers, PolicyRequest,
+        UpdateUserPayload, UserDto,
+    },
+    state::AppState,
+};
 use axum::{extract::State, http::StatusCode, Json};
 use casbin::MgmtApi;
 use uuid::Uuid;
@@ -150,4 +159,231 @@ async fn invalidate_cache(state: &AppState, subject: &str, object: &str, action:
     if cache.remove(&cache_key).is_some() {
         tracing::debug!("Cache invalidado para: {}", cache_key);
     }
+}
+
+/// GET /api/admin/users
+/// Lista todos os usuários (paginado)
+pub async fn list_users(
+    State(state): State<AppState>,
+    Query(params): Query<ListUsersQuery>,
+) -> Result<Json<PaginatedUsers>, AppError> {
+    let limit = params.limit.unwrap_or(20).min(100);
+    let offset = params.offset.unwrap_or(0);
+
+    // Query base
+    let mut query = "SELECT id, username, created_at, updated_at FROM users".to_string();
+
+    // Se houver busca, adicionar WHERE
+    if let Some(ref search) = params.search {
+        query.push_str(&format!(" WHERE username ILIKE '%{}%'", search));
+    }
+
+    query.push_str(" ORDER BY created_at DESC LIMIT $1 OFFSET $2");
+
+    let users = sqlx::query_as::<_, UserDto>(&query)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&state.db_pool_auth)
+        .await?;
+
+    // Count total
+    let mut count_query = "SELECT COUNT(*) FROM users".to_string();
+    if let Some(ref search) = params.search {
+        count_query.push_str(&format!(" WHERE username ILIKE '%{}%'", search));
+    }
+
+    let total: i64 = sqlx::query_scalar(&count_query)
+        .fetch_one(&state.db_pool_auth)
+        .await?;
+
+    Ok(Json(PaginatedUsers {
+        users,
+        total,
+        limit,
+        offset,
+    }))
+}
+
+/// GET /api/admin/users/:id
+/// Busca um usuário específico
+pub async fn get_user(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<UserDto>, AppError> {
+    let user = sqlx::query_as::<_, UserDto>(
+        "SELECT id, username, created_at, updated_at FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(&state.db_pool_auth)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Usuário não encontrado".to_string()))?;
+
+    Ok(Json(user))
+}
+
+/// POST /api/admin/users
+/// Cria um novo usuário (admin pode definir role depois via Casbin)
+pub async fn create_user(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateUserPayload>,
+) -> Result<Json<UserDto>, AppError> {
+    payload.validate()?;
+
+    // Validar senha forte
+    crate::security::validate_password_strength(&payload.password)
+        .map_err(|e| AppError::Anyhow(anyhow::anyhow!(e)))?;
+
+    // Verificar duplicata
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
+        .bind(&payload.username)
+        .fetch_one(&state.db_pool_auth)
+        .await?;
+
+    if exists {
+        return Err(AppError::Anyhow(anyhow::anyhow!("Username já existe")));
+    }
+
+    // Hash senha
+    let password_clone = payload.password.clone();
+    let password_hash =
+        tokio::task::spawn_blocking(move || bcrypt::hash(password_clone, bcrypt::DEFAULT_COST))
+            .await??;
+
+    // Inserir
+    let user = sqlx::query_as::<_, UserDto>(
+        r#"
+        INSERT INTO users (username, password_hash)
+        VALUES ($1, $2)
+        RETURNING id, username, created_at, updated_at
+        "#,
+    )
+    .bind(&payload.username)
+    .bind(&password_hash)
+    .fetch_one(&state.db_pool_auth)
+    .await?;
+
+    tracing::info!(
+        user_id = %user.id,
+        username = %user.username,
+        event_type = "user_created_by_admin",
+        "Admin criou novo usuário"
+    );
+
+    Ok(Json(user))
+}
+
+/// PUT /api/admin/users/:id
+/// Atualiza um usuário
+pub async fn update_user(
+    State(state): State<AppState>,
+    current_user: CurrentUser,
+    Path(user_id): Path<Uuid>,
+    Json(payload): Json<UpdateUserPayload>,
+) -> Result<Json<UserDto>, AppError> {
+    payload.validate()?;
+
+    // Admin não pode modificar a si mesmo via esta rota
+    if current_user.id == user_id {
+        return Err(AppError::Forbidden);
+    }
+
+    // Verificar se usuário existe
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+        .bind(user_id)
+        .fetch_one(&state.db_pool_auth)
+        .await?;
+
+    if !exists {
+        return Err(AppError::NotFound("Usuário não encontrado".to_string()));
+    }
+
+    // Update username (se fornecido)
+    if let Some(ref new_username) = payload.username {
+        // Verificar duplicata
+        let username_taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND id != $2)",
+        )
+        .bind(new_username)
+        .bind(user_id)
+        .fetch_one(&state.db_pool_auth)
+        .await?;
+
+        if username_taken {
+            return Err(AppError::Anyhow(anyhow::anyhow!("Username já está em uso")));
+        }
+
+        sqlx::query("UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2")
+            .bind(new_username)
+            .bind(user_id)
+            .execute(&state.db_pool_auth)
+            .await?;
+    }
+
+    // Update password (se fornecido)
+    if let Some(ref new_password) = payload.password {
+        crate::security::validate_password_strength(new_password)
+            .map_err(|e| AppError::Anyhow(anyhow::anyhow!(e)))?;
+
+        let password_clone = new_password.clone();
+        let password_hash =
+            tokio::task::spawn_blocking(move || bcrypt::hash(password_clone, bcrypt::DEFAULT_COST))
+                .await??;
+
+        sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&password_hash)
+            .bind(user_id)
+            .execute(&state.db_pool_auth)
+            .await?;
+
+        // Revogar refresh tokens do usuário
+        crate::routes::auth_handler::revoke_all_user_tokens(&state.db_pool_auth, user_id)
+            .await
+            .ok();
+    }
+
+    // Buscar usuário atualizado
+    let user = sqlx::query_as::<_, UserDto>(
+        "SELECT id, username, created_at, updated_at FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(&state.db_pool_auth)
+    .await?;
+
+    tracing::info!(
+        user_id = %user_id,
+        event_type = "user_updated_by_admin",
+        "Admin atualizou usuário"
+    );
+
+    Ok(Json(user))
+}
+
+/// DELETE /api/admin/users/:id
+/// Deleta um usuário
+pub async fn delete_user(
+    State(state): State<AppState>,
+    current_user: CurrentUser,
+    Path(user_id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    // Admin não pode deletar a si mesmo
+    if current_user.id == user_id {
+        return Err(AppError::Forbidden);
+    }
+
+    let result = sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(&state.db_pool_auth)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound("Usuário não encontrado".to_string()));
+    }
+
+    tracing::warn!(
+        user_id = %user_id,
+        event_type = "user_deleted_by_admin",
+        "Admin deletou usuário"
+    );
+
+    Ok(StatusCode::NO_CONTENT)
 }

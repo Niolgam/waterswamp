@@ -3,7 +3,7 @@ use crate::models::CurrentUser;
 use crate::state::SharedEnforcer;
 use anyhow::Result;
 use axum::http::request::Parts;
-use bcrypt::{DEFAULT_COST, hash};
+use bcrypt::{hash, DEFAULT_COST};
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use sqlx::PgPool;
 use sqlx_adapter::SqlxAdapter;
@@ -72,6 +72,26 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .await?;
     enforcer
         .add_policy(str_vec![ROLE_ADMIN, RESOURCE_ADMIN_POLICIES, ACTION_DELETE])
+        .await?;
+
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users", ACTION_GET])
+        .await?;
+
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users", ACTION_POST])
+        .await?;
+
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/:id", ACTION_GET])
+        .await?;
+
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/:id", ACTION_PUT])
+        .await?;
+
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/:id", ACTION_DELETE])
         .await?;
 
     // Salva as políticas no banco de dados
