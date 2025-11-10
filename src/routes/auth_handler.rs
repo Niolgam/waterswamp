@@ -10,8 +10,8 @@ use validator::Validate;
 use crate::{
     error::AppError,
     models::{
-        Claims, LoginPayload, LoginResponse, RefreshTokenPayload, RefreshTokenResponse, TokenType,
-        User,
+        Claims, LoginPayload, LoginResponse, RefreshTokenPayload, RefreshTokenResponse,
+        RegisterPayload, TokenType, User,
     },
     state::AppState,
 };
@@ -246,4 +246,115 @@ pub async fn revoke_all_user_tokens(
     }
 
     Ok(revoked_count)
+}
+
+/// POST /auth/register
+/// Cria um novo usuário e retorna tokens
+pub async fn handler_register(
+    State(state): State<AppState>,
+    Json(payload): Json<RegisterPayload>,
+) -> Result<Json<LoginResponse>, AppError> {
+    tracing::info!("=== REGISTER DEBUG ===");
+    tracing::info!("Username: {}", payload.username);
+    tracing::info!("Password length: {}", payload.password.len());
+
+    // 1. Validar payload
+    payload.validate()?;
+    tracing::info!("✓ Validação básica OK");
+
+    // 2. Validar username
+    if !payload
+        .username
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_')
+    {
+        tracing::warn!("✗ Username inválido");
+        return Err(AppError::Anyhow(anyhow::anyhow!(
+            "Username inválido (apenas letras, números e _)"
+        )));
+    }
+    tracing::info!("✓ Username válido");
+
+    // 3. Validar senha
+    if let Err(e) = crate::security::validate_password_strength(&payload.password) {
+        tracing::warn!("✗ Senha fraca: {}", e);
+        return Err(AppError::Anyhow(anyhow::anyhow!(e)));
+    }
+    tracing::info!("✓ Senha forte");
+
+    // 4. Verificar se username já existe
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
+        .bind(&payload.username)
+        .fetch_one(&state.db_pool_auth)
+        .await?;
+
+    if exists {
+        return Err(AppError::Anyhow(anyhow::anyhow!("Username já está em uso")));
+    }
+
+    // 5. Hash da senha
+    let password_clone = payload.password.clone();
+    let password_hash =
+        tokio::task::spawn_blocking(move || bcrypt::hash(password_clone, bcrypt::DEFAULT_COST))
+            .await
+            .context("Falha ao executar hash de senha")?
+            .map_err(|_| AppError::Anyhow(anyhow::anyhow!("Erro ao fazer hash da senha")))?;
+
+    // 6. Inserir usuário no banco
+    let user_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO users (username, password_hash)
+        VALUES ($1, $2)
+        RETURNING id
+        "#,
+    )
+    .bind(&payload.username)
+    .bind(&password_hash)
+    .fetch_one(&state.db_pool_auth)
+    .await?;
+
+    // 7. Gerar access token
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("Falha crítica no relógio do sistema")?
+        .as_secs() as i64;
+
+    let access_claims = Claims {
+        sub: user_id,
+        exp: now + ACCESS_TOKEN_EXPIRY_SECONDS,
+        iat: now,
+        token_type: TokenType::Access,
+    };
+
+    let access_token = encode(&Header::default(), &access_claims, &state.encoding_key)
+        .context("Falha ao codificar access token JWT")?;
+
+    // 8. Gerar refresh token
+    let refresh_token_raw = Uuid::new_v4().to_string();
+    let refresh_token_hash = hash_token(&refresh_token_raw);
+
+    sqlx::query(
+        r#"
+        INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+        VALUES ($1, $2, NOW() + INTERVAL '30 days')
+        "#,
+    )
+    .bind(user_id)
+    .bind(&refresh_token_hash)
+    .execute(&state.db_pool_auth)
+    .await?;
+
+    tracing::info!(
+        user_id = %user_id,
+        username = %payload.username,
+        event_type = "user_registered",
+        "Novo usuário registrado com sucesso"
+    );
+
+    // 9. Retornar resposta
+    Ok(Json(LoginResponse::new(
+        access_token,
+        refresh_token_raw,
+        ACCESS_TOKEN_EXPIRY_SECONDS,
+    )))
 }

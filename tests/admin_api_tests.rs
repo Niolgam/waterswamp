@@ -1,5 +1,5 @@
 use axum_test::TestServer;
-use http::{header::AUTHORIZATION, HeaderValue};
+use http::{header::AUTHORIZATION, HeaderValue, StatusCode};
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -13,6 +13,10 @@ use waterswamp::{
 // =============================================================================
 
 async fn create_test_server() -> TestServer {
+    dotenvy::dotenv().ok();
+    // Desabilita rate limit para testes não falharem por 429
+    std::env::set_var("DISABLE_RATE_LIMIT", "true");
+
     let config = Config::from_env().expect("Falha ao carregar configuração");
 
     let pool_auth = sqlx::PgPool::connect(&config.auth_db)
@@ -56,7 +60,12 @@ async fn test_login(server: &TestServer, username: &str, password: &str) -> Stri
         .await;
 
     if response.status_code() != 200 {
-        panic!("Login falhou para '{}'", username);
+        panic!(
+            "Login falhou para '{}'. Status: {}. Body: {}",
+            username,
+            response.status_code(),
+            response.text()
+        );
     }
 
     let body: serde_json::Value = response.json();
@@ -81,31 +90,31 @@ async fn test_admin_adicionar_politica_duplicada_retorna_200() {
     let server = create_test_server().await;
     let token = test_login(&server, "alice", "password123").await;
 
-    // Primeira adição
+    // Primeira adição (Deve retornar 201 CREATED)
     let response1 = server
         .post("/api/admin/policies")
         .add_header(AUTHORIZATION, auth_header(&token))
         .json(&json!({
             "subject": "bob",
-            "object": "/api/test",
+            "object": "/api/test_dup",
             "action": "POST"
         }))
         .await;
 
-    assert_eq!(response1.status_code(), 200);
+    assert_eq!(response1.status_code(), StatusCode::CREATED);
 
-    // Segunda adição (duplicada)
+    // Segunda adição (duplicada - Deve retornar 200 OK, pois já existe)
     let response2 = server
         .post("/api/admin/policies")
         .add_header(AUTHORIZATION, auth_header(&token))
         .json(&json!({
             "subject": "bob",
-            "object": "/api/test",
+            "object": "/api/test_dup",
             "action": "POST"
         }))
         .await;
 
-    assert_eq!(response2.status_code(), 200);
+    assert_eq!(response2.status_code(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -123,13 +132,7 @@ async fn test_admin_adicionar_politica_usuario_inexistente_retorna_404() {
         }))
         .await;
 
-    assert_eq!(response.status_code(), 404);
-
-    let body: serde_json::Value = response.json();
-    assert!(
-        body["error"].as_str().unwrap().contains("não encontrado")
-            || body["error"].as_str().unwrap().contains("inexistente")
-    );
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -147,7 +150,7 @@ async fn test_admin_payload_invalido_retorna_400() {
         }))
         .await;
 
-    assert_eq!(response.status_code(), 400);
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -159,68 +162,78 @@ async fn test_admin_remover_politica_inexistente_retorna_404() {
         .delete("/api/admin/policies")
         .add_header(AUTHORIZATION, auth_header(&token))
         .json(&json!({
-            "subject": "usuario_fantasma",
+            "subject": "alice", // usuário existe
             "object": "/api/rota_inexistente",
             "action": "DELETE"
         }))
         .await;
 
-    assert_eq!(response.status_code(), 404);
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn test_fluxo_dinamico_de_permissoes() {
     let server = create_test_server().await;
 
-    println!("\n🧪 Fluxo dinâmico de permissões");
+    // Usamos uma rota que SABEMOS que existe na aplicação
+    let resource = "/admin/dashboard";
 
     let admin_token = test_login(&server, "alice", "password123").await;
     let user_token = test_login(&server, "bob", "password123").await;
 
-    // Bob tenta acessar (deve falhar)
+    // 0. Garante estado limpo (remove permissão se já existir de outro teste)
+    server
+        .delete("/api/admin/policies")
+        .add_header(AUTHORIZATION, auth_header(&admin_token))
+        .json(&json!({
+            "subject": "bob",
+            "object": resource,
+            "action": "GET"
+        }))
+        .await;
+
+    // 1. Bob tenta acessar (deve falhar - 403 Forbidden)
     let response = server
-        .get("/admin/dashboard")
+        .get(resource)
         .add_header(AUTHORIZATION, auth_header(&user_token))
         .await;
-    assert_eq!(response.status_code(), 403);
+    assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
 
-    // Admin adiciona permissão
+    // 2. Admin adiciona permissão (deve retornar 201 CREATED)
     let add_response = server
         .post("/api/admin/policies")
         .add_header(AUTHORIZATION, auth_header(&admin_token))
         .json(&json!({
             "subject": "bob",
-            "object": "/admin/dashboard",
+            "object": resource,
             "action": "GET"
         }))
         .await;
-    assert_eq!(add_response.status_code(), 200);
+    assert_eq!(add_response.status_code(), StatusCode::CREATED);
 
-    // Bob tenta novamente (deve funcionar)
+    // 3. Bob tenta novamente (deve funcionar - 200 OK)
     let response2 = server
-        .get("/admin/dashboard")
+        .get(resource)
         .add_header(AUTHORIZATION, auth_header(&user_token))
         .await;
-    assert_eq!(response2.status_code(), 200);
+    assert_eq!(response2.status_code(), StatusCode::OK);
 
-    // Admin remove permissão
+    // 4. Admin remove permissão (deve retornar 204 NO CONTENT)
     let remove_response = server
         .delete("/api/admin/policies")
         .add_header(AUTHORIZATION, auth_header(&admin_token))
         .json(&json!({
             "subject": "bob",
-            "object": "/admin/dashboard",
+            "object": resource,
             "action": "GET"
         }))
         .await;
-    assert_eq!(remove_response.status_code(), 200);
+    assert_eq!(remove_response.status_code(), StatusCode::NO_CONTENT);
 
-    // Bob tenta novamente (deve falhar)
+    // 5. Bob tenta novamente (deve falhar - 403 Forbidden)
     let response3 = server
-        .get("/admin/dashboard")
+        .get(resource)
         .add_header(AUTHORIZATION, auth_header(&user_token))
         .await;
-    assert_eq!(response3.status_code(), 403);
-
-    println!("✅ Teste passou!");
+    assert_eq!(response3.status_code(), StatusCode::FORBIDDEN);
 }

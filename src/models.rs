@@ -78,6 +78,21 @@ pub struct CurrentUser {
     pub id: Uuid,
 }
 
+#[derive(Debug, Validate, Deserialize)]
+pub struct RegisterPayload {
+    #[validate(length(
+        min = 3,
+        max = 50,
+        message = "Username deve ter entre 3 e 50 caracteres"
+    ))]
+    pub username: String,
+
+    #[validate(length(min = 8, message = "Senha deve ter no mínimo 8 caracteres"))]
+    pub password: String,
+}
+
+// Regex para username (apenas alfanuméricos e underscore)
+
 impl<S> FromRequestParts<S> for CurrentUser
 where
     S: Send + Sync,

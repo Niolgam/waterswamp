@@ -110,7 +110,6 @@ pub async fn remove_policy(
     }
 }
 
-/// ⭐ FUNÇÃO REFATORADA
 /// Helper: Resolve subject (aceita UUID ou username)
 ///
 /// RETORNA Option<String> em vez de Result<String, AppError>

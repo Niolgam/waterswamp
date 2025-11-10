@@ -26,11 +26,9 @@ pub fn build_router(app_state: AppState) -> Router {
         .route("/health", get(health_handler::handler_health))
         .route("/health/live", get(health_handler::handler_liveness))
         .route("/health/ready", get(health_handler::handler_ready))
-        // ⭐ NOVO: Métricas Prometheus
         .route("/metrics", get(metrics::handler_metrics))
-        // Login com rate limiting mais agressivo
         .route("/login", post(auth_handler::handler_login))
-        // ⭐ NOVO: Refresh token e logout
+        .route("/register", post(auth_handler::handler_register))
         .route("/refresh-token", post(auth_handler::handler_refresh_token))
         .route("/logout", post(auth_handler::handler_logout))
         .layer(login_rate_limiter());

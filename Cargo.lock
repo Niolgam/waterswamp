@@ -4220,6 +4220,7 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "prometheus",
+ "regex",
  "serde",
  "serde_json",
  "sha2",
