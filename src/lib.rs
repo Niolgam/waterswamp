@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use config::Config;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use sqlx::PgPool;
@@ -19,6 +19,7 @@ mod middleware;
 pub mod models;
 pub mod openapi;
 pub mod rate_limit;
+pub mod repositories;
 pub mod routes;
 pub mod security;
 pub mod shutdown;
@@ -45,10 +46,11 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     let enforcer = casbin_setup::setup_casbin(pool_auth.clone()).await?;
     info!("✅ Casbin inicializado");
 
-    let secret = config.jwt_secret;
-    let encoding_key = EncodingKey::from_secret(secret.as_bytes());
-    let decoding_key = DecodingKey::from_secret(secret.as_bytes());
+    let encoding_key = EncodingKey::from_ed_pem(config.jwt_private_key.as_bytes())
+        .context("Falha ao carregar chave privada EdDSA")?;
 
+    let decoding_key = DecodingKey::from_ed_pem(config.jwt_public_key.as_bytes())
+        .context("Falha ao carregar chave pública EdDSA")?;
     let policy_cache = Arc::new(RwLock::new(HashMap::new()));
 
     let app_state = state::AppState {
@@ -56,8 +58,8 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         policy_cache,
         db_pool_auth: pool_auth,
         db_pool_logs: pool_logs,
-        encoding_key: encoding_key,
-        decoding_key: decoding_key,
+        encoding_key,
+        decoding_key,
     };
 
     info!("📡 Construindo rotas...");

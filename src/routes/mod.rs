@@ -7,7 +7,7 @@ use crate::{
 };
 use axum::{
     middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use tower::ServiceBuilder;
@@ -42,18 +42,18 @@ pub fn build_router(app_state: AppState) -> Router {
         .route("/api/admin/policies", delete(admin_handler::remove_policy))
         .route("/api/admin/users", get(admin_handler::list_users))
         .route("/api/admin/users", post(admin_handler::create_user))
-        .route("/api/admin/users/:id", get(admin_handler::get_user))
-        .route("/api/admin/users/:id", put(admin_handler::update_user))
-        .route("/api/admin/users/:id", delete(admin_handler::delete_user))
+        .route("/api/admin/users/{id}", get(admin_handler::get_user))
+        .route("/api/admin/users/{id}", put(admin_handler::update_user))
+        .route("/api/admin/users/{id}", delete(admin_handler::delete_user))
         .layer(admin_rate_limiter())
         // Middlewares de autenticação e autorização (ordem importa!)
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
-            mw_authorize,
+            mw_authenticate,
         ))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
-            mw_authenticate,
+            mw_authorize,
         ))
         // Rate limiting geral para rotas protegidas
         .layer(api_rate_limiter());

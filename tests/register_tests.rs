@@ -1,56 +1,18 @@
-use axum_test::TestServer;
-use serde_json::json;
-use sqlx::PgPool;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use waterswamp::{
-    casbin_setup::setup_casbin, config::Config, routes::build_router, state::AppState,
-};
+use http::StatusCode;
+use serde_json::{json, Value};
 
-async fn create_test_server() -> TestServer {
-    dotenvy::dotenv().ok();
-    std::env::set_var("DISABLE_RATE_LIMIT", "true");
-
-    let config = Config::from_env().expect("Falha ao carregar config");
-
-    let pool_auth = PgPool::connect(&config.auth_db)
-        .await
-        .expect("Falha ao conectar ao auth_db");
-
-    let pool_logs = PgPool::connect(&config.logs_db)
-        .await
-        .expect("Falha ao conectar ao logs_db");
-
-    let enforcer = setup_casbin(pool_auth.clone())
-        .await
-        .expect("Falha ao inicializar Casbin");
-
-    let encoding_key = jsonwebtoken::EncodingKey::from_secret(config.jwt_secret.as_bytes());
-    let decoding_key = jsonwebtoken::DecodingKey::from_secret(config.jwt_secret.as_bytes());
-    let policy_cache = Arc::new(RwLock::new(HashMap::new()));
-
-    let app_state = AppState {
-        enforcer: enforcer.clone(),
-        policy_cache,
-        db_pool_auth: pool_auth,
-        db_pool_logs: pool_logs,
-        encoding_key,
-        decoding_key,
-    };
-
-    let app = build_router(app_state);
-    TestServer::new(app).unwrap()
-}
+// Importa o setup de 'tests/common.rs'
+mod common;
 
 #[tokio::test]
 async fn test_register_success() {
-    let server = create_test_server().await;
+    let app = common::spawn_app().await;
 
-    // Usar um username único para evitar conflitos
+    // Usa um username único para evitar conflitos com outros testes
     let unique_username = format!("user_{}", uuid::Uuid::new_v4());
 
-    let response = server
+    let response = app
+        .api
         .post("/register")
         .json(&json!({
             "username": unique_username,
@@ -58,28 +20,29 @@ async fn test_register_success() {
         }))
         .await;
 
-    // Debug: ver o corpo da resposta se falhar
-    if response.status_code() != 200 {
-        let body: serde_json::Value = response.json();
-        println!("Erro no registro: {:?}", body);
+    // Debugging útil caso o teste falhe
+    if response.status_code() != StatusCode::OK {
+        let body_text = response.text();
+        println!("Erro no registro: {}", body_text);
         panic!("Registro falhou com status {}", response.status_code());
     }
 
     response.assert_status_ok();
 
-    let body: serde_json::Value = response.json();
-    assert!(body["access_token"].is_string(), "access_token ausente");
-    assert!(body["refresh_token"].is_string(), "refresh_token ausente");
+    let body: Value = response.json();
+    assert!(body["access_token"].is_string(), "access_token missing");
+    assert!(body["refresh_token"].is_string(), "refresh_token missing");
 }
 
 #[tokio::test]
 async fn test_register_username_taken() {
-    let server = create_test_server().await;
+    let app = common::spawn_app().await;
 
     let username = format!("duplicated_{}", uuid::Uuid::new_v4());
 
-    // Primeiro registro (deve funcionar)
-    let response1 = server
+    // 1. Primeiro registro (deve funcionar)
+    let response1 = app
+        .api
         .post("/register")
         .json(&json!({
             "username": username,
@@ -87,16 +50,11 @@ async fn test_register_username_taken() {
         }))
         .await;
 
-    if response1.status_code() != 200 {
-        let body: serde_json::Value = response1.json();
-        println!("Erro no primeiro registro: {:?}", body);
-        panic!("Primeiro registro falhou");
-    }
-
     response1.assert_status_ok();
 
-    // Segundo registro (deve falhar com 400 ou 409)
-    let response2 = server
+    // 2. Segundo registro (deve falhar com conflito)
+    let response2 = app
+        .api
         .post("/register")
         .json(&json!({
             "username": username,
@@ -104,59 +62,66 @@ async fn test_register_username_taken() {
         }))
         .await;
 
-    // Aceitar tanto 400 quanto 409
-    assert!(
-        response2.status_code() == 400 || response2.status_code() == 409,
-        "Esperado 400 ou 409, recebido {}",
+    // O handler retorna AppError::Conflict
+    // que é mapeado para StatusCode::CONFLICT (409)
+    assert_eq!(
+        response2.status_code(),
+        StatusCode::CONFLICT,
+        "Esperado 409 CONFLICT, recebido {}",
         response2.status_code()
     );
 }
 
 #[tokio::test]
 async fn test_register_weak_password() {
-    let server = create_test_server().await;
+    let app = common::spawn_app().await;
 
-    let response = server
+    let response = app
+        .api
         .post("/register")
         .json(&json!({
             "username": format!("user_{}", uuid::Uuid::new_v4()),
-            "password": "senha123" // Sem maiúscula e caractere especial
+            "password": "senha123" // Reprovado pelo zxcvbn
         }))
         .await;
 
+    // Mapeado para AppError::BadRequest
     assert_eq!(
         response.status_code(),
-        400,
+        StatusCode::BAD_REQUEST, // 400
         "Senha fraca deveria retornar 400"
     );
 }
 
 #[tokio::test]
 async fn test_register_short_password() {
-    let server = create_test_server().await;
+    let app = common::spawn_app().await;
 
-    let response = server
+    let response = app
+        .api
         .post("/register")
         .json(&json!({
             "username": format!("user_{}", uuid::Uuid::new_v4()),
-            "password": "Abc1!" // Muito curta
+            "password": "Abc1!" // Falha na validação de DTO (min = 8)
         }))
         .await;
 
-    assert_eq!(response.status_code(), 400);
+    // Mapeado para AppError::Validation, que é 400
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
 async fn test_register_short_username() {
-    let server = create_test_server().await;
+    let app = common::spawn_app().await;
 
-    let response = server
+    let response = app
+        .api
         .post("/register")
         .json(&json!({
-            "username": "ab", // Menos de 3 caracteres
+            "username": "ab", // Falha na validação de DTO (min = 3)
             "password": "S3nh@Forte123"
         }))
         .await;
 
-    assert_eq!(response.status_code(), 400);
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }

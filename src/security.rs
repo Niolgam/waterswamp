@@ -1,6 +1,11 @@
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
 use axum::http::{header, HeaderValue, Method};
 use std::time::Duration;
 use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
+use zxcvbn::{zxcvbn, Score};
 
 /// Configuração de CORS para produção
 /// Permite apenas origens específicas
@@ -94,79 +99,40 @@ pub fn security_headers() -> Vec<SetResponseHeaderLayer<HeaderValue>> {
 }
 
 pub fn validate_password_strength(password: &str) -> Result<(), String> {
-    // Mínimo 8 caracteres
-    if password.len() < 8 {
-        return Err("Senha deve ter no mínimo 8 caracteres".to_string());
+    let estimate = zxcvbn(password, &[]);
+    if estimate.score() < Score::Three {
+        return Err("Senha muito fraca. Use uma senha mais complexa.".to_string());
     }
-
-    // Máximo 128 caracteres (prevenir DoS)
-    if password.len() > 128 {
-        return Err("Senha muito longa (máximo 128 caracteres)".to_string());
-    }
-
-    // Deve conter letra maiúscula
-    if !password.chars().any(|c| c.is_uppercase()) {
-        return Err("Senha deve conter pelo menos uma letra maiúscula".to_string());
-    }
-
-    // Deve conter letra minúscula
-    if !password.chars().any(|c| c.is_lowercase()) {
-        return Err("Senha deve conter pelo menos uma letra minúscula".to_string());
-    }
-
-    // Deve conter número
-    if !password.chars().any(|c| c.is_numeric()) {
-        return Err("Senha deve conter pelo menos um número".to_string());
-    }
-
-    // Deve conter caractere especial
-    if !password
-        .chars()
-        .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c))
-    {
-        return Err("Senha deve conter pelo menos um caractere especial".to_string());
-    }
-
-    // Verificar senhas comuns
-    const COMMON_PASSWORDS: &[&str] = &[
-        "password",
-        "12345678",
-        "qwerty",
-        "abc123",
-        "password123",
-        "111111",
-        "123123",
-        "admin",
-        "letmein",
-        "welcome",
-        "monkey",
-        "1234567890",
-        "password1",
-        "qwertyuiop",
-        "123456789",
-    ];
-
-    let password_lower = password.to_lowercase();
-    if COMMON_PASSWORDS.iter().any(|&p| password_lower.contains(p)) {
-        return Err("Senha muito comum ou previsível. Escolha uma senha mais segura.".to_string());
-    }
-
-    // Verificar sequências repetidas (ex: "aaaaaa")
-    let mut prev_char = '\0';
-    let mut repeat_count = 0;
-    for c in password.chars() {
-        if c == prev_char {
-            repeat_count += 1;
-            if repeat_count >= 4 {
-                return Err("Senha contém muitos caracteres repetidos".to_string());
-            }
-        } else {
-            repeat_count = 1;
-            prev_char = c;
-        }
-    }
-
     Ok(())
+}
+
+/// Gera um hash Argon2id para a senha fornecida.
+pub fn hash_password(password: &str) -> anyhow::Result<String> {
+    let salt = SaltString::generate(&mut OsRng);
+
+    // Argon2id é o padrão da crate argon2 (v0.5+)
+    let argon2 = Argon2::default();
+
+    // Hash da senha (retorna um PasswordHash)
+    let password_hash = argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|e| anyhow::anyhow!("Erro interno de hash: {}", e))?;
+
+    // Converte para o formato string PHC padrão ($argon2id$v=19$...)
+    Ok(password_hash.to_string())
+}
+
+/// Verifica se a senha corresponde ao hash Argon2id fornecido.
+pub fn verify_password(password: &str, hash: &str) -> anyhow::Result<bool> {
+    // Parse do hash armazenado
+    let parsed_hash =
+        PasswordHash::new(hash).map_err(|e| anyhow::anyhow!("Formato de hash inválido: {}", e))?;
+
+    // Verifica a senha
+    let argon2 = Argon2::default();
+    Ok(argon2
+        .verify_password(password.as_bytes(), &parsed_hash)
+        .is_ok())
 }
 
 #[cfg(test)]
@@ -227,8 +193,8 @@ mod tests {
 
     #[test]
     fn test_password_valid() {
-        assert!(validate_password_strength("MyP@ssw0rd2024").is_ok());
-        assert!(validate_password_strength("Tr0ng$ecuR3!").is_ok());
-        assert!(validate_password_strength("C0mpl3x&P@ss").is_ok());
+        assert!(validate_password_strength("F!8q@K39zP#s").is_ok());
+        assert!(validate_password_strength("Tr0ng$ecuR3!Data#42").is_ok());
+        assert!(validate_password_strength("C0mpl3x&P@ss#Sys2025").is_ok());
     }
 }

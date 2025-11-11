@@ -149,7 +149,7 @@ pub struct ListUsersQuery {
 }
 
 /// DTO de usuário (sem informações sensíveis)
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct UserDto {
     pub id: Uuid,
     pub username: String,

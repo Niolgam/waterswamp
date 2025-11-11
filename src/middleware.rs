@@ -10,7 +10,7 @@ use axum::{
     response::Response,
 };
 use casbin::CoreApi;
-use jsonwebtoken::{decode, Validation};
+use jsonwebtoken::{decode, Algorithm, Validation};
 
 pub async fn mw_authenticate(
     State(state): State<AppState>,
@@ -20,11 +20,9 @@ pub async fn mw_authenticate(
     let token = extract_token(req.headers())
         .ok_or_else(|| AppError::Unauthorized("Token não encontrado".to_string()))?;
 
-    let token_data = decode::<Claims>(&token, &state.decoding_key, &Validation::default())
-        .map_err(|e| {
-            tracing::debug!("Erro ao validar token: {}", e);
-            AppError::Unauthorized("Token inválido ou expirado".to_string())
-        })?;
+    let mut validation = Validation::new(Algorithm::EdDSA);
+    let token_data = decode::<Claims>(&token, &state.decoding_key, &validation)
+        .map_err(|_| AppError::Unauthorized("Token inválido ou expirado".to_string()))?;
 
     let current_user = CurrentUser {
         id: token_data.claims.sub,

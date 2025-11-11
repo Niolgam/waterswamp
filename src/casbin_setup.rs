@@ -1,9 +1,11 @@
 use crate::constants::*;
 use crate::models::CurrentUser;
 use crate::state::SharedEnforcer;
+// ADICIONADO: Import do módulo de segurança
+use crate::security;
 use anyhow::Result;
 use axum::http::request::Parts;
-use bcrypt::{hash, DEFAULT_COST};
+// REMOVIDO: use bcrypt::{hash, DEFAULT_COST};
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use sqlx::PgPool;
 use sqlx_adapter::SqlxAdapter;
@@ -19,15 +21,13 @@ macro_rules! str_vec {
     };
 }
 
-/// Encontra o caminho do arquivo rbac_model.conf
-/// Tenta vários locais possíveis para funcionar tanto em produção quanto em testes
 fn find_model_path() -> Result<PathBuf> {
     let possible_paths = vec![
-        PathBuf::from("rbac_model.conf"),        // Diretório atual
-        PathBuf::from("../rbac_model.conf"),     // Um nível acima (para testes)
-        PathBuf::from("../../rbac_model.conf"),  // Dois níveis acima
-        PathBuf::from("src/rbac_model.conf"),    // Na pasta src
-        PathBuf::from("../src/rbac_model.conf"), // src um nível acima
+        PathBuf::from("rbac_model.conf"),
+        PathBuf::from("../rbac_model.conf"),
+        PathBuf::from("../../rbac_model.conf"),
+        PathBuf::from("src/rbac_model.conf"),
+        PathBuf::from("../src/rbac_model.conf"),
     ];
 
     for path in possible_paths {
@@ -48,7 +48,6 @@ pub async fn setup_casbin(pool: PgPool) -> Result<SharedEnforcer> {
     let model = DefaultModel::from_file(model_path).await?;
     let mut enforcer = Enforcer::new(model, adapter).await?;
 
-    // Seed policies and users
     seed_policies(&mut enforcer, &pool).await?;
 
     let enforcer_arc = Arc::new(RwLock::new(enforcer));
@@ -56,6 +55,7 @@ pub async fn setup_casbin(pool: PgPool) -> Result<SharedEnforcer> {
 }
 
 async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
+    // Limpa políticas antigas para evitar duplicação no reinício
     enforcer.clear_policy().await?;
 
     // --- Definindo Políticas (Papéis) ---
@@ -82,30 +82,33 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users", ACTION_POST])
         .await?;
 
+    // ATUALIZADO PARA SINTAXE {id} DO AXUM 0.7 (para manter consistência com as rotas)
     enforcer
-        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/:id", ACTION_GET])
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/{id}", ACTION_GET])
         .await?;
 
     enforcer
-        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/:id", ACTION_PUT])
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/{id}", ACTION_PUT])
         .await?;
 
     enforcer
-        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/:id", ACTION_DELETE])
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/{id}", ACTION_DELETE])
         .await?;
 
-    // Salva as políticas no banco de dados
     enforcer.save_policy().await?;
 
     info!("Políticas do Casbin carregadas e salvas no banco.");
     info!("Iniciando seeding de usuários de teste...");
 
-    // Cria os hashes das senhas
+    // --- ATUALIZAÇÃO AQUI: Usando Argon2id via security::hash_password ---
+    // Como Argon2 pode ser pesado, ainda é bom fazer em spawn_blocking se configurado com parâmetros altos,
+    // mas a crate 'argon2' com padrão é razoavelmente rápida para setup inicial.
+    // Mantendo o padrão de spawn_blocking por segurança.
     let alice_hash =
-        tokio::task::spawn_blocking(move || hash("password123", DEFAULT_COST)).await??;
-    let bob_hash = tokio::task::spawn_blocking(move || hash("password123", DEFAULT_COST)).await??;
+        tokio::task::spawn_blocking(move || security::hash_password("password123")).await??;
+    let bob_hash =
+        tokio::task::spawn_blocking(move || security::hash_password("password123")).await??;
 
-    // Insere os usuários e captura os IDs gerados
     let alice_id: Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO users (username, password_hash)
@@ -134,7 +137,6 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Usuários criados: alice={}, bob={}", alice_id, bob_id);
 
-    // --- Agora usa os UUIDs reais nas políticas do Casbin ---
     enforcer
         .add_grouping_policy(str_vec![&alice_id.to_string(), ROLE_ADMIN])
         .await?;
@@ -149,11 +151,8 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
     Ok(())
 }
 
-/// Função "getter" que o `axum-casbin` usará para
-/// extrair o "subject" (sujeito) da requisição.
 pub fn casbin_subject_getter(parts: &Parts) -> String {
     if let Some(user) = parts.extensions.get::<CurrentUser>() {
-        // Usa UUID como subject (mais estável)
         user.id.to_string()
     } else {
         "anonymous".to_string()

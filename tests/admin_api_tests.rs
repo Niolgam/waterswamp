@@ -1,101 +1,20 @@
-use axum_test::TestServer;
-use http::{header::AUTHORIZATION, HeaderValue, StatusCode};
-use serde_json::json;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+mod common; // Importa o nosso common.rs
 
-use waterswamp::{
-    casbin_setup::setup_casbin, config::Config, routes::build_router, state::AppState,
-};
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-async fn create_test_server() -> TestServer {
-    dotenvy::dotenv().ok();
-    // Desabilita rate limit para testes não falharem por 429
-    std::env::set_var("DISABLE_RATE_LIMIT", "true");
-
-    let config = Config::from_env().expect("Falha ao carregar configuração");
-
-    let pool_auth = sqlx::PgPool::connect(&config.auth_db)
-        .await
-        .expect("Falha ao conectar ao banco de autenticação");
-
-    let pool_logs = sqlx::PgPool::connect(&config.logs_db)
-        .await
-        .expect("Falha ao conectar ao banco de logs");
-
-    let enforcer = setup_casbin(pool_auth.clone())
-        .await
-        .expect("Falha ao configurar Casbin");
-
-    let secret = config.jwt_secret;
-    let encoding_key = jsonwebtoken::EncodingKey::from_secret(secret.as_bytes());
-    let decoding_key = jsonwebtoken::DecodingKey::from_secret(secret.as_bytes());
-
-    let policy_cache = Arc::new(RwLock::new(std::collections::HashMap::new()));
-
-    let app_state = AppState {
-        enforcer,
-        policy_cache,
-        db_pool_auth: pool_auth,
-        db_pool_logs: pool_logs,
-        encoding_key,
-        decoding_key,
-    };
-
-    let app = build_router(app_state);
-    TestServer::new(app).expect("Falha ao criar servidor de teste")
-}
-
-async fn test_login(server: &TestServer, username: &str, password: &str) -> String {
-    let response = server
-        .post("/login")
-        .json(&json!({
-            "username": username,
-            "password": password
-        }))
-        .await;
-
-    if response.status_code() != 200 {
-        panic!(
-            "Login falhou para '{}'. Status: {}. Body: {}",
-            username,
-            response.status_code(),
-            response.text()
-        );
-    }
-
-    let body: serde_json::Value = response.json();
-    body["access_token"]
-        .as_str()
-        .expect("access_token ausente")
-        .to_string()
-}
-
-// Helper para criar header de autorização
-fn auth_header(token: &str) -> HeaderValue {
-    HeaderValue::from_str(&format!("Bearer {}", token))
-        .expect("Falha ao criar header de autorização")
-}
-
-// =============================================================================
-// TESTES
-// =============================================================================
+use http::StatusCode;
+use serde_json::{json, Value};
+use waterswamp::models::UserDto; // Usado para deserializar a resposta
 
 #[tokio::test]
-async fn test_admin_adicionar_politica_duplicada_retorna_200() {
-    let server = create_test_server().await;
-    let token = test_login(&server, "alice", "password123").await;
+async fn test_admin_add_duplicate_policy_returns_200() {
+    let app = common::spawn_app().await;
 
-    // Primeira adição (Deve retornar 201 CREATED)
-    let response1 = server
+    // 1. Primeira adição (Deve retornar 201 CREATED)
+    let response1 = app
+        .api
         .post("/api/admin/policies")
-        .add_header(AUTHORIZATION, auth_header(&token))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "subject": "bob",
+            "subject": "bob", // O utilizador 'bob' existe
             "object": "/api/test_dup",
             "action": "POST"
         }))
@@ -103,10 +22,11 @@ async fn test_admin_adicionar_politica_duplicada_retorna_200() {
 
     assert_eq!(response1.status_code(), StatusCode::CREATED);
 
-    // Segunda adição (duplicada - Deve retornar 200 OK, pois já existe)
-    let response2 = server
+    // 2. Segunda adição (duplicada - Deve retornar 200 OK, idempotente)
+    let response2 = app
+        .api
         .post("/api/admin/policies")
-        .add_header(AUTHORIZATION, auth_header(&token))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "subject": "bob",
             "object": "/api/test_dup",
@@ -118,15 +38,16 @@ async fn test_admin_adicionar_politica_duplicada_retorna_200() {
 }
 
 #[tokio::test]
-async fn test_admin_adicionar_politica_usuario_inexistente_retorna_404() {
-    let server = create_test_server().await;
-    let token = test_login(&server, "alice", "password123").await;
+async fn test_admin_add_policy_nonexistent_user_returns_404() {
+    let app = common::spawn_app().await;
 
-    let response = server
+    // Tenta adicionar política para um utilizador que não existe
+    let response = app
+        .api
         .post("/api/admin/policies")
-        .add_header(AUTHORIZATION, auth_header(&token))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "subject": "usuario_que_nao_existe_123456",
+            "subject": "usuario_fantasma_12345",
             "object": "/api/test",
             "action": "GET"
         }))
@@ -136,13 +57,14 @@ async fn test_admin_adicionar_politica_usuario_inexistente_retorna_404() {
 }
 
 #[tokio::test]
-async fn test_admin_payload_invalido_retorna_400() {
-    let server = create_test_server().await;
-    let token = test_login(&server, "alice", "password123").await;
+async fn test_admin_invalid_policy_payload_returns_400() {
+    let app = common::spawn_app().await;
 
-    let response = server
+    // Payload com "subject" vazio, o que deve falhar a validação do DTO
+    let response = app
+        .api
         .post("/api/admin/policies")
-        .add_header(AUTHORIZATION, auth_header(&token))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "subject": "",
             "object": "/api/test",
@@ -154,86 +76,155 @@ async fn test_admin_payload_invalido_retorna_400() {
 }
 
 #[tokio::test]
-async fn test_admin_remover_politica_inexistente_retorna_404() {
-    let server = create_test_server().await;
-    let token = test_login(&server, "alice", "password123").await;
+async fn test_admin_remove_nonexistent_policy_returns_404() {
+    let app = common::spawn_app().await;
 
-    let response = server
+    // Tenta remover uma política que nunca foi adicionada
+    // CORREÇÃO: Usar .delete() e .json()
+    let response = app
+        .api
         .delete("/api/admin/policies")
-        .add_header(AUTHORIZATION, auth_header(&token))
         .json(&json!({
-            "subject": "alice", // usuário existe
-            "object": "/api/rota_inexistente",
+            "subject": "alice", // Utilizador existe
+            "object": "/api/rota_inexistente_123",
             "action": "DELETE"
         }))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
-async fn test_fluxo_dinamico_de_permissoes() {
-    let server = create_test_server().await;
+async fn test_dynamic_permission_flow() {
+    let app = common::spawn_app().await;
 
-    // Usamos uma rota que SABEMOS que existe na aplicação
-    let resource = "/admin/dashboard";
+    // Recurso que vamos proteger/liberar dinamicamente
+    let resource = "/admin/dashboard"; //
 
-    let admin_token = test_login(&server, "alice", "password123").await;
-    let user_token = test_login(&server, "bob", "password123").await;
-
-    // 0. Garante estado limpo (remove permissão se já existir de outro teste)
-    server
+    // 0. Setup: Garante que Bob (utilizador normal) NÃO tem acesso inicial
+    // CORREÇÃO: Usar .delete() e .json()
+    app.api
         .delete("/api/admin/policies")
-        .add_header(AUTHORIZATION, auth_header(&admin_token))
         .json(&json!({
             "subject": "bob",
             "object": resource,
             "action": "GET"
         }))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
-    // 1. Bob tenta acessar (deve falhar - 403 Forbidden)
-    let response = server
+    // 1. Bob tenta aceder (Deve falhar: 403 Forbidden)
+    let response1 = app
+        .api
         .get(resource)
-        .add_header(AUTHORIZATION, auth_header(&user_token))
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
         .await;
-    assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
+    assert_eq!(response1.status_code(), StatusCode::FORBIDDEN);
 
-    // 2. Admin adiciona permissão (deve retornar 201 CREATED)
-    let add_response = server
+    // 2. Admin (Alice) concede permissão para Bob
+    let add_response = app
+        .api
         .post("/api/admin/policies")
-        .add_header(AUTHORIZATION, auth_header(&admin_token))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "subject": "bob",
             "object": resource,
             "action": "GET"
         }))
         .await;
-    assert_eq!(add_response.status_code(), StatusCode::CREATED);
+    assert_eq!(add_response.status_code(), StatusCode::CREATED); //
 
-    // 3. Bob tenta novamente (deve funcionar - 200 OK)
-    let response2 = server
+    // 3. Bob tenta aceder novamente (Deve ter sucesso: 200 OK)
+    let response2 = app
+        .api
         .get(resource)
-        .add_header(AUTHORIZATION, auth_header(&user_token))
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
         .await;
     assert_eq!(response2.status_code(), StatusCode::OK);
 
-    // 4. Admin remove permissão (deve retornar 204 NO CONTENT)
-    let remove_response = server
+    // 4. Admin (Alice) revoga a permissão
+    // CORREÇÃO: Usar .delete() e .json()
+    let remove_response = app
+        .api
         .delete("/api/admin/policies")
-        .add_header(AUTHORIZATION, auth_header(&admin_token))
         .json(&json!({
             "subject": "bob",
             "object": resource,
             "action": "GET"
         }))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
-    assert_eq!(remove_response.status_code(), StatusCode::NO_CONTENT);
+    assert_eq!(remove_response.status_code(), StatusCode::NO_CONTENT); //
 
-    // 5. Bob tenta novamente (deve falhar - 403 Forbidden)
-    let response3 = server
+    // 5. Bob tenta aceder mais uma vez (Deve falhar novamente: 403 Forbidden)
+    let response3 = app
+        .api
         .get(resource)
-        .add_header(AUTHORIZATION, auth_header(&user_token))
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
         .await;
     assert_eq!(response3.status_code(), StatusCode::FORBIDDEN);
+}
+
+// --- Testes Adicionais (CRUD de Utilizadores) ---
+
+#[tokio::test]
+async fn test_admin_list_users_success() {
+    let app = common::spawn_app().await;
+
+    let response = app
+        .api
+        .get("/api/admin/users")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    response.assert_status_ok();
+    // Verifica se a lista contém pelo menos 'alice' e 'bob'
+    let json: Value = response.json();
+    assert!(json["users"].as_array().unwrap().len() >= 2);
+}
+
+#[tokio::test]
+async fn test_admin_create_user_success() {
+    let app = common::spawn_app().await;
+
+    let response = app
+        .api
+        .post("/api/admin/users")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "username": "new_user_by_admin",
+            "password": "strongPassword123!"
+        }))
+        .await;
+
+    // O handler admin_create_user retorna Ok(Json(user)), que é 200 OK
+    response.assert_status_ok(); //
+
+    let user = response.json::<UserDto>();
+    assert_eq!(user.username, "new_user_by_admin");
+}
+
+#[tokio::test]
+async fn test_admin_access_denied_for_normal_user() {
+    let app = common::spawn_app().await;
+
+    // Tenta aceder a /api/admin/users usando o token de 'bob' (utilizador normal)
+    let response = app
+        .api
+        .get("/api/admin/users")
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
+        .await;
+
+    response.assert_status_forbidden();
+}
+
+#[tokio::test]
+async fn test_admin_access_denied_without_token() {
+    let app = common::spawn_app().await;
+
+    // Tenta aceder sem token
+    let response = app.api.get("/api/admin/users").await;
+
+    response.assert_status_unauthorized();
 }

@@ -1,7 +1,3 @@
-use crate::models::CurrentUser;
-use crate::state::AppState;
-use axum::extract::State;
-
 pub async fn handler_user_profile() -> &'static str {
     // O usuário já foi autenticado e autorizado pelo middleware.
     "Este é o seu perfil de usuário."
