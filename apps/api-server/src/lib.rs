@@ -16,14 +16,12 @@ pub mod error;
 pub mod logging;
 pub mod metrics;
 mod middleware;
-pub mod models;
 pub mod openapi;
 pub mod rate_limit;
-pub mod repositories;
 pub mod routes;
-pub mod security;
 pub mod shutdown;
 pub mod state;
+pub mod web_models;
 
 pub async fn run(addr: SocketAddr) -> Result<()> {
     // ⭐ 1. Inicializar logging ANTES de tudo

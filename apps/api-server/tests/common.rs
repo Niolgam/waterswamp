@@ -1,4 +1,5 @@
 use axum_test::TestServer;
+use domain::models::{Claims, TokenType};
 use jsonwebtoken::DecodingKey;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sqlx::PgPool;
@@ -9,7 +10,6 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 use waterswamp::casbin_setup::setup_casbin;
 use waterswamp::config::Config;
-use waterswamp::models::{Claims, TokenType};
 use waterswamp::routes::build_router;
 use waterswamp::state::AppState;
 
@@ -24,7 +24,7 @@ pub struct TestApp {
 
 pub async fn spawn_app() -> TestApp {
     dotenvy::dotenv().ok();
-    // std::env::set_var("DISABLE_RATE_LIMIT", "true"); // Opcional, dependendo se quer testar rate limit ou não
+    std::env::set_var("DISABLE_RATE_LIMIT", "true"); // Opcional, dependendo se quer testar rate limit ou não
 
     let config = Config::from_env().expect("Falha ao carregar config de teste");
 

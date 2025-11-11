@@ -30,7 +30,7 @@ script = [
  "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
  "echo 'Rodando migrações AUTH com $DATABASE_URL'",
  # Roda o comando de migração
- "sqlx migrate run --source migrations_auth"
+ "sqlx migrate run --source ../../crates/persistence/migrations_auth"
 ]
 
 # --- Tarefa para CRIAR nova migração de AUTENTICAÇÃO ---
@@ -46,7 +46,7 @@ script = [
  "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
  "echo 'Criando migração AUTH na pasta migrations_auth/'",
  # O $1 pega o primeiro argumento passado na linha de comando (o 'name=')
- "sqlx migrate add -r \"$@\" --source migrations_auth"
+ "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_auth"
 ]
 
 # --- Tarefa para CRIAR o banco LOGS ---
@@ -70,7 +70,7 @@ script = [
  "set +a",
  "export DATABASE_URL=$WS_LOGS_DATABASE_URL",
  "echo 'Rodando migrações LOGS com $DATABASE_URL'",
- "sqlx migrate run --source migrations_logs"
+ "sqlx migrate run --source ../../crates/persistence/migrations_logs"
 ]
 
 # --- Tarefa para CRIAR nova migração de LOGS ---
@@ -83,5 +83,5 @@ script = [
  "set +a",
  "export DATABASE_URL=$WS_LOGS_DATABASE_URL",
  "echo 'Criando migração LOGS na pasta migrations_logs/'",
- "sqlx migrate add -r \"$@\" --source migrations_logs"
+ "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_logs"
 ]

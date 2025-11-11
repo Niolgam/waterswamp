@@ -2,7 +2,6 @@ use crate::{
     metrics,
     middleware::{mw_authenticate, mw_authorize},
     rate_limit::{admin_rate_limiter, api_rate_limiter, login_rate_limiter},
-    security::{cors_development, cors_production, security_headers},
     state::AppState,
 };
 use axum::{
@@ -10,6 +9,7 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
+use core_services::security::{cors_development, cors_production, security_headers};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 
@@ -49,11 +49,11 @@ pub fn build_router(app_state: AppState) -> Router {
         // Middlewares de autenticação e autorização (ordem importa!)
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
-            mw_authenticate,
+            mw_authorize,
         ))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
-            mw_authorize,
+            mw_authenticate,
         ))
         // Rate limiting geral para rotas protegidas
         .layer(api_rate_limiter());

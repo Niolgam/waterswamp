@@ -1,8 +1,5 @@
-use crate::{
-    error::AppError,
-    models::{Claims, CurrentUser},
-    state::AppState,
-};
+use crate::web_models::CurrentUser;
+use crate::{error::AppError, state::AppState};
 use axum::{
     extract::{Request, State},
     http::HeaderMap,
@@ -10,6 +7,7 @@ use axum::{
     response::Response,
 };
 use casbin::CoreApi;
+use domain::models::Claims;
 use jsonwebtoken::{decode, Algorithm, Validation};
 
 pub async fn mw_authenticate(
@@ -20,13 +18,16 @@ pub async fn mw_authenticate(
     let token = extract_token(req.headers())
         .ok_or_else(|| AppError::Unauthorized("Token não encontrado".to_string()))?;
 
-    let mut validation = Validation::new(Algorithm::EdDSA);
+    let validation = Validation::new(Algorithm::EdDSA);
     let token_data = decode::<Claims>(&token, &state.decoding_key, &validation)
         .map_err(|_| AppError::Unauthorized("Token inválido ou expirado".to_string()))?;
 
     let current_user = CurrentUser {
         id: token_data.claims.sub,
     };
+
+    let claims = token_data.claims;
+    req.extensions_mut().insert(claims);
 
     req.extensions_mut().insert(current_user);
 

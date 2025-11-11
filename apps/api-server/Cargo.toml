@@ -1,0 +1,53 @@
+[package]
+name = "waterswamp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+domain = { path = "../../crates/domain" }
+persistence = { path = "../../crates/persistence" }
+core_services = { path = "../../crates/core-services" }
+
+axum = { workspace = true }
+tokio = { workspace = true, features = ["full", "signal"] }
+casbin = { workspace = true, features = ["runtime-tokio", "logging"] }
+axum-casbin = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "macros", "chrono", "uuid"] }
+sqlx-adapter = { workspace = true, features = ["postgres"] }
+config = { workspace = true }
+dotenvy = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+anyhow = { workspace = true }
+http = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+argon2 = { workspace = true, features = ["std"] }
+zxcvbn = { workspace = true }
+jsonwebtoken = { workspace = true, features = ["aws_lc_rs"] }
+uuid = { workspace = true, features = ["v4", "serde"] }
+thiserror = { workspace = true }
+validator = { workspace = true, features = ["derive"] }
+tower = { workspace = true, features = ["full"] }
+tower-http = { workspace = true, features = ["full"] }
+tower_governor = { workspace = true }
+governor = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+sha2 = { workspace = true }
+regex = { workspace = true }
+
+utoipa = { workspace = true, features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { workspace = true, features = ["axum"] }
+utoipa-rapidoc = { workspace = true, features = ["axum"] }
+utoipa-redoc = { workspace = true, features = ["axum"] }
+
+prometheus = { workspace = true, features = ["process"] }
+lazy_static = { workspace = true }
+
+axum-test = { workspace = true }
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true

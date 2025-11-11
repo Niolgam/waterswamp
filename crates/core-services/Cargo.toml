@@ -1,0 +1,12 @@
+[package]
+name = "core_services"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+argon2 = { workspace = true }
+zxcvbn = { workspace = true }
+anyhow = { workspace = true }
+tower = {  workspace = true, features = ["util"] }
+tower-http = { workspace = true, features = ["cors"] }
+axum = { workspace = true }

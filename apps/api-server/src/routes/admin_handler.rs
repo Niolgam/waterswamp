@@ -1,13 +1,4 @@
-use crate::{
-    error::AppError,
-    models::{
-        CreateUserPayload, CurrentUser, ListUsersQuery, PaginatedUsers, PolicyRequest,
-        UpdateUserPayload, UserDto,
-    },
-    repositories::{auth_repository::AuthRepository, user_repository::UserRepository},
-    security,
-    state::AppState,
-};
+use crate::{error::AppError, state::AppState, web_models::CurrentUser};
 use anyhow::Context;
 use axum::{
     extract::{Path, Query, State},
@@ -15,6 +6,11 @@ use axum::{
     Json,
 };
 use casbin::MgmtApi;
+use core_services::security::{hash_password, validate_password_strength};
+use domain::models::{
+    CreateUserPayload, ListUsersQuery, PaginatedUsers, PolicyRequest, UpdateUserPayload, UserDto,
+};
+use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -142,7 +138,7 @@ pub async fn create_user(
 ) -> Result<Json<UserDto>, AppError> {
     payload.validate()?;
 
-    crate::security::validate_password_strength(&payload.password)
+    validate_password_strength(&payload.password)
         .map_err(|e| AppError::Anyhow(anyhow::anyhow!(e)))?;
 
     let user_repo = UserRepository::new(&state.db_pool_auth);
@@ -153,11 +149,10 @@ pub async fn create_user(
 
     let password_clone = payload.password.clone();
     // USO DO NOVO HASH
-    let password_hash =
-        tokio::task::spawn_blocking(move || security::hash_password(&password_clone))
-            .await
-            .context("Falha task hash")?
-            .context("Erro ao gerar hash")?;
+    let password_hash = tokio::task::spawn_blocking(move || hash_password(&password_clone))
+        .await
+        .context("Falha task hash")?
+        .context("Erro ao gerar hash")?;
 
     let user = user_repo.create(&payload.username, &password_hash).await?;
 
@@ -199,16 +194,15 @@ pub async fn update_user(
 
     // Atualiza senha
     if let Some(ref new_password) = payload.password {
-        crate::security::validate_password_strength(new_password)
+        validate_password_strength(new_password)
             .map_err(|e| AppError::Anyhow(anyhow::anyhow!(e)))?;
 
         let password_clone = new_password.clone();
         // USO DO NOVO HASH
-        let password_hash =
-            tokio::task::spawn_blocking(move || security::hash_password(&password_clone))
-                .await
-                .context("Falha task hash")?
-                .context("Erro ao gerar hash")?;
+        let password_hash = tokio::task::spawn_blocking(move || hash_password(&password_clone))
+            .await
+            .context("Falha task hash")?
+            .context("Erro ao gerar hash")?;
 
         user_repo.update_password(user_id, &password_hash).await?;
 

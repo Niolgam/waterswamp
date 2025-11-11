@@ -1,0 +1,12 @@
+[package]
+name = "domain"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+uuid = { workspace = true, features = ["v4", "serde"] }
+validator = { workspace = true, features = ["derive"] }
+chrono = { workspace = true, features = ["serde"] }
+axum = { workspace = true }
+sqlx = { workspace = true, features = ["macros", "uuid", "chrono"] }

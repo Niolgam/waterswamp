@@ -6,17 +6,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::{
-    error::AppError,
-    models::{
-        Claims, LoginPayload, LoginResponse, RefreshTokenPayload, RefreshTokenResponse,
-        RegisterPayload, TokenType,
-    },
-    // Importando AMBOS os repositórios
-    repositories::{auth_repository::AuthRepository, user_repository::UserRepository},
-    security,
-    state::AppState,
+use crate::{error::AppError, state::AppState};
+use core_services::security::{hash_password, validate_password_strength, verify_password};
+use domain::models::{
+    Claims, LoginPayload, LoginResponse, RefreshTokenPayload, RefreshTokenResponse,
+    RegisterPayload, TokenType,
 };
+use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 
 const ACCESS_TOKEN_EXPIRY_SECONDS: i64 = 3600; // 1 hora
 
@@ -37,7 +33,7 @@ pub async fn handler_login(
     // 2. Verificar senha com Argon2id (CPU-bound, manter no spawn_blocking)
     let password_valid = tokio::task::spawn_blocking(move || {
         // USA A NOVA FUNÇÃO
-        security::verify_password(&payload.password, &user.1)
+        verify_password(&payload.password, &user.1)
     })
     .await
     .context("Falha task verificar senha")?
@@ -74,7 +70,7 @@ pub async fn handler_register(
         return Err(AppError::BadRequest("Username inválido".to_string()));
     }
 
-    crate::security::validate_password_strength(&payload.password).map_err(AppError::BadRequest)?;
+    validate_password_strength(&payload.password).map_err(AppError::BadRequest)?;
 
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
@@ -85,7 +81,7 @@ pub async fn handler_register(
     let password_clone = payload.password.clone();
     let password_hash = tokio::task::spawn_blocking(move || {
         // USA A NOVA FUNÇÃO
-        security::hash_password(&password_clone)
+        hash_password(&password_clone)
     })
     .await
     .context("Falha task hash")?

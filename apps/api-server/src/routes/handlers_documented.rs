@@ -8,9 +8,11 @@ use utoipa;
 
 use crate::{
     error::AppError,
-    models::{LoginPayload, LoginResponse, RefreshTokenPayload, RefreshTokenResponse},
     state::AppState,
 };
+use domain::models::{LoginPayload, LoginResponse, RefreshTokenPayload, RefreshTokenResponse},
+
+
 
 // -----------------------------------------------------------------------------
 // EXEMPLO 1: Rota Pública Simples

@@ -1,4 +1,4 @@
-use crate::models::UserDto;
+use domain::models::UserDto;
 use sqlx::PgPool;
 use uuid::Uuid;
 

@@ -1,12 +1,10 @@
 use crate::constants::*;
-use crate::models::CurrentUser;
 use crate::state::SharedEnforcer;
-// ADICIONADO: Import do módulo de segurança
-use crate::security;
+use crate::web_models::CurrentUser;
 use anyhow::Result;
 use axum::http::request::Parts;
-// REMOVIDO: use bcrypt::{hash, DEFAULT_COST};
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
+use core_services::security;
 use sqlx::PgPool;
 use sqlx_adapter::SqlxAdapter;
 use std::path::PathBuf;
@@ -64,7 +62,7 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .await?;
 
     enforcer
-        .add_policy(str_vec![ROLE_USER, RESOURCE_USER_PROFILE, ACTION_GET])
+        .add_policy(str_vec![ROLE_ADMIN, RESOURCE_USER_PROFILE, ACTION_GET])
         .await?;
 
     enforcer
@@ -72,6 +70,10 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .await?;
     enforcer
         .add_policy(str_vec![ROLE_ADMIN, RESOURCE_ADMIN_POLICIES, ACTION_DELETE])
+        .await?;
+
+    enforcer
+        .add_policy(str_vec![ROLE_USER, RESOURCE_USER_PROFILE, ACTION_GET])
         .await?;
 
     enforcer
@@ -142,6 +144,10 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .await?;
     enforcer
         .add_grouping_policy(str_vec![&bob_id.to_string(), ROLE_USER])
+        .await?;
+
+    enforcer
+        .add_grouping_policy(str_vec![ROLE_ADMIN, ROLE_USER])
         .await?;
 
     enforcer.save_policy().await?;

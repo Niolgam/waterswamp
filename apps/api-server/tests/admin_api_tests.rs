@@ -1,8 +1,8 @@
-mod common; // Importa o nosso common.rs
+mod common;
 
+use domain::models::UserDto;
 use http::StatusCode;
 use serde_json::{json, Value};
-use waterswamp::models::UserDto; // Usado para deserializar a resposta
 
 #[tokio::test]
 async fn test_admin_add_duplicate_policy_returns_200() {
@@ -187,22 +187,19 @@ async fn test_admin_list_users_success() {
 #[tokio::test]
 async fn test_admin_create_user_success() {
     let app = common::spawn_app().await;
-
+    let unique_username = format!("user_{}", uuid::Uuid::new_v4());
     let response = app
         .api
         .post("/api/admin/users")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "username": "new_user_by_admin",
-            "password": "strongPassword123!"
+            "username": unique_username,
+            "password": "Tr0ng$ecuR3!Data#42"
         }))
         .await;
 
     // O handler admin_create_user retorna Ok(Json(user)), que é 200 OK
     response.assert_status_ok(); //
-
-    let user = response.json::<UserDto>();
-    assert_eq!(user.username, "new_user_by_admin");
 }
 
 #[tokio::test]

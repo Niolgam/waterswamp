@@ -1,7 +1,3 @@
-use axum::{
-    extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
-};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -18,7 +14,7 @@ pub struct LoginPayload {
     pub password: String,
 }
 
-/// Resposta de login com access e refresh tokens
+/// Resposta de login com access e refresh rokens
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginResponse {
     pub access_token: String,
@@ -73,11 +69,6 @@ pub struct User {
     pub password_hash: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct CurrentUser {
-    pub id: Uuid,
-}
-
 #[derive(Debug, Validate, Deserialize)]
 pub struct RegisterPayload {
     #[validate(length(
@@ -89,23 +80,6 @@ pub struct RegisterPayload {
 
     #[validate(length(min = 8, message = "Senha deve ter no mínimo 8 caracteres"))]
     pub password: String,
-}
-
-// Regex para username (apenas alfanuméricos e underscore)
-
-impl<S> FromRequestParts<S> for CurrentUser
-where
-    S: Send + Sync,
-{
-    type Rejection = StatusCode;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<CurrentUser>()
-            .cloned()
-            .ok_or(StatusCode::INTERNAL_SERVER_ERROR)
-    }
 }
 
 // =============================================================================
