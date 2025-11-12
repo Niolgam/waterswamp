@@ -6,7 +6,7 @@ use validator::Validate;
 // AUTH - Payloads e Respostas
 // =============================================================================
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, Serialize)]
 pub struct LoginPayload {
     #[validate(length(min = 3, message = "Username muito curto"))]
     pub username: String,
@@ -35,7 +35,7 @@ impl LoginResponse {
 }
 
 /// Payload para renovar token
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, Serialize)]
 pub struct RefreshTokenPayload {
     #[validate(length(min = 1, message = "Refresh token não pode estar vazio"))]
     pub refresh_token: String,
@@ -69,7 +69,7 @@ pub struct User {
     pub password_hash: String,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, Serialize)]
 pub struct RegisterPayload {
     #[validate(length(
         min = 3,

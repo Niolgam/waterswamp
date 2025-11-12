@@ -4301,6 +4301,7 @@ dependencies = [
  "http",
  "jsonwebtoken",
  "lazy_static",
+ "once_cell",
  "persistence",
  "prometheus",
  "regex",

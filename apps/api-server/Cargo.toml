@@ -43,7 +43,7 @@ utoipa-redoc = { workspace = true, features = ["axum"] }
 
 prometheus = { workspace = true, features = ["process"] }
 lazy_static = { workspace = true }
-
+once_cell =  { workspace = true } 
 axum-test = { workspace = true }
 
 [profile.release]

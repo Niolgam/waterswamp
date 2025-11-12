@@ -43,3 +43,4 @@ utoipa-redoc = { version = "4.0", features = ["axum"] }
 prometheus = { version = "0.13", features = ["process"] }
 lazy_static = "1.5"
 axum-test = "18.1.0"
+once_cell = "1.19"
