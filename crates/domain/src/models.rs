@@ -1,9 +1,21 @@
+use chrono;
+use lazy_static;
+use regex;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use sqlx;
 use uuid::Uuid;
 use validator::Validate;
 
+lazy_static::lazy_static! {
+    /// Regex estático para validação de papéis
+    static ref ROLE_REGEX: Regex =
+        Regex::new(r"^(admin|user)$").unwrap();
+}
+
 // =============================================================================
 // AUTH - Payloads e Respostas
+// (Assumindo que estes já cá estavam)
 // =============================================================================
 
 #[derive(Debug, Validate, Deserialize, Serialize)]
@@ -14,7 +26,6 @@ pub struct LoginPayload {
     pub password: String,
 }
 
-/// Resposta de login com access e refresh rokens
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginResponse {
     pub access_token: String,
@@ -34,14 +45,12 @@ impl LoginResponse {
     }
 }
 
-/// Payload para renovar token
 #[derive(Debug, Validate, Deserialize, Serialize)]
 pub struct RefreshTokenPayload {
     #[validate(length(min = 1, message = "Refresh token não pode estar vazio"))]
     pub refresh_token: String,
 }
 
-/// Resposta ao renovar token
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RefreshTokenResponse {
     pub access_token: String,
@@ -61,6 +70,7 @@ impl RefreshTokenResponse {
 
 // =============================================================================
 // USER
+// (Assumindo que estes já cá estavam)
 // =============================================================================
 
 #[derive(Debug, sqlx::FromRow)]
@@ -84,6 +94,7 @@ pub struct RegisterPayload {
 
 // =============================================================================
 // JWT CLAIMS
+// (Assumindo que estes já cá estavam)
 // =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +114,7 @@ pub enum TokenType {
 
 // =============================================================================
 // POLICIES (CASBIN)
+// (Assumindo que estes já cá estavam)
 // =============================================================================
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
@@ -114,6 +126,10 @@ pub struct PolicyRequest {
     #[validate(length(min = 1))]
     pub action: String,
 }
+
+// =============================================================================
+// ADMIN - User CRUD (TAREFA 4)
+// =============================================================================
 
 #[derive(Debug, Deserialize)]
 pub struct ListUsersQuery {
@@ -129,6 +145,15 @@ pub struct UserDto {
     pub username: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// DTO detalhado do usuário, incluindo papéis
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserDetailDto {
+    #[serde(flatten)]
+    pub user: UserDto,
+    /// Lista de papéis (ex: "admin", "user") atribuídos a este usuário
+    pub roles: Vec<String>,
 }
 
 /// Resposta paginada de usuários
@@ -148,6 +173,14 @@ pub struct CreateUserPayload {
 
     #[validate(length(min = 8))]
     pub password: String,
+
+    // ⭐ CORREÇÃO: A macro #[validate] vai agora encontrar o "ROLE_REGEX"
+    // que foi definido no topo do ficheiro.
+    #[validate(
+        length(min = 1),
+        regex(path = *ROLE_REGEX, message = "O papel deve ser 'admin' ou 'user'")
+    )]
+    pub role: String,
 }
 
 /// Payload para atualizar usuário
@@ -158,4 +191,11 @@ pub struct UpdateUserPayload {
 
     #[validate(length(min = 8))]
     pub password: Option<String>,
+
+    // ⭐ CORREÇÃO: Idem
+    #[validate(
+        length(min = 1),
+        regex(path = *ROLE_REGEX, message = "O papel deve ser 'admin' ou 'user'")
+    )]
+    pub role: Option<String>,
 }

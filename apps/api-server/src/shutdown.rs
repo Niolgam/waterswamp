@@ -51,7 +51,6 @@ pub async fn shutdown_signal_with_timeout(timeout_secs: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_shutdown_signal_with_timeout() {

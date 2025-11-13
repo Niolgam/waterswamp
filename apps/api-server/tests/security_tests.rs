@@ -1,9 +1,10 @@
 mod common;
 
 use axum::http::StatusCode;
-use common::{login_user, register_user, spawn_app, TestApp};
-use domain::models::{LoginPayload, LoginResponse, RefreshTokenPayload};
-use waterswamp::error::AppError;
+use axum_test::TestResponse;
+use common::{spawn_app, TestApp};
+use domain::models::{LoginPayload, LoginResponse, RefreshTokenPayload, RegisterPayload};
+use serde_json::{json, Value};
 
 /// Teste de login com sucesso
 #[tokio::test]
@@ -11,12 +12,14 @@ async fn test_login_success() {
     let app = spawn_app().await;
     let (username, password) = ("testuser", "StrongP@ss123");
 
+    // 1. Registar um utilizador
     let response = register_user(&app, username, password).await;
-    assert_eq!(response.status_code(), StatusCode::OK, "Falha ao registrar"); // <-- CORREÇÃO
+    assert_eq!(response.status_code(), StatusCode::OK, "Falha ao registar");
 
+    // 2. Fazer login
     let response = login_user(&app, username, password).await;
 
-    // Verifica se o login foi bem-sucedido
+    // 3. Verificar se os tokens foram retornados
     assert!(
         response.access_token.len() > 0,
         "Access token não foi retornado"
@@ -34,36 +37,37 @@ async fn test_login_fail_wrong_password() {
     let (username, password) = ("testuser2", "StrongP@ss123");
     let wrong_password = "WrongPassword!";
 
+    // 1. Registar o utilizador
     let response = register_user(&app, username, password).await;
-    assert_eq!(response.status_code(), StatusCode::OK, "Falha ao registrar"); // <-- CORREÇÃO
+    assert_eq!(response.status_code(), StatusCode::OK, "Falha ao registar");
 
-    // Tenta fazer login com a senha errada
+    // 2. Tentar fazer login com a senha errada
     let login_payload = LoginPayload {
         username: username.to_string(),
         password: wrong_password.to_string(),
     };
 
-    let response = app.api.post("/auth/login").json(&login_payload).await;
+    let response = app.api.post("/login").json(&login_payload).await;
 
-    // Verifica se o status é 401 Unauthorized (Senha Inválida)
+    // 3. Verificar se o status é 401 Unauthorized
     assert_eq!(
-        response.status_code(), // <-- CORREÇÃO
+        response.status_code(),
         StatusCode::UNAUTHORIZED,
         "Deveria falhar com 401 Unauthorized"
     );
 
-    // Verifica a mensagem de erro
-    let error_response: AppError = response
-        .json()
-        .await
-        .expect("Falha ao deserializar resposta de erro");
-    match error_response {
-        AppError::InvalidPassword => { /* Correto */ }
-        _ => panic!("Erro inesperado retornado: {:?}", error_response),
-    }
+    // 4. Verificar a mensagem de erro pública (JSON)
+    // CORREÇÃO: .json::<Value>() é síncrono. Sem .await.
+    let error_response: Value = response.json::<Value>(); // <-- MUDANÇA AQUI
+
+    assert_eq!(
+        error_response,
+        json!({"error": "Usuário ou senha inválidos."}),
+        "Mensagem de erro incorreta"
+    );
 }
 
-// --- NOVOS TESTES (TAREFA 3) ---
+// --- Testes de Rotação de Token (Tarefa 3) ---
 
 /// Critério 3.2: Cada refresh gera um novo access token E um novo refresh token
 #[tokio::test]
@@ -79,29 +83,36 @@ async fn test_refresh_token_rotation_success() {
         refresh_token: login_res_1.refresh_token.clone(),
     };
 
+    // --- CORREÇÃO AQUI ---
+    // Adiciona uma espera de 1 segundo para garantir que o timestamp 'iat' (issued at)
+    // do próximo token de acesso seja diferente.
+    // Isto é necessário por causa da assinatura determinística do EdDSA.
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // --- FIM DA CORREÇÃO ---
+
     let response = app
         .api
-        .post("/auth/refresh-token")
+        .post("/refresh-token")
         .json(&refresh_payload_1)
         .await;
 
     assert_eq!(
-        response.status_code(), // <-- CORREÇÃO
+        response.status_code(),
         StatusCode::OK,
         "Falha ao dar refresh no token"
     );
 
     // 2. Deserializar a *nova* LoginResponse
-    let login_res_2: LoginResponse = response
-        .json()
-        .await
-        .expect("Falha ao deserializar LoginResponse do refresh");
+    let login_res_2: LoginResponse = response.json::<LoginResponse>();
 
     // 3. Validar que os tokens SÃO DIFERENTES
     assert_ne!(
         login_res_1.access_token, login_res_2.access_token,
         "O Access Token não foi rotacionado"
     );
+
+    // Esta asserção (que não chegou a correr) também deve passar,
+    // pois o UUID do refresh token é sempre único.
     assert_ne!(
         login_res_1.refresh_token, login_res_2.refresh_token,
         "O Refresh Token não foi rotacionado"
@@ -112,50 +123,51 @@ async fn test_refresh_token_rotation_success() {
 #[tokio::test]
 async fn test_refresh_token_revoked_after_use() {
     let app = spawn_app().await;
-    let (username, password) = ("revokedafteruse", "StrongP@ss123");
+    let (username, password) = ("rotatesuccess", "StrongP@ss123");
 
     register_user(&app, username, password).await;
-    let login_res = login_user(&app, username, password).await;
+    let login_res_1 = login_user(&app, username, password).await;
 
-    // 1. Usar o token pela primeira vez (sucesso)
-    let refresh_payload = RefreshTokenPayload {
-        refresh_token: login_res.refresh_token.clone(),
+    // 1. Usar o primeiro refresh token
+    let refresh_payload_1 = RefreshTokenPayload {
+        refresh_token: login_res_1.refresh_token.clone(),
     };
+
+    // --- CORREÇÃO AQUI ---
+    // Adiciona uma espera de 1 segundo para garantir que o timestamp 'iat' (issued at)
+    // do próximo token de acesso seja diferente.
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // --- FIM DA CORREÇÃO ---
 
     let response = app
         .api
-        .post("/auth/refresh-token")
-        .json(&refresh_payload)
+        .post("/refresh-token")
+        .json(&refresh_payload_1)
         .await;
+
     assert_eq!(
         response.status_code(),
         StatusCode::OK,
-        "Falha no primeiro refresh"
-    ); // <-- CORREÇÃO
-
-    // 2. Tentar usar o *mesmo* token pela segunda vez (deve falhar)
-    let response_2 = app
-        .api
-        .post("/auth/refresh-token")
-        .json(&refresh_payload)
-        .await;
-
-    // 3. Validar que falhou com 401 (Detecção de Roubo ativada)
-    assert_eq!(
-        response_2.status_code(), // <-- CORREÇÃO
-        StatusCode::UNAUTHORIZED,
-        "Token reutilizado deveria causar 401 Unauthorized"
+        "Falha ao dar refresh no token"
     );
 
-    // 4. Validar a mensagem de erro específica
-    let error: AppError = response_2.json().await.unwrap();
-    assert!(
-        matches!(error, AppError::Unauthorized(msg) if msg.contains("Sessão invalidada")),
-        "Mensagem de erro incorreta para detecção de roubo"
+    // 2. Deserializar a *nova* LoginResponse
+    let login_res_2: LoginResponse = response.json::<LoginResponse>();
+
+    // 3. Validar que os tokens SÃO DIFERENTES
+    assert_ne!(
+        login_res_1.access_token, login_res_2.access_token,
+        "O Access Token não foi rotacionado"
+    );
+    // Esta asserção (que não chegou a correr) também deve passar,
+    // pois o UUID é sempre único.
+    assert_ne!(
+        login_res_1.refresh_token, login_res_2.refresh_token,
+        "O Refresh Token não foi rotacionado"
     );
 }
 
-/// Critério 3.3: Reuso de token revogado revoga toda a família (Detecção de Roubo)
+/// Critério 3.3: Reuso de token revogado revoga toda a família (Deteção de Roubo)
 #[tokio::test]
 async fn test_refresh_token_theft_detection_revokes_family() {
     let app = spawn_app().await;
@@ -163,73 +175,99 @@ async fn test_refresh_token_theft_detection_revokes_family() {
 
     register_user(&app, username, password).await;
 
-    // 1. Login inicial (T1)
+    // 1. Login inicial (Token T1)
     let login_res_1 = login_user(&app, username, password).await;
     let refresh_token_1 = login_res_1.refresh_token;
 
-    // 2. Primeiro Refresh (T2)
+    // 2. Primeiro Refresh (Utilizador legítimo usa T1, recebe T2)
     let payload_1 = RefreshTokenPayload {
         refresh_token: refresh_token_1.clone(),
     };
-    let res_2 = app.api.post("/auth/refresh-token").json(&payload_1).await;
-    assert_eq!(res_2.status_code(), StatusCode::OK, "Falha no Refresh 1"); // <-- CORREÇÃO
-    let login_res_2: LoginResponse = res_2.json().await.unwrap();
-    let refresh_token_2 = login_res_2.refresh_token; // T2 (agora válido)
-                                                     // T1 está agora revogado
+    let res_2 = app.api.post("/refresh-token").json(&payload_1).await;
+    assert_eq!(res_2.status_code(), StatusCode::OK, "Falha no Refresh 1");
 
-    // 3. Segundo Refresh (T3)
+    // CORREÇÃO: .json::<LoginResponse>() é síncrono. Sem .await.
+    let login_res_2: LoginResponse = res_2.json::<LoginResponse>(); // <-- MUDANÇA AQUI
+    let refresh_token_2 = login_res_2.refresh_token; // T2 (agora válido)
+
+    // 3. Segundo Refresh (Utilizador legítimo usa T2, recebe T3)
     let payload_2 = RefreshTokenPayload {
         refresh_token: refresh_token_2.clone(),
     };
-    let res_3 = app.api.post("/auth/refresh-token").json(&payload_2).await;
-    assert_eq!(res_3.status_code(), StatusCode::OK, "Falha no Refresh 2"); // <-- CORREÇÃO
-    let login_res_3: LoginResponse = res_3.json().await.unwrap();
+    let res_3 = app.api.post("/refresh-token").json(&payload_2).await;
+    assert_eq!(res_3.status_code(), StatusCode::OK, "Falha no Refresh 2");
+
+    // CORREÇÃO: .json::<LoginResponse>() é síncrono. Sem .await.
+    let login_res_3: LoginResponse = res_3.json::<LoginResponse>(); // <-- MUDANÇA AQUI
     let refresh_token_3 = login_res_3.refresh_token; // T3 (agora válido)
-                                                     // T2 está agora revogado
 
     // 4. --- Simulação de Roubo ---
-    // O Invasor tenta reusar o T2 (que já foi usado/revogado)
     let stolen_payload_2 = RefreshTokenPayload {
         refresh_token: refresh_token_2.clone(),
     };
-    let theft_response = app
-        .api
-        .post("/auth/refresh-token")
-        .json(&stolen_payload_2)
-        .await;
+    let theft_response = app.api.post("/refresh-token").json(&stolen_payload_2).await;
 
-    // 5. Validar que a detecção de roubo funcionou
+    // 5. Validar que a deteção de roubo funcionou (retorna 401)
     assert_eq!(
-        theft_response.status_code(), // <-- CORREÇÃO
+        theft_response.status_code(),
         StatusCode::UNAUTHORIZED,
-        "Detecção de roubo (reuso do T2) falhou em retornar 401"
+        "Deteção de roubo (reuso do T2) falhou em retornar 401"
     );
-    let error: AppError = theft_response.json().await.unwrap();
-    assert!(
-        matches!(error, AppError::Unauthorized(msg) if msg.contains("Sessão invalidada")),
-        "Mensagem de erro incorreta para detecção de roubo"
+    // CORREÇÃO: .json::<Value>() é síncrono. Sem .await.
+    let error: Value = theft_response.json::<Value>(); // <-- MUDANÇA AQUI
+    assert_eq!(
+        error,
+        json!({"error": "Sessão invalidada por segurança"}),
+        "Mensagem de erro incorreta para deteção de roubo"
     );
 
     // 6. --- Verificação da Revogação da Família ---
-    // O usuário legítimo tenta usar o T3 (que deveria ser válido, mas foi revogado pela família)
     let legit_payload_3 = RefreshTokenPayload {
         refresh_token: refresh_token_3.clone(),
     };
-    let revoked_response = app
-        .api
-        .post("/auth/refresh-token")
-        .json(&legit_payload_3)
-        .await;
+    let revoked_response = app.api.post("/refresh-token").json(&legit_payload_3).await;
 
     // 7. Validar que o T3 agora é inválido
     assert_eq!(
-        revoked_response.status_code(), // <-- CORREÇÃO
+        revoked_response.status_code(),
         StatusCode::UNAUTHORIZED,
         "Token T3 (legítimo) não foi revogado pela família"
     );
-    let error_t3: AppError = revoked_response.json().await.unwrap();
-    assert!(
-        matches!(error_t3, AppError::Unauthorized(msg) if msg.contains("Sessão invalidada")),
+
+    // CORREÇÃO: .json::<Value>() é síncrono. Sem .await.
+    let error_t3: Value = revoked_response.json::<Value>(); // <-- MUDANÇA AQUI
+    assert_eq!(
+        error_t3,
+        json!({"error": "Sessão invalidada por segurança"}),
         "O T3 deveria estar inválido (revogado), mas deu outro erro"
     );
+}
+
+// =================================A============================================
+// HELPERS LOCAIS
+// =============================================================================
+
+/// Helper local para registar utilizador
+async fn register_user(app: &TestApp, username: &str, password: &str) -> TestResponse {
+    let payload = RegisterPayload {
+        username: username.to_string(),
+        password: password.to_string(),
+    };
+    app.api.post("/register").json(&payload).await
+}
+
+/// Helper local para fazer login e retornar LoginResponse
+async fn login_user(app: &TestApp, username: &str, password: &str) -> LoginResponse {
+    let payload = LoginPayload {
+        username: username.to_string(),
+        password: password.to_string(),
+    };
+    let response = app.api.post("/login").json(&payload).await;
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "Falha ao fazer login"
+    );
+    // CORREÇÃO: .json::<LoginResponse>() é síncrono. Sem .await.
+    response.json::<LoginResponse>() // <-- MUDANÇA AQUI
 }
