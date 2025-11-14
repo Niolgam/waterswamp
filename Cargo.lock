@@ -1046,6 +1046,7 @@ name = "email_service"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "config",
  "domain",
  "dotenvy",
@@ -4632,6 +4633,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "argon2",
+ "async-trait",
  "axum 0.8.6",
  "axum-casbin",
  "axum-test",

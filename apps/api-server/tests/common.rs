@@ -1,31 +1,90 @@
 use axum_test::TestServer;
 use domain::models::{Claims, TokenType};
-use email_service::config::EmailConfig;
-use email_service::EmailService;
 use jsonwebtoken::DecodingKey;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 use waterswamp::casbin_setup::setup_casbin;
 use waterswamp::config::Config;
 use waterswamp::routes::build_router;
 use waterswamp::state::AppState;
 
-// Struct que agrupa tudo que um teste pode precisar
+use async_trait::async_trait;
+use email_service::EmailSender;
+use tera::Context as TeraContext;
+
+#[derive(Clone)]
+pub struct MockEmail {
+    pub to: String,
+    pub subject: String,
+    pub template: String,
+    pub context: TeraContext,
+}
+
+#[derive(Clone, Default)]
+pub struct MockEmailService {
+    pub messages: Arc<Mutex<Vec<MockEmail>>>,
+}
+
+impl MockEmailService {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[async_trait]
+impl EmailSender for MockEmailService {
+    async fn send_email(
+        &self,
+        to_email: String,
+        subject: String,
+        template: &str,
+        context: TeraContext,
+    ) -> anyhow::Result<()> {
+        // Em vez de enviar, apenas guardamos a mensagem na Vec
+        let mut guard = self.messages.lock().await;
+        guard.push(MockEmail {
+            to: to_email,
+            subject,
+            template: template.to_string(),
+            context,
+        });
+        Ok(())
+    }
+
+    fn send_welcome_email(&self, to_email: String, username: &str) {
+        let mut context = TeraContext::new();
+        context.insert("username", username);
+
+        let service = self.clone();
+        let subject = "Bem-vindo ao Waterswamp!".to_string();
+        let template = "welcome.html".to_string();
+
+        // O spawn é importante para simular o comportamento real
+        tokio::spawn(async move {
+            let _ = service
+                .send_email(to_email, subject, &template, context)
+                .await;
+        });
+    }
+}
+
 pub struct TestApp {
     pub api: TestServer,
     pub db_auth: PgPool,
     pub db_logs: PgPool,
-    pub admin_token: String, // Token pronto para usar da 'alice'
-    pub user_token: String,  // Token pronto para usar do 'bob'
+    pub admin_token: String,
+    pub user_token: String,
+    pub email_service: Arc<MockEmailService>,
 }
 
 pub async fn spawn_app() -> TestApp {
     dotenvy::dotenv().ok();
+
     std::env::set_var("DISABLE_RATE_LIMIT", "true"); // Opcional, dependendo se quer testar rate limit ou não
 
     let config = Config::from_env().expect("Falha ao carregar config de teste");
@@ -54,10 +113,7 @@ pub async fn spawn_app() -> TestApp {
     let encoding_key = EncodingKey::from_ed_pem(private_pem).expect("Chave privada inválida");
     let decoding_key = DecodingKey::from_ed_pem(public_pem).expect("Chave pública inválida");
 
-    let email_config =
-        EmailConfig::from_env().expect("Falha ao carregar config de email para teste");
-    let email_service =
-        EmailService::new(email_config).expect("Falha ao criar email service de teste");
+    let email_service = Arc::new(MockEmailService::new());
 
     let app_state = AppState {
         enforcer,
@@ -66,7 +122,7 @@ pub async fn spawn_app() -> TestApp {
         db_pool_logs: pool_logs.clone(),
         encoding_key,
         decoding_key,
-        email_service,
+        email_service: email_service.clone(),
     };
 
     let app = build_router(app_state);
@@ -90,6 +146,7 @@ pub async fn spawn_app() -> TestApp {
         db_logs: pool_logs,
         admin_token: generate_test_token(alice_id),
         user_token: generate_test_token(bob_id),
+        email_service: email_service,
     }
 }
 

@@ -68,7 +68,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         db_pool_logs: pool_logs,
         encoding_key,
         decoding_key,
-        email_service,
+        email_service: Arc::new(email_service),
     };
 
     info!("📡 Construindo rotas...");

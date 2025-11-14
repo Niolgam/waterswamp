@@ -134,3 +134,49 @@ async fn test_register_short_username() {
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_register_success_sends_welcome_email() {
+    // ⭐ Nome do teste atualizado
+    let app = common::spawn_app().await;
+
+    let unique_username = format!("user_{}", uuid::Uuid::new_v4());
+    let unique_email = format!("{}@example.com", unique_username);
+
+    // 1. Fazer o pedido de registo
+    let response = app
+        .api
+        .post("/register")
+        .json(&json!({
+            "username": unique_username,
+            "email": unique_email,
+            "password": "S3nh@Forte123"
+        }))
+        .await;
+
+    // 2. Verificar se a API funcionou
+    response.assert_status_ok();
+    let body: Value = response.json();
+    assert!(body["access_token"].is_string(), "access_token missing");
+
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let received_emails = app.email_service.messages.lock().await;
+
+    // Verificar se 1 email foi recebido
+    assert_eq!(received_emails.len(), 1, "Deveria ter recebido 1 email");
+
+    let email = &received_emails[0];
+    // Verificar o assunto
+    assert!(
+        email.subject.contains("Bem-vindo ao Waterswamp!"),
+        "O assunto do email está incorreto"
+    );
+
+    // Verificar o conteúdo (contexto do Tera)
+    assert_eq!(email.template, "welcome.html");
+    assert_eq!(
+        email.context.get("username").unwrap().as_str().unwrap(),
+        unique_username
+    );
+}

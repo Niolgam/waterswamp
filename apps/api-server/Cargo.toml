@@ -50,6 +50,8 @@ axum-test = { workspace = true }
 lettre = { workspace = true }
 tera = { workspace = true }
 htmlescape = { workspace = true }
+async-trait = { workspace = true }
+
 
 [profile.release]
 lto = true
