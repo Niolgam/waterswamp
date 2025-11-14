@@ -88,6 +88,9 @@ pub struct RegisterPayload {
     ))]
     pub username: String,
 
+    #[validate(email(message = "Email inválido"))]
+    pub email: String,
+
     #[validate(length(min = 8, message = "Senha deve ter no mínimo 8 caracteres"))]
     pub password: String,
 }
@@ -143,6 +146,7 @@ pub struct ListUsersQuery {
 pub struct UserDto {
     pub id: Uuid,
     pub username: String,
+    pub email: String,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -171,6 +175,9 @@ pub struct CreateUserPayload {
     #[validate(length(min = 3, max = 50))]
     pub username: String,
 
+    #[validate(email(message = "Email inválido"))]
+    pub email: String,
+
     #[validate(length(min = 8))]
     pub password: String,
 
@@ -188,6 +195,9 @@ pub struct CreateUserPayload {
 pub struct UpdateUserPayload {
     #[validate(length(min = 3, max = 50))]
     pub username: Option<String>,
+
+    #[validate(email(message = "Email inválido"))]
+    pub email: Option<String>,
 
     #[validate(length(min = 8))]
     pub password: Option<String>,

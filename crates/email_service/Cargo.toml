@@ -1,0 +1,25 @@
+[package]
+name = "email_service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Nossas crates do workspace
+domain = { path = "../domain" }
+
+# Configuração
+config = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+dotenvy = { workspace = true }
+serde_json = { workspace = true }
+
+# Email
+lettre = { workspace = true }
+tera = { workspace = true }
+htmlescape = { workspace = true }
+
+# Outros
+tokio = { workspace = true, features = ["rt", "macros"] }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+once_cell = { workspace = true } # 'once_cell::sync::Lazy' é mais flexível que lazy_static

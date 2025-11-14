@@ -1,4 +1,5 @@
 use casbin::Enforcer;
+use email_service::EmailService;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -17,4 +18,5 @@ pub struct AppState {
     pub db_pool_logs: PgPool,
     pub encoding_key: EncodingKey,
     pub decoding_key: DecodingKey,
+    pub email_service: EmailService,
 }

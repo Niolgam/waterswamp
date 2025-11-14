@@ -10,12 +10,14 @@ async fn test_register_success() {
 
     // Usa um username único para evitar conflitos com outros testes
     let unique_username = format!("user_{}", uuid::Uuid::new_v4());
+    let unique_email = format!("{}@example.com", unique_username);
 
     let response = app
         .api
         .post("/register")
         .json(&json!({
             "username": unique_username,
+        "email": unique_email,
             "password": "S3nh@Forte123"
         }))
         .await;
@@ -39,6 +41,8 @@ async fn test_register_username_taken() {
     let app = common::spawn_app().await;
 
     let username = format!("duplicated_{}", uuid::Uuid::new_v4());
+    let email1 = format!("dup1_{}@example.com", username);
+    let email2 = format!("dup2_{}@example.com", username);
 
     // 1. Primeiro registro (deve funcionar)
     let response1 = app
@@ -46,6 +50,7 @@ async fn test_register_username_taken() {
         .post("/register")
         .json(&json!({
             "username": username,
+             "email": email1,
             "password": "S3nh@Forte123"
         }))
         .await;
@@ -58,6 +63,7 @@ async fn test_register_username_taken() {
         .post("/register")
         .json(&json!({
             "username": username,
+            "email": email2,
             "password": "Outr@Senh@456"
         }))
         .await;
@@ -81,6 +87,7 @@ async fn test_register_weak_password() {
         .post("/register")
         .json(&json!({
             "username": format!("user_{}", uuid::Uuid::new_v4()),
+            "email": format!("weakpass_{}@example.com", uuid::Uuid::new_v4()),
             "password": "senha123" // Reprovado pelo zxcvbn
         }))
         .await;
@@ -102,6 +109,7 @@ async fn test_register_short_password() {
         .post("/register")
         .json(&json!({
             "username": format!("user_{}", uuid::Uuid::new_v4()),
+            "email": format!("shortpass_{}@example.com", uuid::Uuid::new_v4()),
             "password": "Abc1!" // Falha na validação de DTO (min = 8)
         }))
         .await;
@@ -118,7 +126,8 @@ async fn test_register_short_username() {
         .api
         .post("/register")
         .json(&json!({
-            "username": "ab", // Falha na validação de DTO (min = 3)
+            "username": "ab",
+            "email": format!("shortuser_{}@example.com", uuid::Uuid::new_v4()),
             "password": "S3nh@Forte123"
         }))
         .await;

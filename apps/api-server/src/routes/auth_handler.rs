@@ -24,12 +24,13 @@ pub async fn handler_login(
 ) -> Result<Json<LoginResponse>, AppError> {
     payload.validate()?;
 
-    let user: (Uuid, String) =
-        sqlx::query_as("SELECT id, password_hash FROM users WHERE username = $1")
-            .bind(&payload.username)
-            .fetch_optional(&state.db_pool_auth)
-            .await?
-            .ok_or(AppError::InvalidPassword)?;
+    let user: (Uuid, String) = sqlx::query_as(
+        "SELECT id, password_hash FROM users WHERE username = $1 OR LOWER(email) = LOWER($1)",
+    )
+    .bind(&payload.username) // O campo 'username' pode conter um email
+    .fetch_optional(&state.db_pool_auth)
+    .await?
+    .ok_or(AppError::InvalidPassword)?;
 
     // 2. Verificar senha com Argon2id
     let password_valid =
@@ -42,7 +43,7 @@ pub async fn handler_login(
         return Err(AppError::InvalidPassword);
     }
 
-    // 3. Gerar tokens (agora usa o helper modificado)
+    // 3. Gerar tokens
     let (access_token, refresh_token_raw) = generate_tokens(&state, user.0).await?;
 
     tracing::info!(user_id = %user.0, event_type = "user_login", "Usuário autenticado");
@@ -76,6 +77,9 @@ pub async fn handler_register(
     if user_repo.exists_by_username(&payload.username).await? {
         return Err(AppError::Conflict("Username já está em uso".to_string()));
     }
+    if user_repo.exists_by_email(&payload.email).await? {
+        return Err(AppError::Conflict("Email já está em uso".to_string()));
+    }
 
     let password_clone = payload.password.clone();
     let password_hash = tokio::task::spawn_blocking(move || hash_password(&password_clone))
@@ -83,10 +87,16 @@ pub async fn handler_register(
         .context("Falha task hash")?
         .context("Erro ao gerar hash")?;
 
-    let user = user_repo.create(&payload.username, &password_hash).await?;
+    let user = user_repo
+        .create(&payload.username, &payload.email, &password_hash)
+        .await?;
 
     // Gerar tokens (agora usa o helper modificado)
     let (access_token, refresh_token_raw) = generate_tokens(&state, user.id).await?;
+
+    state
+        .email_service
+        .send_welcome_email(payload.email, &user.username);
 
     tracing::info!(user_id = %user.id, event_type = "user_registered", "Novo usuário registrado");
 

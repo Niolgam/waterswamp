@@ -1,5 +1,7 @@
 use axum_test::TestServer;
 use domain::models::{Claims, TokenType};
+use email_service::config::EmailConfig;
+use email_service::EmailService;
 use jsonwebtoken::DecodingKey;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sqlx::PgPool;
@@ -52,6 +54,11 @@ pub async fn spawn_app() -> TestApp {
     let encoding_key = EncodingKey::from_ed_pem(private_pem).expect("Chave privada inválida");
     let decoding_key = DecodingKey::from_ed_pem(public_pem).expect("Chave pública inválida");
 
+    let email_config =
+        EmailConfig::from_env().expect("Falha ao carregar config de email para teste");
+    let email_service =
+        EmailService::new(email_config).expect("Falha ao criar email service de teste");
+
     let app_state = AppState {
         enforcer,
         policy_cache: Arc::new(RwLock::new(HashMap::new())),
@@ -59,6 +66,7 @@ pub async fn spawn_app() -> TestApp {
         db_pool_logs: pool_logs.clone(),
         encoding_key,
         decoding_key,
+        email_service,
     };
 
     let app = build_router(app_state);

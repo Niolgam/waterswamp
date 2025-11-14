@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Bem-vindo!</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        line-height: 1.6;
+      }
+      .container {
+        width: 90%;
+        margin: auto;
+        padding: 20px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+      .button {
+        padding: 10px 15px;
+        background-color: #007bff;
+        color: white;
+        text-decoration: none;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Bem-vindo ao Waterswamp, {{ username }}!</h2>
+      <p>Estamos muito felizes por ter-se juntado à nossa plataforma.</p>
+      <p>
+        Para começar, pode fazer login a qualquer momento e explorar as
+        funcionalidades da sua conta.
+      </p>
+      <p>
+        <a href="{{ base_url }}/login" class="button">Fazer Login</a>
+      </p>
+      <p>
+        Obrigado,<br />
+        A Equipa Waterswamp
+      </p>
+    </div>
+  </body>
+</html>

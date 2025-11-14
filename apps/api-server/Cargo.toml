@@ -7,6 +7,7 @@ edition = "2021"
 domain = { path = "../../crates/domain" }
 persistence = { path = "../../crates/persistence" }
 core_services = { path = "../../crates/core-services" }
+email_service = { path = "../../crates/email_service" }
 
 axum = { workspace = true }
 tokio = { workspace = true, features = ["full", "signal"] }
@@ -45,6 +46,10 @@ prometheus = { workspace = true, features = ["process"] }
 lazy_static = { workspace = true }
 once_cell =  { workspace = true } 
 axum-test = { workspace = true }
+
+lettre = { workspace = true }
+tera = { workspace = true }
+htmlescape = { workspace = true }
 
 [profile.release]
 lto = true

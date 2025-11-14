@@ -16,7 +16,8 @@ impl<'a> UserRepository<'a> {
     /// Busca um usuário pelo ID.
     pub async fn find_by_id(&self, id: Uuid) -> Result<Option<UserDto>, sqlx::Error> {
         sqlx::query_as::<_, UserDto>(
-            "SELECT id, username, created_at, updated_at FROM users WHERE id = $1",
+            // ⭐ ATUALIZADO: Adicionado 'email'
+            "SELECT id, username, email, created_at, updated_at FROM users WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(self.pool)
@@ -26,11 +27,20 @@ impl<'a> UserRepository<'a> {
     /// Busca um usuário pelo Username.
     pub async fn find_by_username(&self, username: &str) -> Result<Option<UserDto>, sqlx::Error> {
         sqlx::query_as::<_, UserDto>(
-            "SELECT id, username, created_at, updated_at FROM users WHERE username = $1",
+            // ⭐ ATUALIZADO: Adicionado 'email'
+            "SELECT id, username, email, created_at, updated_at FROM users WHERE username = $1",
         )
         .bind(username)
         .fetch_optional(self.pool)
         .await
+    }
+
+    /// ⭐ NOVO: Verifica se um email já existe (case-insensitive).
+    pub async fn exists_by_email(&self, email: &str) -> Result<bool, sqlx::Error> {
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1))")
+            .bind(email)
+            .fetch_one(self.pool)
+            .await
     }
 
     /// Verifica se um username já existe.
@@ -39,6 +49,21 @@ impl<'a> UserRepository<'a> {
             .bind(username)
             .fetch_one(self.pool)
             .await
+    }
+
+    /// ⭐ NOVO: Verifica se um email já existe, excluindo um ID.
+    pub async fn exists_by_email_excluding(
+        &self,
+        email: &str,
+        exclude_id: Uuid,
+    ) -> Result<bool, sqlx::Error> {
+        sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND id != $2)",
+        )
+        .bind(email)
+        .bind(exclude_id)
+        .fetch_one(self.pool)
+        .await
     }
 
     /// Verifica se um username já existe, excluindo um ID específico (útil para updates).
@@ -55,19 +80,23 @@ impl<'a> UserRepository<'a> {
     }
 
     /// Cria um novo usuário.
+    // ⭐ ATUALIZADO: Adicionada assinatura 'email'
     pub async fn create(
         &self,
         username: &str,
+        email: &str,
         password_hash: &str,
     ) -> Result<UserDto, sqlx::Error> {
         sqlx::query_as::<_, UserDto>(
+            // ⭐ ATUALIZADO: Adicionados 'email'
             r#"
-            INSERT INTO users (username, password_hash)
-            VALUES ($1, $2)
-            RETURNING id, username, created_at, updated_at
+            INSERT INTO users (username, email, password_hash)
+            VALUES ($1, $2, $3)
+            RETURNING id, username, email, created_at, updated_at
             "#,
         )
         .bind(username)
+        .bind(email) // Adicionado
         .bind(password_hash)
         .fetch_one(self.pool)
         .await
@@ -77,6 +106,16 @@ impl<'a> UserRepository<'a> {
     pub async fn update_username(&self, id: Uuid, new_username: &str) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2")
             .bind(new_username)
+            .bind(id)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// ⭐ NOVO: Atualiza o email de um usuário.
+    pub async fn update_email(&self, id: Uuid, new_email: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2")
+            .bind(new_email)
             .bind(id)
             .execute(self.pool)
             .await?;
@@ -114,11 +153,14 @@ impl<'a> UserRepository<'a> {
         offset: i64,
         search: Option<&String>,
     ) -> Result<(Vec<UserDto>, i64), sqlx::Error> {
-        let mut query_str = "SELECT id, username, created_at, updated_at FROM users".to_string();
+        // ⭐ ATUALIZADO: Adicionado 'email'
+        let mut query_str =
+            "SELECT id, username, email, created_at, updated_at FROM users".to_string();
         let mut count_str = "SELECT COUNT(*) FROM users".to_string();
 
         if let Some(s) = search {
-            let where_clause = format!(" WHERE username ILIKE '%{}%'", s);
+            // ⭐ ATUALIZADO: Busca por username OU email
+            let where_clause = format!(" WHERE username ILIKE '%{0}%' OR email ILIKE '%{0}%'", s);
             query_str.push_str(&where_clause);
             count_str.push_str(&where_clause);
         }

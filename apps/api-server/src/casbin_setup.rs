@@ -113,8 +113,8 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     let alice_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO users (username, password_hash)
-        VALUES ('alice', $1)
+        INSERT INTO users (username, email, password_hash)
+        VALUES ('alice', 'alice@temp.example.com', $1)
         ON CONFLICT (username) DO UPDATE
         SET password_hash = EXCLUDED.password_hash
         RETURNING id
@@ -126,8 +126,8 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     let bob_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO users (username, password_hash)
-        VALUES ('bob', $1)
+        INSERT INTO users (username, email, password_hash)
+        VALUES ('bob','bob@temp.example.com', $1)
         ON CONFLICT (username) DO UPDATE
         SET password_hash = EXCLUDED.password_hash
         RETURNING id

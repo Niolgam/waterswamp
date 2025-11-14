@@ -11,9 +11,10 @@ use serde_json::{json, Value};
 async fn test_login_success() {
     let app = spawn_app().await;
     let (username, password) = ("testuser", "StrongP@ss123");
+    let email = "testuser@example.com";
 
     // 1. Registar um utilizador
-    let response = register_user(&app, username, password).await;
+    let response = register_user(&app, username, email, password).await;
     assert_eq!(response.status_code(), StatusCode::OK, "Falha ao registar");
 
     // 2. Fazer login
@@ -35,10 +36,11 @@ async fn test_login_success() {
 async fn test_login_fail_wrong_password() {
     let app = spawn_app().await;
     let (username, password) = ("testuser2", "StrongP@ss123");
+    let email = "testuser2@example.com";
     let wrong_password = "WrongPassword!";
 
     // 1. Registar o utilizador
-    let response = register_user(&app, username, password).await;
+    let response = register_user(&app, username, email, password).await;
     assert_eq!(response.status_code(), StatusCode::OK, "Falha ao registar");
 
     // 2. Tentar fazer login com a senha errada
@@ -74,8 +76,9 @@ async fn test_login_fail_wrong_password() {
 async fn test_refresh_token_rotation_success() {
     let app = spawn_app().await;
     let (username, password) = ("rotatesuccess", "StrongP@ss123");
+    let email = "rotatesuccess@example.com";
 
-    register_user(&app, username, password).await;
+    register_user(&app, username, email, password).await;
     let login_res_1 = login_user(&app, username, password).await;
 
     // 1. Usar o primeiro refresh token
@@ -124,8 +127,9 @@ async fn test_refresh_token_rotation_success() {
 async fn test_refresh_token_revoked_after_use() {
     let app = spawn_app().await;
     let (username, password) = ("rotatesuccess", "StrongP@ss123");
+    let email = "revokedafteruse@example.com";
 
-    register_user(&app, username, password).await;
+    register_user(&app, username, email, password).await;
     let login_res_1 = login_user(&app, username, password).await;
 
     // 1. Usar o primeiro refresh token
@@ -172,8 +176,9 @@ async fn test_refresh_token_revoked_after_use() {
 async fn test_refresh_token_theft_detection_revokes_family() {
     let app = spawn_app().await;
     let (username, password) = ("theftdetection", "StrongP@ss123");
+    let email = "theftdetection@example.com";
 
-    register_user(&app, username, password).await;
+    register_user(&app, username, email, password).await;
 
     // 1. Login inicial (Token T1)
     let login_res_1 = login_user(&app, username, password).await;
@@ -248,9 +253,10 @@ async fn test_refresh_token_theft_detection_revokes_family() {
 // =============================================================================
 
 /// Helper local para registar utilizador
-async fn register_user(app: &TestApp, username: &str, password: &str) -> TestResponse {
+async fn register_user(app: &TestApp, username: &str, email: &str, password: &str) -> TestResponse {
     let payload = RegisterPayload {
         username: username.to_string(),
+        email: email.to_string(),
         password: password.to_string(),
     };
     app.api.post("/register").json(&payload).await

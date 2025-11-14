@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use config::Config;
+use email_service::config::EmailConfig;
+use email_service::EmailService;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -49,6 +51,14 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
 
     let decoding_key = DecodingKey::from_ed_pem(config.jwt_public_key.as_bytes())
         .context("Falha ao carregar chave pública EdDSA")?;
+
+    info!("📧 Inicializando serviço de email...");
+    let email_config =
+        EmailConfig::from_env().context("Falha ao carregar configuração de email")?;
+    let email_service =
+        EmailService::new(email_config).context("Falha ao criar transportador de email")?;
+    info!("✅ Serviço de email pronto");
+
     let policy_cache = Arc::new(RwLock::new(HashMap::new()));
 
     let app_state = state::AppState {
@@ -58,6 +68,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         db_pool_logs: pool_logs,
         encoding_key,
         decoding_key,
+        email_service,
     };
 
     info!("📡 Construindo rotas...");

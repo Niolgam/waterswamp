@@ -1,6 +1,6 @@
 mod common;
 
-use domain::models::{UserDetailDto, UserDto};
+use domain::models::UserDetailDto;
 use http::StatusCode;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -169,6 +169,7 @@ async fn test_dynamic_permission_flow() {
 async fn test_admin_create_user_and_get_user() {
     let app = common::spawn_app().await;
     let unique_username = format!("user_{}", uuid::Uuid::new_v4());
+    let unique_email = format!("{}@example.com", unique_username);
 
     // 1. Criar Utilizador
     let response = app
@@ -177,6 +178,7 @@ async fn test_admin_create_user_and_get_user() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "username": unique_username,
+            "email": unique_email,
             "password": "Tr0ng$ecuR3!Data#42",
             "role": "user" // Testar a definição de role
         }))
@@ -187,6 +189,7 @@ async fn test_admin_create_user_and_get_user() {
     // 2. Verificar a Resposta (UserDetailDto)
     let user_detail: UserDetailDto = response.json();
     assert_eq!(user_detail.user.username, unique_username);
+    assert_eq!(user_detail.user.email, unique_email);
     assert_eq!(user_detail.roles, vec!["user"]);
 
     let new_user_id = user_detail.user.id;
@@ -218,6 +221,27 @@ async fn test_admin_create_user_conflict() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "username": "bob",
+            "email": "bob_new@example.com",
+            "password": "OutraSenha123!",
+            "role": "user"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CONFLICT); // 409
+}
+
+#[tokio::test]
+async fn test_admin_create_user_email_conflict() {
+    let app = common::spawn_app().await;
+
+    // 'bob@temp.example.com' foi criado na migração
+    let response = app
+        .api
+        .post("/api/admin/users")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "username": "new_bob",
+            "email": "bob@temp.example.com",
             "password": "OutraSenha123!",
             "role": "user"
         }))
@@ -275,6 +299,7 @@ async fn test_admin_update_user_role_and_password() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "username": "charlie",
+            "email": "charlie@example.com",
             "password": "PasswordCharlie123!",
             "role": "user"
         }))
@@ -320,6 +345,7 @@ async fn test_admin_delete_user_and_cannot_delete_self() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "username": "dave_to_delete",
+            "email": "dave@example.com",
             "password": "PasswordDave123!",
             "role": "user"
         }))
