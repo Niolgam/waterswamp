@@ -1,7 +1,7 @@
 use anyhow::Context;
 use axum::{extract::State, Json};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, Algorithm, Header};
+use jsonwebtoken::{decode, encode, Algorithm, Header, Validation};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -10,12 +10,14 @@ use validator::Validate;
 use crate::{error::AppError, state::AppState};
 use core_services::security::{hash_password, validate_password_strength, verify_password};
 use domain::models::{
-    Claims, LoginPayload, LoginResponse, RefreshTokenPayload, RegisterPayload, TokenType,
+    Claims, ForgotPasswordPayload, LoginPayload, LoginResponse, RefreshTokenPayload,
+    RegisterPayload, ResetPasswordPayload, TokenType,
 };
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 
 const ACCESS_TOKEN_EXPIRY_SECONDS: i64 = 3600; // 1 hora
 const REFRESH_TOKEN_EXPIRY_SECONDS: i64 = 604800; // 7 dias
+const PASSWORD_RESET_EXPIRY_SECONDS: i64 = 900; // 15 minutos
 
 /// POST /login
 pub async fn handler_login(
@@ -260,6 +262,113 @@ pub async fn handler_logout(
     tracing::info!(event_type = "user_logout", "Refresh token revogado");
 
     Ok(Json(serde_json::json!({"message": "Logout realizado"})))
+}
+
+/// POST /forgot-password
+/// (Subtarefa 6.2)
+pub async fn handler_forgot_password(
+    State(state): State<AppState>,
+    Json(payload): Json<ForgotPasswordPayload>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    payload.validate()?;
+    let user_repo = UserRepository::new(&state.db_pool_auth);
+
+    // 1. Buscar usuário pelo email
+    // Usamos find_by_email que acabamos de adicionar
+    let user = user_repo.find_by_email(&payload.email).await?;
+
+    if let Some(user) = user {
+        // 2. Gerar o Token JWT de Reset
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let claims = Claims {
+            sub: user.id,
+            exp: now + PASSWORD_RESET_EXPIRY_SECONDS,
+            iat: now,
+            token_type: TokenType::PasswordReset, // <--- Tipo Específico
+        };
+
+        let header = Header::new(Algorithm::EdDSA);
+        let token =
+            encode(&header, &claims, &state.encoding_key).context("Falha ao gerar JWT de reset")?;
+
+        // 3. Enviar o email (fire-and-forget)
+        state
+            .email_service
+            .send_password_reset_email(payload.email, &user.username, &token);
+    } else {
+        // Nota: Não retornamos erro se o email não for encontrado.
+        // Isso previne ataques de enumeração de email.
+        tracing::info!(email = %payload.email, event_type = "forgot_password_attempt", "Tentativa de reset para email não existente (ou erro silencioso)");
+    }
+
+    // 4. Retornar sempre uma resposta genérica de sucesso
+    Ok(Json(serde_json::json!({
+        "message": "Se este email estiver registado, um link de redefinição de senha foi enviado."
+    })))
+}
+
+/// POST /reset-password
+/// (Subtarefa 6.3)
+pub async fn handler_reset_password(
+    State(state): State<AppState>,
+    Json(payload): Json<ResetPasswordPayload>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    payload.validate()?;
+
+    // 1. Validar a força da nova senha
+    validate_password_strength(&payload.new_password).map_err(AppError::BadRequest)?;
+
+    // 2. Decodificar e validar o token JWT
+    let mut validation = Validation::new(Algorithm::EdDSA);
+    validation.leeway = 5; // 5 segundos de tolerância
+
+    let token_data =
+        decode::<Claims>(&payload.token, &state.decoding_key, &validation).map_err(|e| {
+            tracing::warn!(error = %e, "Falha na validação do token de reset");
+            AppError::Unauthorized("Token inválido ou expirado".to_string())
+        })?;
+
+    let claims = token_data.claims;
+
+    // 3. Verificar se o token é do tipo correto
+    if claims.token_type != TokenType::PasswordReset {
+        return Err(AppError::Unauthorized(
+            "Token inválido (tipo incorreto)".to_string(),
+        ));
+    }
+
+    let user_id = claims.sub;
+
+    // 4. Hashear a nova senha
+    let password_clone = payload.new_password.clone();
+    let password_hash = tokio::task::spawn_blocking(move || hash_password(&password_clone))
+        .await
+        .context("Falha task hash (reset)")?
+        .context("Erro ao gerar hash (reset)")?;
+
+    // 5. Atualizar a senha no banco
+    let user_repo = UserRepository::new(&state.db_pool_auth);
+    user_repo
+        .update_password(user_id, &password_hash) //
+        .await
+        .context("Falha ao atualizar senha no DB")?;
+
+    // 6. Revogar todos os refresh tokens (Segurança)
+    let auth_repo = AuthRepository::new(&state.db_pool_auth);
+    auth_repo
+        .revoke_all_user_tokens(user_id) //
+        .await
+        .context("Falha ao revogar refresh tokens após reset")?;
+
+    tracing::info!(user_id = %user_id, event_type = "password_reset_success", "Senha redefinida com sucesso");
+
+    Ok(Json(
+        serde_json::json!({"message": "Senha atualizada com sucesso"}),
+    ))
 }
 
 // --- Helpers ---

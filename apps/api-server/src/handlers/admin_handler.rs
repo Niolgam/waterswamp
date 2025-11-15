@@ -1,5 +1,3 @@
-// apps/api-server/src/routes/admin_handler.rs
-
 use crate::{error::AppError, state::AppState, web_models::CurrentUser};
 use anyhow::Context;
 use axum::{
@@ -7,16 +5,11 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use casbin::{MgmtApi, RbacApi}; // Importar RbacApi
+use casbin::{MgmtApi, RbacApi};
 use core_services::security::{hash_password, validate_password_strength};
 use domain::models::{
-    CreateUserPayload,
-    ListUsersQuery,
-    PaginatedUsers,
-    PolicyRequest,
-    UpdateUserPayload,
+    CreateUserPayload, ListUsersQuery, PaginatedUsers, PolicyRequest, UpdateUserPayload,
     UserDetailDto,
-    UserDto, // Usado em PaginatedUsers
 };
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use uuid::Uuid;

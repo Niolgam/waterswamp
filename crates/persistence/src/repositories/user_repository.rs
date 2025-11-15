@@ -35,6 +35,15 @@ impl<'a> UserRepository<'a> {
         .await
     }
 
+    pub async fn find_by_email(&self, email: &str) -> Result<Option<UserDto>, sqlx::Error> {
+        sqlx::query_as::<_, UserDto>(
+            "SELECT id, username, email, created_at, updated_at FROM users WHERE LOWER(email) = LOWER($1)",
+        )
+        .bind(email)
+        .fetch_optional(self.pool)
+        .await
+    }
+
     /// ⭐ NOVO: Verifica se um email já existe (case-insensitive).
     pub async fn exists_by_email(&self, email: &str) -> Result<bool, sqlx::Error> {
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1))")

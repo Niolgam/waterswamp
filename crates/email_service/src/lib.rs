@@ -3,26 +3,21 @@
 pub mod config;
 
 use crate::config::EmailConfig;
-use anyhow::Context; // ⭐ RE-ADICIONADO: Usado em .with_context()
+use anyhow::Context;
 use async_trait::async_trait;
 use htmlescape;
 use lettre::{
-    message::header::ContentType, // ⭐ USADO
+    message::header::ContentType,
     transport::smtp::{
         authentication::Credentials,
         client::{Tls, TlsParameters},
-        AsyncSmtpTransportBuilder,
     },
-    AsyncSmtpTransport,
-    AsyncTransport, // ⭐ USADO
-    Message,
-    Tokio1Executor, // O Executor correto
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use once_cell::sync::Lazy;
-use serde_json; // ⭐ RE-ADICIONADO: Usado no filtro
-use std::collections::HashMap; // ⭐ RE-ADICIONADO: Usado no filtro
+use serde_json;
+use std::collections::HashMap;
 use tera::{Context as TeraContext, Tera, Value};
-// use tokio::runtime::Handle; // REMOVIDO (Warning)
 
 // Inicializa o Tera (motor de templates)
 pub static TERA: Lazy<Tera> = Lazy::new(|| {
@@ -61,6 +56,7 @@ pub trait EmailSender {
     ) -> anyhow::Result<()>;
 
     fn send_welcome_email(&self, to_email: String, username: &str);
+    fn send_password_reset_email(&self, to_email: String, username: &str, token: &str);
 }
 
 // ===================================================================
@@ -115,12 +111,10 @@ impl EmailSender for EmailService {
             std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
         context.insert("base_url", &base_url);
 
-        // ⭐ USADO: `anyhow::Context`
         let html_body = TERA
             .render(template, &context)
             .with_context(|| format!("Falha ao renderizar template de email: {}", template))?;
 
-        // ⭐ USADO: `Message`, `ContentType`
         let email = Message::builder()
             .from(self.from_email.parse()?)
             .to(to_email.parse()?)
@@ -128,7 +122,6 @@ impl EmailSender for EmailService {
             .header(ContentType::TEXT_HTML)
             .body(html_body)?;
 
-        // ⭐ USADO: `AsyncTransport`
         self.transport.send(email).await?;
         Ok(())
     }
@@ -149,6 +142,35 @@ impl EmailSender for EmailService {
                 .await
             {
                 tracing::error!(error = ?e, "Falha ao enviar email");
+            }
+        });
+    }
+
+    fn send_password_reset_email(&self, to_email: String, username: &str, token: &str) {
+        let mut context = TeraContext::new();
+        context.insert("username", username);
+
+        // O base_url é injetado pelo `send_email`, mas precisamos dele aqui
+        // para construir o link que o frontend usará.
+        let base_url =
+            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+        // Este link aponta para o SEU APLICATIVO FRONTEND,
+        // que então fará a chamada POST para a API
+        let reset_link = format!("{}/reset-password-form?token={}", base_url, token);
+        context.insert("reset_link", &reset_link);
+
+        let service = self.clone();
+        let subject = "Redefina sua senha do Waterswamp".to_string();
+        let template = "reset_password.html".to_string();
+
+        tokio::spawn(async move {
+            tracing::info!(to = %to_email, template = %template, "A enviar email de reset de senha...");
+            if let Err(e) = service
+                .send_email(to_email, subject, &template, context)
+                .await
+            {
+                tracing::error!(error = ?e, "Falha ao enviar email de reset");
             }
         });
     }

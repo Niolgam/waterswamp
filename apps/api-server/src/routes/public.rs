@@ -1,3 +1,12 @@
-pub async fn handler_public() -> &'static str {
-    "Esta rota é pública."
+use crate::handlers::{health_handler, public_handler};
+use crate::{metrics, state::AppState};
+use axum::{routing::get, Router};
+
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/public", get(public_handler::handler_public))
+        .route("/health", get(health_handler::handler_health))
+        .route("/health/live", get(health_handler::handler_liveness))
+        .route("/health/ready", get(health_handler::handler_ready))
+        .route("/metrics", get(metrics::handler_metrics))
 }

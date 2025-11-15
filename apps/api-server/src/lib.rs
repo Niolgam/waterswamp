@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use config::Config;
 use email_service::config::EmailConfig;
 use email_service::EmailService;
 use jsonwebtoken::{DecodingKey, EncodingKey};
@@ -11,10 +10,13 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tracing::info;
 
+use crate::config::config::Config;
+
 pub mod casbin_setup;
 pub mod config;
 mod constants;
 pub mod error;
+pub mod handlers;
 pub mod logging;
 pub mod metrics;
 mod middleware;
@@ -31,7 +33,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     logging::init_logging(log_config)?;
 
     // ⭐ 2. Inicializar timestamp de uptime
-    routes::health_handler::init_server_start_time();
+    handlers::health_handler::init_server_start_time();
 
     info!("🚀 Iniciando Waterswamp API...");
 
@@ -72,7 +74,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     };
 
     info!("📡 Construindo rotas...");
-    let app = routes::build_router(app_state);
+    let app = routes::build(app_state);
 
     let listener = TcpListener::bind(addr).await?;
     info!("🚀 Servidor ouvindo em {}", addr);

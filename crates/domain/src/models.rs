@@ -113,6 +113,7 @@ pub struct Claims {
 pub enum TokenType {
     Access,
     Refresh,
+    PasswordReset,
 }
 
 // =============================================================================
@@ -208,4 +209,19 @@ pub struct UpdateUserPayload {
         regex(path = *ROLE_REGEX, message = "O papel deve ser 'admin' ou 'user'")
     )]
     pub role: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct ForgotPasswordPayload {
+    #[validate(email)]
+    pub email: String,
+}
+
+// ⭐ NOVO: Payload para definir a nova senha
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct ResetPasswordPayload {
+    #[validate(length(min = 1))]
+    pub token: String,
+    #[validate(length(min = 10))]
+    pub new_password: String,
 }

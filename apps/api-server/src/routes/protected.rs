@@ -1,9 +1,14 @@
-pub async fn handler_user_profile() -> &'static str {
-    // O usuário já foi autenticado e autorizado pelo middleware.
-    "Este é o seu perfil de usuário."
-}
+use crate::{handlers::protected_handler, state::AppState};
+use axum::{routing::get, Router};
 
-// Handler de admin
-pub async fn handler_admin_dashboard() -> &'static str {
-    "Você está no dashboard de admin."
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/users/profile",
+            get(protected_handler::handler_user_profile),
+        )
+        .route(
+            "/admin/dashboard",
+            get(protected_handler::handler_admin_dashboard),
+        )
 }

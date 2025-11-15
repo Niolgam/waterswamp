@@ -9,8 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 use waterswamp::casbin_setup::setup_casbin;
-use waterswamp::config::Config;
-use waterswamp::routes::build_router;
+use waterswamp::config::config::Config;
+use waterswamp::routes::build;
 use waterswamp::state::AppState;
 
 use async_trait::async_trait;
@@ -18,6 +18,7 @@ use email_service::EmailSender;
 use tera::Context as TeraContext;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct MockEmail {
     pub to: String,
     pub subject: String,
@@ -71,8 +72,29 @@ impl EmailSender for MockEmailService {
                 .await;
         });
     }
-}
 
+    fn send_password_reset_email(&self, to_email: String, username: &str, token: &str) {
+        let mut context = TeraContext::new();
+        context.insert("username", username);
+
+        // Simulamos a criação do link que o serviço real faria,
+        // para que o teste possa (opcionalmente) verificar o contexto.
+        let reset_link = format!("http://mock.test/reset?token={}", token);
+        context.insert("reset_link", &reset_link);
+
+        let service = self.clone();
+        let subject = "Redefina sua senha do Waterswamp".to_string();
+        let template = "reset_password.html".to_string();
+
+        // O spawn é importante para simular o comportamento real
+        tokio::spawn(async move {
+            let _ = service
+                .send_email(to_email, subject, &template, context)
+                .await;
+        });
+    }
+}
+#[allow(dead_code)]
 pub struct TestApp {
     pub api: TestServer,
     pub db_auth: PgPool,
@@ -125,7 +147,7 @@ pub async fn spawn_app() -> TestApp {
         email_service: email_service.clone(),
     };
 
-    let app = build_router(app_state);
+    let app = build(app_state);
     let api = TestServer::new(app).unwrap();
 
     // --- Busca os IDs da Alice e Bob que foram criados no setup_casbin ---
