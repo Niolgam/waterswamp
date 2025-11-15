@@ -1,7 +1,6 @@
 use http::StatusCode;
 use serde_json::{json, Value};
 
-// Importa o setup de 'tests/common.rs'
 mod common;
 
 #[tokio::test]
