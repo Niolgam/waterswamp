@@ -7,7 +7,7 @@ edition = "2021"
 domain = { path = "../../crates/domain" }
 persistence = { path = "../../crates/persistence" }
 core_services = { path = "../../crates/core-services" }
-email_service = { path = "../../crates/email_service" }
+email_service = { path = "../../crates/email-service" }
 
 axum = { workspace = true }
 tokio = { workspace = true, features = ["full", "signal"] }

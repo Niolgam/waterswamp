@@ -7,6 +7,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct CurrentUser {
     pub id: Uuid,
+    pub username: String,
 }
 
 // Regex para username (apenas alfanuméricos e underscore)

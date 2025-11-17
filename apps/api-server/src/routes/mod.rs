@@ -4,7 +4,9 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 
 use crate::{
-    config, metrics,
+    config,
+    handlers::audit_middleware,
+    metrics,
     middleware::{mw_authenticate, mw_authorize},
     rate_limit::api_rate_limiter,
     state::AppState,
@@ -55,6 +57,10 @@ fn apply_global_middleware(router: Router) -> Router {
 
     router.layer(
         ServiceBuilder::new()
+            .layer(middleware::from_fn_with_state(
+                app_state,
+                audit_middleware::audit_middleware,
+            ))
             .layer(middleware::from_fn(metrics::metrics_middleware))
             .layer(TraceLayer::new_for_http())
             .layer(config::cors::configure())

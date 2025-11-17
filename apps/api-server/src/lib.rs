@@ -12,7 +12,6 @@ use tracing::info;
 
 use crate::config::config::Config;
 
-pub mod casbin_setup;
 pub mod config;
 mod constants;
 pub mod error;
@@ -61,6 +60,10 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         EmailService::new(email_config).context("Falha ao criar transportador de email")?;
     info!("✅ Serviço de email pronto");
 
+    info!("📝 Inicializando serviço de audit...");
+    let audit_service = AuditService::new(pool_logs.clone());
+    info!("✅ Serviço de audit pronto");
+
     let policy_cache = Arc::new(RwLock::new(HashMap::new()));
 
     let app_state = state::AppState {
@@ -71,6 +74,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         encoding_key,
         decoding_key,
         email_service: Arc::new(email_service),
+        audit_service,
     };
 
     info!("📡 Construindo rotas...");

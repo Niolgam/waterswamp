@@ -97,6 +97,68 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .add_policy(str_vec![ROLE_ADMIN, "/api/admin/users/{id}", ACTION_DELETE])
         .await?;
 
+    // --- AUDIT LOG POLICIES ---
+    // Allow admin to view audit logs (list, pagination, filtering)
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/audit-logs", ACTION_GET])
+        .await?;
+
+    // Allow admin to view audit log statistics
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            "/api/admin/audit-logs/stats",
+            ACTION_GET
+        ])
+        .await?;
+
+    // Allow admin to view failed login attempts
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            "/api/admin/audit-logs/failed-logins",
+            ACTION_GET
+        ])
+        .await?;
+
+    // Allow admin to view suspicious IPs
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            "/api/admin/audit-logs/suspicious-ips",
+            ACTION_GET
+        ])
+        .await?;
+
+    // Allow admin to view user-specific audit logs
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            "/api/admin/audit-logs/user/{user_id}",
+            ACTION_GET
+        ])
+        .await?;
+
+    // Allow admin to view specific audit log entry
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            "/api/admin/audit-logs/{id}",
+            ACTION_GET
+        ])
+        .await?;
+
+    // Allow admin to cleanup old audit logs (destructive operation)
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            "/api/admin/audit-logs/cleanup",
+            ACTION_POST
+        ])
+        .await?;
+
+    info!("Políticas de Audit Logs carregadas");
+
     enforcer.save_policy().await?;
 
     info!("Políticas do Casbin carregadas e salvas no banco.");

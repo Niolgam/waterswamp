@@ -18,4 +18,5 @@ pub struct AppState {
     pub encoding_key: EncodingKey,
     pub decoding_key: DecodingKey,
     pub email_service: Arc<dyn EmailSender + Send + Sync>,
+    pub audit_service: AuditService,
 }
