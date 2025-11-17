@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::handlers::audit_services::AuditService;
+
 pub type SharedEnforcer = Arc<RwLock<Enforcer>>;
 pub type PolicyCache = Arc<RwLock<HashMap<String, bool>>>;
 

@@ -47,12 +47,12 @@ pub fn build(app_state: AppState) -> Router {
         .merge(public_routes)
         .merge(authenticated_routes)
         .merge(protected_routes)
-        .with_state(app_state);
+        .with_state(app_state.clone());
 
-    apply_global_middleware(router)
+    apply_global_middleware(router, app_state)
 }
 
-fn apply_global_middleware(router: Router) -> Router {
+fn apply_global_middleware(router: Router, app_state: AppState) -> Router {
     let headers = security_headers();
 
     router.layer(

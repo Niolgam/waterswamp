@@ -10,8 +10,6 @@ pub struct CurrentUser {
     pub username: String,
 }
 
-// Regex para username (apenas alfanuméricos e underscore)
-
 impl<S> FromRequestParts<S> for CurrentUser
 where
     S: Send + Sync,

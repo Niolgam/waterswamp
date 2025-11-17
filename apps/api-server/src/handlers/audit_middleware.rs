@@ -1,15 +1,13 @@
 use axum::{
-    body::Body,
     extract::{Request, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     middleware::Next,
     response::Response,
 };
 use std::time::Instant;
 use uuid::Uuid;
 
-// Import from your crate
-// use crate::{state::AppState, web_models::CurrentUser};
+use crate::{state::AppState, web_models::CurrentUser};
 
 /// Middleware that automatically logs audit events for all requests.
 /// This captures request metadata and response status for comprehensive auditing.
@@ -176,7 +174,6 @@ fn should_log_action(action: &str, method: &str, path: &str, status_code: i32) -
     }
 
     // Don't log routine GET requests to avoid noise
-    // Exceptions: admin routes (handled above)
     if method == "GET" {
         // Skip health checks, metrics, static assets
         if path == "/health"
@@ -236,10 +233,6 @@ fn extract_user_agent(headers: &HeaderMap) -> Option<String> {
         })
 }
 
-// =============================================================================
-// SELECTIVE AUDIT MIDDLEWARE
-// =============================================================================
-
 /// More selective middleware that only logs specific routes
 /// Use this if the full middleware is too verbose
 pub async fn selective_audit_middleware(
@@ -264,20 +257,4 @@ pub async fn selective_audit_middleware(
     } else {
         next.run(req).await
     }
-}
-
-// =============================================================================
-// PLACEHOLDER TYPES (replace with actual imports)
-// =============================================================================
-
-#[derive(Clone)]
-pub struct AppState {
-    pub db_pool_logs: sqlx::PgPool,
-    // ... other fields
-}
-
-#[derive(Debug, Clone)]
-pub struct CurrentUser {
-    pub id: Uuid,
-    pub username: String,
 }

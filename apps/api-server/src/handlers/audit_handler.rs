@@ -6,9 +6,10 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
-// Import from your crate structure
-// use crate::{error::AppError, state::AppState};
-// use persistence::repositories::audit_log_repository::{AuditLogRepository, AuditLogEntryRow, AuditLogStatsRow, SuspiciousIpRow};
+use crate::{error::AppError, state::AppState};
+use persistence::repositories::audit_logs_repository::{
+    AuditLogEntryRow, AuditLogRepository, AuditLogStatsRow, SuspiciousIpRow,
+};
 
 // =============================================================================
 // REQUEST/RESPONSE TYPES
@@ -100,7 +101,7 @@ pub struct SuspiciousIpDto {
 /// Query for suspicious IPs
 #[derive(Debug, Deserialize, Validate)]
 pub struct SuspiciousIpsQuery {
-    #[validate(range(min = 1, max = 168))] // Max 1 week
+    #[validate(range(min = 1, max = 168))]
     pub hours: Option<i64>,
 
     #[validate(range(min = 1, max = 100))]
@@ -326,8 +327,6 @@ pub async fn cleanup_old_logs(
 // CONVERSIONS
 // =============================================================================
 
-// Conversion from repository row type to DTO
-// Add this in the actual implementation where AuditLogEntryRow is defined
 impl From<AuditLogEntryRow> for AuditLogDto {
     fn from(row: AuditLogEntryRow) -> Self {
         Self {
@@ -346,150 +345,4 @@ impl From<AuditLogEntryRow> for AuditLogDto {
             created_at: row.created_at,
         }
     }
-}
-
-// =============================================================================
-// PLACEHOLDER TYPES (replace with actual imports)
-// =============================================================================
-
-// These are placeholders - in your actual code, import from the correct modules
-
-pub struct AppState {
-    pub db_pool_logs: sqlx::PgPool,
-    // ... other fields
-}
-
-pub enum AppError {
-    Database(sqlx::Error),
-    NotFound(String),
-    Validation(validator::ValidationErrors),
-}
-
-impl From<validator::ValidationErrors> for AppError {
-    fn from(e: validator::ValidationErrors) -> Self {
-        AppError::Validation(e)
-    }
-}
-
-impl From<sqlx::Error> for AppError {
-    fn from(e: sqlx::Error) -> Self {
-        AppError::Database(e)
-    }
-}
-
-// Placeholder for repository types
-pub struct AuditLogRepository<'a> {
-    pool: &'a sqlx::PgPool,
-}
-
-impl<'a> AuditLogRepository<'a> {
-    pub fn new(pool: &'a sqlx::PgPool) -> Self {
-        Self { pool }
-    }
-
-    // Methods would be implemented in the actual repository
-    pub async fn list(
-        &self,
-        _limit: i64,
-        _offset: i64,
-        _user_id: Option<Uuid>,
-        _action: Option<&str>,
-        _resource: Option<&str>,
-        _ip_address: Option<&str>,
-        _status_code: Option<i32>,
-        _min_status_code: Option<i32>,
-        _max_status_code: Option<i32>,
-        _start_date: Option<chrono::DateTime<chrono::Utc>>,
-        _end_date: Option<chrono::DateTime<chrono::Utc>>,
-        _sort_by: &str,
-        _sort_order: &str,
-    ) -> Result<(Vec<AuditLogEntryRow>, i64), sqlx::Error> {
-        todo!()
-    }
-
-    pub async fn find_by_id(&self, _id: Uuid) -> Result<Option<AuditLogEntryRow>, sqlx::Error> {
-        todo!()
-    }
-
-    pub async fn get_stats(&self) -> Result<AuditLogStatsRow, sqlx::Error> {
-        todo!()
-    }
-
-    pub async fn get_user_logs(
-        &self,
-        _user_id: Uuid,
-        _limit: i64,
-    ) -> Result<Vec<AuditLogEntryRow>, sqlx::Error> {
-        todo!()
-    }
-
-    pub async fn get_failed_logins(
-        &self,
-        _hours: i64,
-        _limit: i64,
-    ) -> Result<Vec<AuditLogEntryRow>, sqlx::Error> {
-        todo!()
-    }
-
-    pub async fn get_suspicious_ips(
-        &self,
-        _hours: i64,
-        _threshold: i64,
-    ) -> Result<Vec<SuspiciousIpRow>, sqlx::Error> {
-        todo!()
-    }
-
-    pub async fn cleanup_old_logs(&self, _retention_days: i64) -> Result<u64, sqlx::Error> {
-        todo!()
-    }
-}
-
-// Placeholder row types
-#[derive(Debug)]
-pub struct AuditLogEntryRow {
-    pub id: Uuid,
-    pub user_id: Option<Uuid>,
-    pub username: Option<String>,
-    pub action: String,
-    pub resource: String,
-    pub method: Option<String>,
-    pub status_code: Option<i32>,
-    pub details: Option<serde_json::Value>,
-    pub ip_address: Option<String>,
-    pub user_agent: Option<String>,
-    pub request_id: Option<Uuid>,
-    pub duration_ms: Option<i32>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug)]
-pub struct AuditLogStatsRow {
-    pub total_logs: i64,
-    pub logs_today: i64,
-    pub logs_this_week: i64,
-    pub failed_logins_today: i64,
-    pub unique_users_today: i64,
-    pub top_actions: Vec<ActionCountRow>,
-    pub top_resources: Vec<ResourceCountRow>,
-}
-
-#[derive(Debug)]
-pub struct ActionCountRow {
-    pub action: String,
-    pub count: i64,
-}
-
-#[derive(Debug)]
-pub struct ResourceCountRow {
-    pub resource: String,
-    pub count: i64,
-}
-
-#[derive(Debug)]
-pub struct SuspiciousIpRow {
-    pub ip_address: Option<String>,
-    pub failed_attempts: i64,
-    pub unique_usernames: i64,
-    pub first_attempt: chrono::DateTime<chrono::Utc>,
-    pub last_attempt: chrono::DateTime<chrono::Utc>,
 }

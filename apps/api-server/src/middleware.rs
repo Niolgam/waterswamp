@@ -22,13 +22,26 @@ pub async fn mw_authenticate(
     let token_data = decode::<Claims>(&token, &state.decoding_key, &validation)
         .map_err(|_| AppError::Unauthorized("Token inválido ou expirado".to_string()))?;
 
+    let user_id = token_data.claims.sub;
+
+    // Fetch username from database
+    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(&state.db_pool_auth)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "Erro ao buscar username");
+            AppError::Anyhow(anyhow::anyhow!("Erro interno"))
+        })?
+        .ok_or_else(|| AppError::Unauthorized("Usuário não encontrado".to_string()))?;
+
     let current_user = CurrentUser {
-        id: token_data.claims.sub,
+        id: user_id,
+        username,
     };
 
     let claims = token_data.claims;
     req.extensions_mut().insert(claims);
-
     req.extensions_mut().insert(current_user);
 
     Ok(next.run(req).await)
