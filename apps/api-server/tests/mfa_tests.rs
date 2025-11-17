@@ -31,6 +31,9 @@ fn hash_backup_code(code: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+// Test secret that's at least 128 bits (16 bytes) - this is 20 bytes when decoded
+const TEST_SECRET: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
 #[tokio::test]
 async fn test_mfa_setup_initiation() {
     let app = common::spawn_app().await;
@@ -186,7 +189,6 @@ async fn test_login_with_mfa_enabled_returns_challenge() {
         .await
         .unwrap();
 
-    let secret = "JBSWY3DPEHPK3PXP"; // Test secret
     sqlx::query(
         r#"
         UPDATE users 
@@ -195,7 +197,7 @@ async fn test_login_with_mfa_enabled_returns_challenge() {
         "#,
     )
     .bind(user_id)
-    .bind(secret)
+    .bind(TEST_SECRET)
     .execute(&app.db_auth)
     .await
     .unwrap();
@@ -229,7 +231,6 @@ async fn test_mfa_verify_with_totp() {
         .await
         .unwrap();
 
-    let secret = "JBSWY3DPEHPK3PXP";
     sqlx::query(
         r#"
         UPDATE users 
@@ -238,7 +239,7 @@ async fn test_mfa_verify_with_totp() {
         "#,
     )
     .bind(user_id)
-    .bind(secret)
+    .bind(TEST_SECRET)
     .execute(&app.db_auth)
     .await
     .unwrap();
@@ -257,7 +258,7 @@ async fn test_mfa_verify_with_totp() {
     let mfa_token = login_body["mfa_token"].as_str().unwrap();
 
     // 3. Generate valid TOTP code
-    let totp_code = generate_totp_code(secret);
+    let totp_code = generate_totp_code(TEST_SECRET);
 
     // 4. Verify MFA
     let mfa_response = app
@@ -287,7 +288,6 @@ async fn test_mfa_verify_with_backup_code() {
         .await
         .unwrap();
 
-    let secret = "JBSWY3DPEHPK3PXP";
     let backup_code_plain = "ABCD1234EFGH";
     let backup_code_hashed = hash_backup_code(backup_code_plain);
 
@@ -301,7 +301,7 @@ async fn test_mfa_verify_with_backup_code() {
         "#,
     )
     .bind(user_id)
-    .bind(secret)
+    .bind(TEST_SECRET)
     .bind(&backup_code_hashed)
     .execute(&app.db_auth)
     .await
@@ -357,7 +357,6 @@ async fn test_mfa_verify_invalid_code() {
         .await
         .unwrap();
 
-    let secret = "JBSWY3DPEHPK3PXP";
     sqlx::query(
         r#"
         UPDATE users 
@@ -366,7 +365,7 @@ async fn test_mfa_verify_invalid_code() {
         "#,
     )
     .bind(user_id)
-    .bind(secret)
+    .bind(TEST_SECRET)
     .execute(&app.db_auth)
     .await
     .unwrap();
@@ -406,7 +405,6 @@ async fn test_mfa_disable() {
         .await
         .unwrap();
 
-    let secret = "JBSWY3DPEHPK3PXP";
     sqlx::query(
         r#"
         UPDATE users 
@@ -416,12 +414,12 @@ async fn test_mfa_disable() {
         "#,
     )
     .bind(user_id)
-    .bind(secret)
+    .bind(TEST_SECRET)
     .execute(&app.db_auth)
     .await
     .unwrap();
 
-    let totp_code = generate_totp_code(secret);
+    let totp_code = generate_totp_code(TEST_SECRET);
 
     // Disable MFA
     let disable_response = app
@@ -457,7 +455,6 @@ async fn test_mfa_disable_wrong_password() {
         .await
         .unwrap();
 
-    let secret = "JBSWY3DPEHPK3PXP";
     sqlx::query(
         r#"
         UPDATE users 
@@ -467,12 +464,12 @@ async fn test_mfa_disable_wrong_password() {
         "#,
     )
     .bind(user_id)
-    .bind(secret)
+    .bind(TEST_SECRET)
     .execute(&app.db_auth)
     .await
     .unwrap();
 
-    let totp_code = generate_totp_code(secret);
+    let totp_code = generate_totp_code(TEST_SECRET);
 
     // Try to disable with wrong password
     let disable_response = app
@@ -497,7 +494,6 @@ async fn test_mfa_regenerate_backup_codes() {
         .await
         .unwrap();
 
-    let secret = "JBSWY3DPEHPK3PXP";
     let old_backup = hash_backup_code("OLDCODE12345");
 
     sqlx::query(
@@ -510,13 +506,13 @@ async fn test_mfa_regenerate_backup_codes() {
         "#,
     )
     .bind(user_id)
-    .bind(secret)
+    .bind(TEST_SECRET)
     .bind(&old_backup)
     .execute(&app.db_auth)
     .await
     .unwrap();
 
-    let totp_code = generate_totp_code(secret);
+    let totp_code = generate_totp_code(TEST_SECRET);
 
     // Regenerate backup codes
     let regen_response = app
@@ -578,7 +574,6 @@ async fn test_mfa_status_with_backup_codes() {
         .await
         .unwrap();
 
-    let secret = "JBSWY3DPEHPK3PXP";
     let codes = vec![
         hash_backup_code("CODE1"),
         hash_backup_code("CODE2"),
@@ -595,7 +590,7 @@ async fn test_mfa_status_with_backup_codes() {
         "#,
     )
     .bind(user_id)
-    .bind(secret)
+    .bind(TEST_SECRET)
     .bind(&codes)
     .execute(&app.db_auth)
     .await

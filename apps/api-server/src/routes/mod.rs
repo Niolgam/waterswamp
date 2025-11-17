@@ -18,6 +18,17 @@ pub mod public;
 pub fn build(app_state: AppState) -> Router {
     let public_routes = public::router().merge(auth::router(app_state.clone()));
 
+    // Routes that require authentication but NOT Casbin authorization
+    // (any authenticated user can access these)
+    let authenticated_routes = auth::protected_auth_router()
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            mw_authenticate,
+        ))
+        .layer(api_rate_limiter());
+
+    // Routes that require authentication AND Casbin authorization
+    // (role-based access control)
     let protected_routes = protected::router()
         .merge(admin::router())
         .layer(middleware::from_fn_with_state(
@@ -32,6 +43,7 @@ pub fn build(app_state: AppState) -> Router {
 
     let router = Router::new()
         .merge(public_routes)
+        .merge(authenticated_routes)
         .merge(protected_routes)
         .with_state(app_state);
 

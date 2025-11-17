@@ -136,7 +136,6 @@ async fn test_register_short_username() {
 
 #[tokio::test]
 async fn test_register_success_sends_welcome_email() {
-    // ⭐ Nome do teste atualizado
     let app = common::spawn_app().await;
 
     let unique_username = format!("user_{}", uuid::Uuid::new_v4());
@@ -162,20 +161,36 @@ async fn test_register_success_sends_welcome_email() {
 
     let received_emails = app.email_service.messages.lock().await;
 
-    // Verificar se 1 email foi recebido
-    assert_eq!(received_emails.len(), 1, "Deveria ter recebido 1 email");
-
-    let email = &received_emails[0];
-    // Verificar o assunto
-    assert!(
-        email.subject.contains("Bem-vindo ao Waterswamp!"),
-        "O assunto do email está incorreto"
+    // Verificar se 2 emails foram recebidos (verification + welcome)
+    assert_eq!(
+        received_emails.len(),
+        2,
+        "Deveria ter recebido 2 emails (verification + welcome)"
     );
 
-    // Verificar o conteúdo (contexto do Tera)
-    assert_eq!(email.template, "welcome.html");
+    // Find verification email
+    let verification_email = received_emails
+        .iter()
+        .find(|e| e.subject.contains("Verifique"));
+    assert!(
+        verification_email.is_some(),
+        "Deveria ter email de verificação"
+    );
+    let ver_email = verification_email.unwrap();
+    assert_eq!(ver_email.to, unique_email);
+    assert_eq!(ver_email.template, "email_verification.html");
+    assert!(ver_email.context.get("verification_link").is_some());
+
+    // Find welcome email
+    let welcome_email = received_emails
+        .iter()
+        .find(|e| e.subject.contains("Bem-vindo"));
+    assert!(welcome_email.is_some(), "Deveria ter email de boas-vindas");
+    let wel_email = welcome_email.unwrap();
+    assert_eq!(wel_email.to, unique_email);
+    assert_eq!(wel_email.template, "welcome.html");
     assert_eq!(
-        email.context.get("username").unwrap().as_str().unwrap(),
+        wel_email.context.get("username").unwrap().as_str().unwrap(),
         unique_username
     );
 }

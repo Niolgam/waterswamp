@@ -93,7 +93,42 @@ impl EmailSender for MockEmailService {
                 .await;
         });
     }
+
+    fn send_verification_email(&self, to_email: String, username: &str, token: &str) {
+        let mut context = TeraContext::new();
+        context.insert("username", username);
+
+        let verification_link = format!("http://mock.test/verify-email?token={}", token);
+        context.insert("verification_link", &verification_link);
+
+        let service = self.clone();
+        let subject = "Verifique seu email - Waterswamp".to_string();
+        let template = "email_verification.html".to_string();
+
+        tokio::spawn(async move {
+            let _ = service
+                .send_email(to_email, subject, &template, context)
+                .await;
+        });
+    }
+
+    fn send_mfa_enabled_email(&self, to_email: String, username: &str) {
+        let mut context = TeraContext::new();
+        context.insert("username", username);
+        context.insert("enabled_at", "2025-01-01 00:00:00 UTC");
+
+        let service = self.clone();
+        let subject = "MFA Ativado - Waterswamp".to_string();
+        let template = "mfa_enabled.html".to_string();
+
+        tokio::spawn(async move {
+            let _ = service
+                .send_email(to_email, subject, &template, context)
+                .await;
+        });
+    }
 }
+
 #[allow(dead_code)]
 pub struct TestApp {
     pub api: TestServer,
