@@ -11,7 +11,9 @@ use tokio::sync::RwLock;
 use tracing::info;
 
 use crate::config::config::Config;
+use crate::handlers::audit_services::AuditService;
 
+pub mod casbin_setup;
 pub mod config;
 mod constants;
 pub mod error;

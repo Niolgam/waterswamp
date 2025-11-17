@@ -12,3 +12,4 @@ axum = { workspace = true }
 sqlx = { workspace = true, features = ["macros", "uuid", "chrono"] }
 regex = { workspace = true }
 lazy_static = { workspace = true }
+serde_json = { workspace = true }

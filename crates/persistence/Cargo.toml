@@ -7,3 +7,4 @@ edition = "2021"
 sqlx = { workspace = true }
 uuid = { workspace = true }
 domain = { path = "../domain" }
+serde_json = { workspace = true }

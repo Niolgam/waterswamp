@@ -1,3 +1,4 @@
+use sqlx::types::chrono;
 use sqlx::PgPool;
 use uuid::Uuid;
 
