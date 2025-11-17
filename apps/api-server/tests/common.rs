@@ -12,6 +12,8 @@ use waterswamp::casbin_setup::setup_casbin;
 use waterswamp::config::config::Config;
 use waterswamp::routes::build;
 use waterswamp::state::AppState;
+// [Fix] Import AuditService
+use waterswamp::handlers::audit_services::AuditService;
 
 use async_trait::async_trait;
 use email_service::EmailSender;
@@ -46,7 +48,6 @@ impl EmailSender for MockEmailService {
         template: &str,
         context: TeraContext,
     ) -> anyhow::Result<()> {
-        // Em vez de enviar, apenas guardamos a mensagem na Vec
         let mut guard = self.messages.lock().await;
         guard.push(MockEmail {
             to: to_email,
@@ -60,12 +61,9 @@ impl EmailSender for MockEmailService {
     fn send_welcome_email(&self, to_email: String, username: &str) {
         let mut context = TeraContext::new();
         context.insert("username", username);
-
         let service = self.clone();
         let subject = "Bem-vindo ao Waterswamp!".to_string();
         let template = "welcome.html".to_string();
-
-        // O spawn é importante para simular o comportamento real
         tokio::spawn(async move {
             let _ = service
                 .send_email(to_email, subject, &template, context)
@@ -76,17 +74,11 @@ impl EmailSender for MockEmailService {
     fn send_password_reset_email(&self, to_email: String, username: &str, token: &str) {
         let mut context = TeraContext::new();
         context.insert("username", username);
-
-        // Simulamos a criação do link que o serviço real faria,
-        // para que o teste possa (opcionalmente) verificar o contexto.
         let reset_link = format!("http://mock.test/reset?token={}", token);
         context.insert("reset_link", &reset_link);
-
         let service = self.clone();
         let subject = "Redefina sua senha do Waterswamp".to_string();
         let template = "reset_password.html".to_string();
-
-        // O spawn é importante para simular o comportamento real
         tokio::spawn(async move {
             let _ = service
                 .send_email(to_email, subject, &template, context)
@@ -97,14 +89,11 @@ impl EmailSender for MockEmailService {
     fn send_verification_email(&self, to_email: String, username: &str, token: &str) {
         let mut context = TeraContext::new();
         context.insert("username", username);
-
         let verification_link = format!("http://mock.test/verify-email?token={}", token);
         context.insert("verification_link", &verification_link);
-
         let service = self.clone();
         let subject = "Verifique seu email - Waterswamp".to_string();
         let template = "email_verification.html".to_string();
-
         tokio::spawn(async move {
             let _ = service
                 .send_email(to_email, subject, &template, context)
@@ -116,11 +105,9 @@ impl EmailSender for MockEmailService {
         let mut context = TeraContext::new();
         context.insert("username", username);
         context.insert("enabled_at", "2025-01-01 00:00:00 UTC");
-
         let service = self.clone();
         let subject = "MFA Ativado - Waterswamp".to_string();
         let template = "mfa_enabled.html".to_string();
-
         tokio::spawn(async move {
             let _ = service
                 .send_email(to_email, subject, &template, context)
@@ -142,7 +129,7 @@ pub struct TestApp {
 pub async fn spawn_app() -> TestApp {
     dotenvy::dotenv().ok();
 
-    std::env::set_var("DISABLE_RATE_LIMIT", "true"); // Opcional, dependendo se quer testar rate limit ou não
+    std::env::set_var("DISABLE_RATE_LIMIT", "true");
 
     let config = Config::from_env().expect("Falha ao carregar config de teste");
 
@@ -153,17 +140,32 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Falha ao conectar ao logs_db");
 
-    // Limpa o banco antes de cada teste para garantir isolamento (opcional mas recomendado)
-    sqlx::query("TRUNCATE TABLE users, casbin_rule, refresh_tokens CASCADE")
-        .execute(&pool_auth)
+    // [Fix] Run migrations to create tables
+    sqlx::migrate!("../../crates/persistence/migrations_auth")
+        .run(&pool_auth)
         .await
-        .ok();
+        .expect("Falha ao rodar migrations no auth_db");
+
+    sqlx::migrate!("../../crates/persistence/migrations_logs")
+        .run(&pool_logs)
+        .await
+        .expect("Falha ao rodar migrations no logs_db");
+
+    // [Fix] Removed TRUNCATE calls to prevent race conditions in parallel tests.
+    // In a real production test env, you would use transactional tests or unique DBs per test.
+    // sqlx::query("TRUNCATE TABLE users, casbin_rule, refresh_tokens CASCADE")
+    //    .execute(&pool_auth)
+    //    .await
+    //    .ok();
+    // sqlx::query("TRUNCATE TABLE audit_logs CASCADE")
+    //    .execute(&pool_logs)
+    //    .await
+    //    .ok();
 
     let enforcer = setup_casbin(pool_auth.clone())
         .await
         .expect("Falha ao inicializar Casbin");
 
-    // Carrega chaves de teste
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let public_pem = include_bytes!("../tests/keys/public_test.pem");
 
@@ -171,6 +173,9 @@ pub async fn spawn_app() -> TestApp {
     let decoding_key = DecodingKey::from_ed_pem(public_pem).expect("Chave pública inválida");
 
     let email_service = Arc::new(MockEmailService::new());
+
+    // [Fix] Initialize audit service
+    let audit_service = AuditService::new(pool_logs.clone());
 
     let app_state = AppState {
         enforcer,
@@ -180,12 +185,13 @@ pub async fn spawn_app() -> TestApp {
         encoding_key,
         decoding_key,
         email_service: email_service.clone(),
+        // [Fix] Add field to AppState
+        audit_service,
     };
 
     let app = build(app_state);
     let api = TestServer::new(app).unwrap();
 
-    // --- Busca os IDs da Alice e Bob que foram criados no setup_casbin ---
     let alice_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'alice'")
         .fetch_one(&pool_auth)
         .await
@@ -196,7 +202,6 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Bob não encontrado no seed");
 
-    // --- Gera tokens para eles ---
     TestApp {
         api,
         db_auth: pool_auth,
@@ -207,7 +212,6 @@ pub async fn spawn_app() -> TestApp {
     }
 }
 
-// Seu helper de geração de token
 pub fn generate_test_token(user_id: Uuid) -> String {
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let encoding_key = EncodingKey::from_ed_pem(private_pem).unwrap();

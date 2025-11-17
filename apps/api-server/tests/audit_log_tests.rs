@@ -569,11 +569,17 @@ async fn test_audit_log_details_json() {
 async fn test_middleware_logs_login_attempt() {
     let app = common::spawn_app().await;
 
-    // Clear existing logs
-    sqlx::query("DELETE FROM audit_logs")
-        .execute(&app.db_logs)
-        .await
-        .ok();
+    // [Fix] Do NOT clear existing logs as it causes race conditions in parallel tests.
+    // Instead, count existing logs before action.
+    let initial_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) FROM audit_logs 
+        WHERE action = 'login' OR resource = '/login'
+        "#,
+    )
+    .fetch_one(&app.db_logs)
+    .await
+    .unwrap_or(0);
 
     // Perform a login (this should be logged by middleware)
     let _login_response = app
@@ -588,8 +594,8 @@ async fn test_middleware_logs_login_attempt() {
     // Give middleware time to write log
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-    // Check if login was logged
-    let count: i64 = sqlx::query_scalar(
+    // Check if login was logged (count should increase)
+    let final_count: i64 = sqlx::query_scalar(
         r#"
         SELECT COUNT(*) FROM audit_logs 
         WHERE action = 'login' OR resource = '/login'
@@ -599,5 +605,8 @@ async fn test_middleware_logs_login_attempt() {
     .await
     .unwrap();
 
-    assert!(count >= 1, "Login should be logged by middleware");
+    assert!(
+        final_count > initial_count,
+        "Login should be logged by middleware"
+    );
 }
