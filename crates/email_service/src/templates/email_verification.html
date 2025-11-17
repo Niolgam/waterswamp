@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Verifique seu Email</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        line-height: 1.6;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 20px;
+      }
+      .container {
+        max-width: 600px;
+        margin: auto;
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        text-align: center;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 20px;
+        margin-bottom: 20px;
+      }
+      .header h1 {
+        color: #007bff;
+        margin: 0;
+      }
+      .content {
+        color: #333;
+      }
+      .button {
+        display: inline-block;
+        padding: 12px 30px;
+        background-color: #28a745;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+        margin: 20px 0;
+      }
+      .button:hover {
+        background-color: #218838;
+      }
+      .warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 20px;
+      }
+      .footer {
+        text-align: center;
+        color: #666;
+        font-size: 12px;
+        margin-top: 30px;
+        border-top: 1px solid #ddd;
+        padding-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🌊 Waterswamp</h1>
+      </div>
+      <div class="content">
+        <h2>Olá, {{ username }}!</h2>
+        <p>Obrigado por se registar no Waterswamp. Para completar o seu registo e garantir a segurança da sua conta, por favor verifique o seu endereço de email.</p>
+        
+        <p style="text-align: center;">
+          <a href="{{ verification_link }}" class="button">Verificar Meu Email</a>
+        </p>
+        
+        <div class="warning">
+          <strong>⏰ Importante:</strong> Este link expirará em <strong>24 horas</strong>. Se não verificar o seu email a tempo, poderá solicitar um novo link de verificação.
+        </div>
+        
+        <p>Se não criou uma conta no Waterswamp, pode ignorar este email com segurança.</p>
+        
+        <p>
+          Cumprimentos,<br />
+          A Equipa Waterswamp
+        </p>
+      </div>
+      <div class="footer">
+        <p>Este é um email automático. Por favor, não responda diretamente.</p>
+        <p>&copy; {{ current_year }} Waterswamp. Todos os direitos reservados.</p>
+      </div>
+    </div>
+  </body>
+</html>

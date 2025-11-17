@@ -1,5 +1,3 @@
-// crates/email_service/src/lib.rs
-
 pub mod config;
 
 use crate::config::EmailConfig;
@@ -29,12 +27,10 @@ pub static TERA: Lazy<Tera> = Lazy::new(|| {
         }
     };
 
-    // ⭐ CORREÇÃO (Erro FnOnce/Fn): Adicionar tipo explícito ao segundo argumento
     tera.register_filter(
         "safe_html",
         |value: &Value, _args: &HashMap<String, Value>| {
             let s = value.as_str().unwrap_or_default().replace('\n', "<br>");
-            // CORREÇÃO (Erro E0425): Usar 'encode_minimal'
             Ok(serde_json::to_value(htmlescape::encode_minimal(&s)).unwrap())
         },
     );
@@ -42,7 +38,7 @@ pub static TERA: Lazy<Tera> = Lazy::new(|| {
 });
 
 // ===================================================================
-// 1. A NOVA TRAIT (INTERFACE)
+// 1. THE TRAIT (INTERFACE) - EXTENDED
 // ===================================================================
 #[async_trait]
 pub trait EmailSender {
@@ -51,16 +47,21 @@ pub trait EmailSender {
         to_email: String,
         subject: String,
         template: &str,
-        // ⭐ CORREÇÃO AQUI: Adicionar 'mut'
-        mut context: TeraContext,
+        context: TeraContext,
     ) -> anyhow::Result<()>;
 
     fn send_welcome_email(&self, to_email: String, username: &str);
     fn send_password_reset_email(&self, to_email: String, username: &str, token: &str);
+
+    // NEW: Email Verification
+    fn send_verification_email(&self, to_email: String, username: &str, token: &str);
+
+    // NEW: MFA Notifications
+    fn send_mfa_enabled_email(&self, to_email: String, username: &str);
 }
 
 // ===================================================================
-// 2. O SERVIÇO REAL (IMPLEMENTAÇÃO)
+// 2. THE REAL SERVICE (IMPLEMENTATION)
 // ===================================================================
 
 #[derive(Clone)]
@@ -74,20 +75,16 @@ impl EmailService {
     pub fn new(config: EmailConfig) -> anyhow::Result<Self> {
         let creds = Credentials::new(config.smtp_user.clone(), config.smtp_pass.clone());
 
-        // ⭐ CORREÇÃO (Erros E0624, E0599, E0061, E0107)
-        // 1. O Executor é um tipo genérico no `relay()`, não um valor em `new()`.
-        // 2. O `relay()` só aceita o 'host' como argumento.
         let mut transport_builder = AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp_host)?
             .port(config.smtp_port)
             .credentials(creds);
 
-        // TLS opcional (para o Mailtrap, mas não para mocks)
+        // TLS opcional
         if config.smtp_host != "127.0.0.1" {
             let tls_params = TlsParameters::new(config.smtp_host.clone())?;
             transport_builder = transport_builder.tls(Tls::Required(tls_params));
         }
 
-        // 3. O .build() não aceita argumentos
         let transport = transport_builder.build();
 
         Ok(Self {
@@ -99,7 +96,6 @@ impl EmailService {
 
 #[async_trait]
 impl EmailSender for EmailService {
-    /// Método interno para renderizar e enviar
     async fn send_email(
         &self,
         to_email: String,
@@ -110,6 +106,10 @@ impl EmailSender for EmailService {
         let base_url =
             std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
         context.insert("base_url", &base_url);
+
+        // Add current year for footer
+        let current_year = chrono::Utc::now().format("%Y").to_string();
+        context.insert("current_year", &current_year);
 
         let html_body = TERA
             .render(template, &context)
@@ -126,7 +126,6 @@ impl EmailSender for EmailService {
         Ok(())
     }
 
-    /// Envia um email de forma assíncrona ("fire-and-forget")
     fn send_welcome_email(&self, to_email: String, username: &str) {
         let mut context = TeraContext::new();
         context.insert("username", username);
@@ -150,13 +149,9 @@ impl EmailSender for EmailService {
         let mut context = TeraContext::new();
         context.insert("username", username);
 
-        // O base_url é injetado pelo `send_email`, mas precisamos dele aqui
-        // para construir o link que o frontend usará.
         let base_url =
             std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
 
-        // Este link aponta para o SEU APLICATIVO FRONTEND,
-        // que então fará a chamada POST para a API
         let reset_link = format!("{}/reset-password-form?token={}", base_url, token);
         context.insert("reset_link", &reset_link);
 
@@ -171,6 +166,55 @@ impl EmailSender for EmailService {
                 .await
             {
                 tracing::error!(error = ?e, "Falha ao enviar email de reset");
+            }
+        });
+    }
+
+    fn send_verification_email(&self, to_email: String, username: &str, token: &str) {
+        let mut context = TeraContext::new();
+        context.insert("username", username);
+
+        let base_url =
+            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+
+        let verification_link = format!("{}/verify-email?token={}", base_url, token);
+        context.insert("verification_link", &verification_link);
+
+        let service = self.clone();
+        let subject = "Verifique seu email - Waterswamp".to_string();
+        let template = "email_verification.html".to_string();
+
+        tokio::spawn(async move {
+            tracing::info!(to = %to_email, template = %template, "A enviar email de verificação...");
+            if let Err(e) = service
+                .send_email(to_email, subject, &template, context)
+                .await
+            {
+                tracing::error!(error = ?e, "Falha ao enviar email de verificação");
+            }
+        });
+    }
+
+    fn send_mfa_enabled_email(&self, to_email: String, username: &str) {
+        let mut context = TeraContext::new();
+        context.insert("username", username);
+
+        let enabled_at = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string();
+        context.insert("enabled_at", &enabled_at);
+
+        let service = self.clone();
+        let subject = "MFA Ativado - Waterswamp".to_string();
+        let template = "mfa_enabled.html".to_string();
+
+        tokio::spawn(async move {
+            tracing::info!(to = %to_email, template = %template, "A enviar notificação de MFA ativado...");
+            if let Err(e) = service
+                .send_email(to_email, subject, &template, context)
+                .await
+            {
+                tracing::error!(error = ?e, "Falha ao enviar notificação de MFA");
             }
         });
     }

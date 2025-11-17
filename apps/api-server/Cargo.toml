@@ -52,6 +52,8 @@ tera = { workspace = true }
 htmlescape = { workspace = true }
 async-trait = { workspace = true }
 
+totp-rs = { workspace = true }
+rand = { workspace = true }
 
 [profile.release]
 lto = true

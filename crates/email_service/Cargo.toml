@@ -22,6 +22,8 @@ htmlescape = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
 tracing = { workspace = true }
 anyhow = { workspace = true }
-once_cell = { workspace = true } # 'once_cell::sync::Lazy' é mais flexível que lazy_static
+once_cell = { workspace = true }
 
 async-trait = { workspace = true }
+
+chrono = { workspace = true }

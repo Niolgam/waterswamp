@@ -7,36 +7,51 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::{error::AppError, state::AppState};
+use crate::{
+    error::AppError,
+    handlers::{
+        email_verification_handler::create_verification_token,
+        mfa_handler::{generate_mfa_challenge_token, MfaRequiredResponse},
+    },
+    state::AppState,
+};
 use core_services::security::{hash_password, validate_password_strength, verify_password};
 use domain::models::{
     Claims, ForgotPasswordPayload, LoginPayload, LoginResponse, RefreshTokenPayload,
     RegisterPayload, ResetPasswordPayload, TokenType,
 };
-use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
+use persistence::repositories::{
+    auth_repository::AuthRepository, mfa_repository::MfaRepository, user_repository::UserRepository,
+};
 
 const ACCESS_TOKEN_EXPIRY_SECONDS: i64 = 3600; // 1 hora
 const REFRESH_TOKEN_EXPIRY_SECONDS: i64 = 604800; // 7 dias
 const PASSWORD_RESET_EXPIRY_SECONDS: i64 = 900; // 15 minutos
 
 /// POST /login
+/// UPDATED: Now checks for MFA and returns MFA challenge if enabled
 pub async fn handler_login(
     State(state): State<AppState>,
     Json(payload): Json<LoginPayload>,
-) -> Result<Json<LoginResponse>, AppError> {
+) -> Result<Json<serde_json::Value>, AppError> {
     payload.validate()?;
 
-    let user: (Uuid, String) = sqlx::query_as(
-        "SELECT id, password_hash FROM users WHERE username = $1 OR LOWER(email) = LOWER($1)",
+    // 1. Find user by username or email
+    let user: (Uuid, String, bool) = sqlx::query_as(
+        "SELECT id, password_hash, mfa_enabled FROM users WHERE username = $1 OR LOWER(email) = LOWER($1)",
     )
-    .bind(&payload.username) // O campo 'username' pode conter um email
+    .bind(&payload.username)
     .fetch_optional(&state.db_pool_auth)
     .await?
     .ok_or(AppError::InvalidPassword)?;
 
-    // 2. Verificar senha com Argon2id
+    let user_id = user.0;
+    let password_hash = user.1;
+    let mfa_enabled = user.2;
+
+    // 2. Verify password with Argon2id
     let password_valid =
-        tokio::task::spawn_blocking(move || verify_password(&payload.password, &user.1))
+        tokio::task::spawn_blocking(move || verify_password(&payload.password, &password_hash))
             .await
             .context("Falha task verificar senha")?
             .map_err(|_| AppError::InvalidPassword)?;
@@ -45,19 +60,36 @@ pub async fn handler_login(
         return Err(AppError::InvalidPassword);
     }
 
-    // 3. Gerar tokens
-    let (access_token, refresh_token_raw) = generate_tokens(&state, user.0).await?;
+    // 3. Check if MFA is enabled
+    if mfa_enabled {
+        // Generate MFA challenge token
+        let mfa_token =
+            generate_mfa_challenge_token(&state, user_id).context("Falha ao gerar token MFA")?;
 
-    tracing::info!(user_id = %user.0, event_type = "user_login", "Usuário autenticado");
+        tracing::info!(user_id = %user_id, event_type = "mfa_challenge_issued", "MFA challenge emitido");
 
-    Ok(Json(LoginResponse::new(
-        access_token,
-        refresh_token_raw,
-        ACCESS_TOKEN_EXPIRY_SECONDS,
-    )))
+        return Ok(Json(serde_json::json!({
+            "mfa_required": true,
+            "mfa_token": mfa_token,
+            "message": "Autenticação de dois fatores necessária"
+        })));
+    }
+
+    // 4. Generate tokens (no MFA)
+    let (access_token, refresh_token_raw) = generate_tokens(&state, user_id).await?;
+
+    tracing::info!(user_id = %user_id, event_type = "user_login", "Usuário autenticado");
+
+    Ok(Json(serde_json::json!({
+        "access_token": access_token,
+        "refresh_token": refresh_token_raw,
+        "token_type": "Bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRY_SECONDS
+    })))
 }
 
 /// POST /register
+/// UPDATED: Now sends email verification
 pub async fn handler_register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterPayload>,
@@ -93,14 +125,27 @@ pub async fn handler_register(
         .create(&payload.username, &payload.email, &password_hash)
         .await?;
 
-    // Gerar tokens (agora usa o helper modificado)
+    // Generate tokens
     let (access_token, refresh_token_raw) = generate_tokens(&state, user.id).await?;
 
+    // NEW: Generate and send email verification token
+    let verification_token = create_verification_token(&state, user.id)
+        .await
+        .context("Falha ao criar token de verificação")?;
+
+    // Send verification email (instead of just welcome email)
+    state.email_service.send_verification_email(
+        payload.email.clone(),
+        &user.username,
+        &verification_token,
+    );
+
+    // Also send welcome email
     state
         .email_service
         .send_welcome_email(payload.email, &user.username);
 
-    tracing::info!(user_id = %user.id, event_type = "user_registered", "Novo usuário registrado");
+    tracing::info!(user_id = %user.id, event_type = "user_registered", "Novo usuário registrado (email não verificado)");
 
     Ok(Json(LoginResponse::new(
         access_token,
@@ -120,7 +165,6 @@ struct RefreshTokenInfo {
 }
 
 /// POST /refresh-token
-/// ATUALIZADO: Implementa Rotação de Token (3.2) e Detecção de Roubo (3.3)
 pub async fn handler_refresh_token(
     State(state): State<AppState>,
     Json(payload): Json<RefreshTokenPayload>,
@@ -129,14 +173,13 @@ pub async fn handler_refresh_token(
 
     let old_token_hash = hash_token(&payload.refresh_token);
 
-    // 1. Iniciar transação
+    // 1. Start transaction
     let mut tx = state
         .db_pool_auth
         .begin()
         .await
         .context("Falha ao iniciar transação de refresh")?;
 
-    // --- CORREÇÃO: Ligar com referência `&old_token_hash` ---
     let old_token = sqlx::query_as::<_, RefreshTokenInfo>(
         r#"
         SELECT id, user_id, revoked, expires_at, family_id
@@ -144,7 +187,7 @@ pub async fn handler_refresh_token(
         WHERE token_hash = $1
         "#,
     )
-    .bind(&old_token_hash) // <-- MUDANÇA AQUI
+    .bind(&old_token_hash)
     .fetch_optional(&mut *tx)
     .await
     .context("Falha ao buscar refresh token")?;
@@ -155,7 +198,7 @@ pub async fn handler_refresh_token(
         }
         Some(token) => {
             if token.revoked {
-                // --- DETECÇÃO DE ROUBO! (Subtarefa 3.3) ---
+                // Token theft detection
                 sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE family_id = $1")
                     .bind(token.family_id)
                     .execute(&mut *tx)
@@ -192,7 +235,7 @@ pub async fn handler_refresh_token(
         }
     };
 
-    // 3. Gerar novo Access Token (lógica existente)
+    // 3. Generate new Access Token
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -208,13 +251,12 @@ pub async fn handler_refresh_token(
     let access_token =
         encode(&header, &claims, &state.encoding_key).context("Falha ao codificar JWT")?;
 
-    // 4. Gerar e salvar novo Refresh Token (Subtarefa 3.2)
+    // 4. Generate and save new Refresh Token
     let new_refresh_token_raw = Uuid::new_v4().to_string();
     let new_refresh_token_hash = hash_token(&new_refresh_token_raw);
 
     let new_expires_at = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECONDS);
 
-    // --- CORREÇÃO: Ligar com referência `&old_token_hash` ---
     sqlx::query(
         r#"
         INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id, parent_token_hash)
@@ -222,15 +264,15 @@ pub async fn handler_refresh_token(
         "#,
     )
     .bind(user_id)
-    .bind(new_refresh_token_hash) // new_refresh_token_hash é movido aqui (OK, só usa 1 vez)
+    .bind(new_refresh_token_hash)
     .bind(new_expires_at)
     .bind(family_id)
-    .bind(&old_token_hash) // <-- MUDANÇA AQUI
+    .bind(&old_token_hash)
     .execute(&mut *tx)
     .await
     .context("Falha ao salvar novo refresh token")?;
 
-    // 5. Commitar transação
+    // 5. Commit transaction
     tx.commit()
         .await
         .context("Falha ao commitar rotação de token")?;
@@ -265,7 +307,6 @@ pub async fn handler_logout(
 }
 
 /// POST /forgot-password
-/// (Subtarefa 6.2)
 pub async fn handler_forgot_password(
     State(state): State<AppState>,
     Json(payload): Json<ForgotPasswordPayload>,
@@ -273,12 +314,9 @@ pub async fn handler_forgot_password(
     payload.validate()?;
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    // 1. Buscar usuário pelo email
-    // Usamos find_by_email que acabamos de adicionar
     let user = user_repo.find_by_email(&payload.email).await?;
 
     if let Some(user) = user {
-        // 2. Gerar o Token JWT de Reset
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -288,43 +326,36 @@ pub async fn handler_forgot_password(
             sub: user.id,
             exp: now + PASSWORD_RESET_EXPIRY_SECONDS,
             iat: now,
-            token_type: TokenType::PasswordReset, // <--- Tipo Específico
+            token_type: TokenType::PasswordReset,
         };
 
         let header = Header::new(Algorithm::EdDSA);
         let token =
             encode(&header, &claims, &state.encoding_key).context("Falha ao gerar JWT de reset")?;
 
-        // 3. Enviar o email (fire-and-forget)
         state
             .email_service
             .send_password_reset_email(payload.email, &user.username, &token);
     } else {
-        // Nota: Não retornamos erro se o email não for encontrado.
-        // Isso previne ataques de enumeração de email.
-        tracing::info!(email = %payload.email, event_type = "forgot_password_attempt", "Tentativa de reset para email não existente (ou erro silencioso)");
+        tracing::info!(email = %payload.email, event_type = "forgot_password_attempt", "Tentativa de reset para email não existente");
     }
 
-    // 4. Retornar sempre uma resposta genérica de sucesso
     Ok(Json(serde_json::json!({
         "message": "Se este email estiver registado, um link de redefinição de senha foi enviado."
     })))
 }
 
 /// POST /reset-password
-/// (Subtarefa 6.3)
 pub async fn handler_reset_password(
     State(state): State<AppState>,
     Json(payload): Json<ResetPasswordPayload>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     payload.validate()?;
 
-    // 1. Validar a força da nova senha
     validate_password_strength(&payload.new_password).map_err(AppError::BadRequest)?;
 
-    // 2. Decodificar e validar o token JWT
     let mut validation = Validation::new(Algorithm::EdDSA);
-    validation.leeway = 5; // 5 segundos de tolerância
+    validation.leeway = 5;
 
     let token_data =
         decode::<Claims>(&payload.token, &state.decoding_key, &validation).map_err(|e| {
@@ -334,7 +365,6 @@ pub async fn handler_reset_password(
 
     let claims = token_data.claims;
 
-    // 3. Verificar se o token é do tipo correto
     if claims.token_type != TokenType::PasswordReset {
         return Err(AppError::Unauthorized(
             "Token inválido (tipo incorreto)".to_string(),
@@ -343,24 +373,21 @@ pub async fn handler_reset_password(
 
     let user_id = claims.sub;
 
-    // 4. Hashear a nova senha
     let password_clone = payload.new_password.clone();
     let password_hash = tokio::task::spawn_blocking(move || hash_password(&password_clone))
         .await
         .context("Falha task hash (reset)")?
         .context("Erro ao gerar hash (reset)")?;
 
-    // 5. Atualizar a senha no banco
     let user_repo = UserRepository::new(&state.db_pool_auth);
     user_repo
-        .update_password(user_id, &password_hash) //
+        .update_password(user_id, &password_hash)
         .await
         .context("Falha ao atualizar senha no DB")?;
 
-    // 6. Revogar todos os refresh tokens (Segurança)
     let auth_repo = AuthRepository::new(&state.db_pool_auth);
     auth_repo
-        .revoke_all_user_tokens(user_id) //
+        .revoke_all_user_tokens(user_id)
         .await
         .context("Falha ao revogar refresh tokens após reset")?;
 
@@ -385,7 +412,7 @@ async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, Str
         .unwrap()
         .as_secs() as i64;
 
-    // 1. Gerar Access Token
+    // 1. Generate Access Token
     let claims = Claims {
         sub: user_id,
         exp: now + ACCESS_TOKEN_EXPIRY_SECONDS,
@@ -397,15 +424,14 @@ async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, Str
     let access_token =
         encode(&header, &claims, &state.encoding_key).context("Falha ao gerar JWT")?;
 
-    // 2. Gerar Refresh Token (Início de uma nova família)
+    // 2. Generate Refresh Token
     let refresh_token_raw = Uuid::new_v4().to_string();
     let refresh_token_hash = hash_token(&refresh_token_raw);
     let family_id = Uuid::new_v4();
 
     let expires_at = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECONDS);
 
-    // 3. Salvar Refresh Token no DB
-    // --- CORREÇÃO: Ligar com referência (por consistência) ---
+    // 3. Save Refresh Token
     sqlx::query(
         r#"
         INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id, parent_token_hash)
@@ -413,7 +439,7 @@ async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, Str
         "#,
     )
     .bind(user_id)
-    .bind(&refresh_token_hash) // <-- MUDANÇA AQUI (para &str)
+    .bind(&refresh_token_hash)
     .bind(expires_at)
     .bind(family_id)
     .execute(&state.db_pool_auth)
