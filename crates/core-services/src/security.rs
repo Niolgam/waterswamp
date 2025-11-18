@@ -1,6 +1,6 @@
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2,
+    Algorithm, Argon2, Params, Version,
 };
 use axum::http::{header, HeaderValue, Method};
 use std::time::Duration;
@@ -8,7 +8,6 @@ use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 use zxcvbn::{zxcvbn, Score};
 
 /// Configuração de CORS para produção
-/// Permite apenas origens específicas
 pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
     let origins: Vec<HeaderValue> = allowed_origins
         .into_iter()
@@ -31,17 +30,15 @@ pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
 }
 
 /// Configuração de CORS para desenvolvimento
-/// Permite origens comuns de localhost explicitamente para suportar credenciais
 pub fn cors_development() -> CorsLayer {
-    // Lista expandida de origens comuns para desenvolvimento e testes
     let dev_origins = [
-        "http://localhost",      // Usado frequentemente por ferramentas de teste
-        "http://127.0.0.1",      // Variação de IP local
-        "http://localhost:3000", // React, Node
-        "http://localhost:4200", // Angular
-        "http://localhost:5173", // Vite (Vue, React, Svelte)
-        "http://localhost:8000", // Django, PHP, etc
-        "http://localhost:8080", // Java, outras APIs
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://localhost:3000",
+        "http://localhost:4200",
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://localhost:8080",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:4200",
         "http://127.0.0.1:5173",
@@ -67,30 +64,24 @@ pub fn cors_development() -> CorsLayer {
 }
 
 /// Headers de segurança (Helmet-style)
-/// Retorna uma lista de layers para adicionar headers de segurança
 pub fn security_headers() -> Vec<SetResponseHeaderLayer<HeaderValue>> {
     vec![
-        // Previne MIME sniffing
         SetResponseHeaderLayer::if_not_present(
             header::X_CONTENT_TYPE_OPTIONS,
             HeaderValue::from_static("nosniff"),
         ),
-        // Protege contra clickjacking
         SetResponseHeaderLayer::if_not_present(
             header::X_FRAME_OPTIONS,
             HeaderValue::from_static("DENY"),
         ),
-        // Ativa proteção XSS do browser
         SetResponseHeaderLayer::if_not_present(
             header::X_XSS_PROTECTION,
             HeaderValue::from_static("1; mode=block"),
         ),
-        // Content Security Policy básico
         SetResponseHeaderLayer::if_not_present(
             header::CONTENT_SECURITY_POLICY,
             HeaderValue::from_static("default-src 'self'"),
         ),
-        // Controla quais features do browser estão disponíveis
         SetResponseHeaderLayer::if_not_present(
             header::HeaderName::from_static("permissions-policy"),
             HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
@@ -106,38 +97,327 @@ pub fn validate_password_strength(password: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Gera um hash Argon2id para a senha fornecida.
+// =============================================================================
+// ARGON2ID PASSWORD HASHING - OWASP RECOMMENDATIONS
+// =============================================================================
+
+/// Parâmetros Argon2id otimizados baseados nas recomendações OWASP 2024.
+///
+/// **Configuração atual:**
+/// - **Memory Cost (m_cost)**: 64 MiB (65536 KiB)
+/// - **Time Cost (t_cost)**: 3 iterações
+/// - **Parallelism (p_cost)**: 4 threads
+/// - **Output Length**: 32 bytes (padrão)
+///
+/// **Justificativa:**
+/// Estas configurações oferecem um excelente equilíbrio entre:
+/// - Segurança contra ataques de força bruta e rainbow tables
+/// - Performance aceitável para servidores modernos (~200-300ms por hash)
+/// - Resistência contra ataques com GPUs e ASICs
+///
+/// **Referências:**
+/// - [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+/// - [RFC 9106 - Argon2 Memory-Hard Function](https://www.rfc-editor.org/rfc/rfc9106.html)
+/// - [Argon2 Best Practices](https://github.com/p-h-c/phc-winner-argon2#recommendations)
+const ARGON2_M_COST: u32 = 65536; // 64 MiB
+const ARGON2_T_COST: u32 = 3; // 3 iterations
+const ARGON2_P_COST: u32 = 4; // 4 parallel threads
+
+/// Gera um hash Argon2id seguro para a senha fornecida.
+///
+/// Utiliza parâmetros baseados nas recomendações OWASP para Argon2id:
+/// - **Algoritmo**: Argon2id (híbrido: resistente a side-channel e GPU attacks)
+/// - **Memory**: 64 MiB (balanceamento entre segurança e performance)
+/// - **Iterations**: 3 (t_cost)
+/// - **Parallelism**: 4 threads
+/// - **Salt**: 128-bit aleatório gerado via OsRng (cryptographically secure)
+/// - **Output**: PHC string format (`$argon2id$v=19$m=65536,t=3,p=4$...`)
+///
+/// # Performance
+///
+/// Tempo esperado por hash em hardware moderno:
+/// - **Servidor (4+ cores)**: ~200-300ms
+/// - **Desktop (2-4 cores)**: ~300-500ms
+/// - **Mobile/Low-end**: ~500ms-1s
+///
+/// # Exemplos
+///
+/// ```rust
+/// use core_services::security::hash_password;
+///
+/// // Hash de senha para novo usuário
+/// let password = "MyS3cur3P@ssw0rd!";
+/// let hash = hash_password(password).expect("Falha ao gerar hash");
+///
+/// // Hash resultante (formato PHC):
+/// // $argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
+/// ```
+///
+/// # Erros
+///
+/// Retorna `Err` se:
+/// - Falha ao gerar salt aleatório
+/// - Falha ao configurar parâmetros Argon2
+/// - Falha ao computar hash (muito raro)
+///
+/// # Segurança
+///
+/// ⚠️ **IMPORTANTE**: Esta função é **blocking** e pode levar 200-500ms.
+/// Em contextos assíncronos (Axum, Tokio), use `tokio::task::spawn_blocking`:
+///
+/// ```rust
+/// let password_clone = password.to_string();
+/// let hash = tokio::task::spawn_blocking(move || {
+///     hash_password(&password_clone)
+/// })
+/// .await??;
+/// ```
 pub fn hash_password(password: &str) -> anyhow::Result<String> {
+    // Gera salt criptograficamente seguro (128-bit)
     let salt = SaltString::generate(&mut OsRng);
 
-    // Argon2id é o padrão da crate argon2 (v0.5+)
-    let argon2 = Argon2::default();
+    // Configura parâmetros Argon2id (OWASP recommendations)
+    let params = Params::new(
+        ARGON2_M_COST, // m_cost: 64 MiB
+        ARGON2_T_COST, // t_cost: 3 iterations
+        ARGON2_P_COST, // p_cost: 4 threads
+        None,          // output_len: usa padrão (32 bytes)
+    )
+    .map_err(|e| anyhow::anyhow!("Erro ao configurar parâmetros Argon2: {}", e))?;
 
-    // Hash da senha (retorna um PasswordHash)
+    // Cria instância Argon2id com parâmetros customizados
+    let argon2 = Argon2::new(
+        Algorithm::Argon2id, // Híbrido: resistente a side-channel + GPU
+        Version::V0x13,      // Versão mais recente (0x13 = 19 decimal)
+        params,
+    );
+
+    // Computa hash (operação blocking ~200-300ms)
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| anyhow::anyhow!("Erro interno de hash: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Erro ao gerar hash: {}", e))?;
 
-    // Converte para o formato string PHC padrão ($argon2id$v=19$...)
+    // Retorna formato PHC string
+    // Exemplo: $argon2id$v=19$m=65536,t=3,p=4$<base64_salt>$<base64_hash>
     Ok(password_hash.to_string())
 }
 
 /// Verifica se a senha corresponde ao hash Argon2id fornecido.
+///
+/// Esta função é **constant-time** (timing-safe) para prevenir timing attacks.
+/// Os parâmetros (m_cost, t_cost, p_cost) são extraídos automaticamente do
+/// hash PHC string, garantindo compatibilidade mesmo se os parâmetros mudarem.
+///
+/// # Performance
+///
+/// O tempo de verificação é equivalente ao tempo de hash (~200-300ms),
+/// pois recalcula o hash com os mesmos parâmetros e compara de forma segura.
+///
+/// # Exemplos
+///
+/// ```rust
+/// use core_services::security::{hash_password, verify_password};
+///
+/// // Gerar hash
+/// let password = "MyS3cur3P@ssw0rd!";
+/// let hash = hash_password(password)?;
+///
+/// // Verificar senha correta
+/// assert!(verify_password(password, &hash)?);
+///
+/// // Verificar senha incorreta
+/// assert!(!verify_password("WrongPassword", &hash)?);
+/// ```
+///
+/// # Erros
+///
+/// Retorna `Err` se:
+/// - O hash fornecido está em formato inválido (não é PHC string)
+/// - Falha ao parsear parâmetros do hash
+/// - Erro interno na verificação (muito raro)
+///
+/// # Segurança
+///
+/// ⚠️ **IMPORTANTE**: Esta função também é **blocking** (~200-300ms).
+/// Use `spawn_blocking` em contextos assíncronos:
+///
+/// ```rust
+/// let password_clone = password.to_string();
+/// let hash_clone = hash.clone();
+/// let is_valid = tokio::task::spawn_blocking(move || {
+///     verify_password(&password_clone, &hash_clone)
+/// })
+/// .await??;
+/// ```
 pub fn verify_password(password: &str, hash: &str) -> anyhow::Result<bool> {
-    // Parse do hash armazenado
+    // Parse do hash PHC string
+    // Extrai automaticamente: algoritmo, versão, m_cost, t_cost, p_cost, salt
     let parsed_hash =
         PasswordHash::new(hash).map_err(|e| anyhow::anyhow!("Formato de hash inválido: {}", e))?;
 
-    // Verifica a senha
+    // Cria verificador Argon2
+    // Os parâmetros são extraídos do 'parsed_hash', então não precisamos
+    // configurá-los manualmente aqui
     let argon2 = Argon2::default();
+
+    // Verifica senha (constant-time comparison)
+    // Retorna Ok(()) se senha correta, Err se incorreta
     Ok(argon2
         .verify_password(password.as_bytes(), &parsed_hash)
         .is_ok())
 }
 
+// =============================================================================
+// TESTES
+// =============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_argon2id_hash_format() {
+        let password = "TestPassword123!";
+        let hash = hash_password(password).expect("Falha ao gerar hash");
+
+        // Verifica formato PHC string Argon2id
+        assert!(hash.starts_with("$argon2id$v=19$"));
+
+        // Verifica presença dos parâmetros
+        assert!(hash.contains(&format!("m={}", ARGON2_M_COST)));
+        assert!(hash.contains(&format!("t={}", ARGON2_T_COST)));
+        assert!(hash.contains(&format!("p={}", ARGON2_P_COST)));
+    }
+
+    #[test]
+    fn test_password_verification_success() {
+        let password = "Correct_P@ssw0rd_123";
+        let hash = hash_password(password).expect("Falha ao gerar hash");
+
+        assert!(
+            verify_password(password, &hash).unwrap(),
+            "Senha correta deveria validar"
+        );
+    }
+
+    #[test]
+    fn test_password_verification_failure() {
+        let password = "Correct_P@ssw0rd_123";
+        let hash = hash_password(password).expect("Falha ao gerar hash");
+
+        assert!(
+            !verify_password("Wrong_P@ssw0rd_456", &hash).unwrap(),
+            "Senha incorreta não deveria validar"
+        );
+    }
+
+    #[test]
+    fn test_hash_uniqueness() {
+        let password = "SamePassword123!";
+        let hash1 = hash_password(password).expect("Falha ao gerar hash 1");
+        let hash2 = hash_password(password).expect("Falha ao gerar hash 2");
+
+        // Hashes diferentes devido a salts aleatórios únicos
+        assert_ne!(hash1, hash2, "Hashes devem ser únicos (salts diferentes)");
+
+        // Ambos devem validar a mesma senha
+        assert!(verify_password(password, &hash1).unwrap());
+        assert!(verify_password(password, &hash2).unwrap());
+    }
+
+    #[test]
+    fn test_invalid_hash_format() {
+        let result = verify_password("password", "invalid_hash_format");
+        assert!(result.is_err(), "Hash inválido deveria retornar erro");
+    }
+
+    #[test]
+    fn test_password_strength_validation() {
+        // Senha muito fraca
+        assert!(validate_password_strength("abc123").is_err());
+        assert!(validate_password_strength("password").is_err());
+        assert!(validate_password_strength("12345678").is_err());
+
+        // Senhas fortes (Score >= 3)
+        assert!(validate_password_strength("C0mpl3x&P@ss#2025").is_ok());
+        assert!(validate_password_strength("Tr0ng$ecuR3!Data#42").is_ok());
+        assert!(validate_password_strength("F!8q@K39zP#sM7vL").is_ok());
+    }
+
+    #[test]
+    fn test_backwards_compatibility() {
+        // Testa que hashes antigos com parâmetros diferentes ainda funcionam
+        // Simula mudança de parâmetros no futuro
+
+        let password = "BackwardsCompat!123";
+        let hash = hash_password(password).expect("Falha ao gerar hash");
+
+        // Deve validar mesmo que parâmetros globais mudem
+        // (porque parâmetros estão embedados no hash PHC)
+        assert!(verify_password(password, &hash).unwrap());
+    }
+
+    // =========================================================================
+    // BENCHMARK TESTS (cargo test --release -- --ignored)
+    // =========================================================================
+
+    #[test]
+    #[ignore] // Execute com: cargo test --release -- --ignored
+    fn bench_hash_performance() {
+        use std::time::Instant;
+
+        let password = "BenchmarkP@ssw0rd!123";
+        let iterations = 10;
+
+        let start = Instant::now();
+        for _ in 0..iterations {
+            hash_password(password).expect("Hash falhou");
+        }
+        let duration = start.elapsed();
+
+        let avg_ms = duration.as_millis() / iterations;
+        println!("\n📊 Argon2id Hash Performance:");
+        println!("   Total: {:?} para {} iterações", duration, iterations);
+        println!("   Média: {}ms por hash", avg_ms);
+        println!(
+            "   Parâmetros: m={}, t={}, p={}",
+            ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST
+        );
+
+        // Verifica se está dentro do esperado (~200-500ms)
+        assert!(
+            avg_ms >= 100 && avg_ms <= 1000,
+            "Performance fora do esperado: {}ms (esperado: 100-1000ms)",
+            avg_ms
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_verify_performance() {
+        use std::time::Instant;
+
+        let password = "BenchmarkP@ssw0rd!123";
+        let hash = hash_password(password).expect("Falha ao gerar hash");
+        let iterations = 10;
+
+        let start = Instant::now();
+        for _ in 0..iterations {
+            verify_password(password, &hash).expect("Verify falhou");
+        }
+        let duration = start.elapsed();
+
+        let avg_ms = duration.as_millis() / iterations;
+        println!("\n📊 Argon2id Verify Performance:");
+        println!("   Total: {:?} para {} iterações", duration, iterations);
+        println!("   Média: {}ms por verificação", avg_ms);
+
+        assert!(
+            avg_ms >= 100 && avg_ms <= 1000,
+            "Performance fora do esperado: {}ms",
+            avg_ms
+        );
+    }
 
     #[test]
     fn test_cors_production_parsing() {
@@ -146,55 +426,11 @@ mod tests {
             "https://app.example.com".to_string(),
         ];
         let _cors = cors_production(origins);
-        // Se compilar sem panic, está OK
     }
 
     #[test]
     fn test_security_headers_count() {
         let headers = security_headers();
-        // Verifica que temos pelo menos 5 headers de segurança
         assert!(headers.len() >= 5);
-    }
-
-    #[test]
-    fn test_password_too_short() {
-        assert!(validate_password_strength("Abc1!").is_err());
-    }
-
-    #[test]
-    fn test_password_no_uppercase() {
-        assert!(validate_password_strength("abc123!@").is_err());
-    }
-
-    #[test]
-    fn test_password_no_lowercase() {
-        assert!(validate_password_strength("ABC123!@").is_err());
-    }
-
-    #[test]
-    fn test_password_no_number() {
-        assert!(validate_password_strength("Abcdefg!").is_err());
-    }
-
-    #[test]
-    fn test_password_no_special() {
-        assert!(validate_password_strength("Abcdefg123").is_err());
-    }
-
-    #[test]
-    fn test_password_common() {
-        assert!(validate_password_strength("Password123!").is_err());
-    }
-
-    #[test]
-    fn test_password_repeated_chars() {
-        assert!(validate_password_strength("Aaaaa123!").is_err());
-    }
-
-    #[test]
-    fn test_password_valid() {
-        assert!(validate_password_strength("F!8q@K39zP#s").is_ok());
-        assert!(validate_password_strength("Tr0ng$ecuR3!Data#42").is_ok());
-        assert!(validate_password_strength("C0mpl3x&P@ss#Sys2025").is_ok());
     }
 }

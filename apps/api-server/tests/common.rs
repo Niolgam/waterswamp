@@ -1,23 +1,22 @@
+use async_trait::async_trait;
 use axum_test::TestServer;
 use domain::models::{Claims, TokenType};
+use email_service::EmailSender;
 use jsonwebtoken::DecodingKey;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Once;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tera::Context as TeraContext;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 use waterswamp::casbin_setup::setup_casbin;
 use waterswamp::config::config::Config;
+use waterswamp::handlers::audit_services::AuditService;
 use waterswamp::routes::build;
 use waterswamp::state::AppState;
-// [Fix] Import AuditService
-use waterswamp::handlers::audit_services::AuditService;
-
-use async_trait::async_trait;
-use email_service::EmailSender;
-use tera::Context as TeraContext;
 
 #[derive(Clone)]
 #[allow(dead_code)]
@@ -229,4 +228,139 @@ pub fn generate_test_token(user_id: Uuid) -> String {
 
     let header = Header::new(Algorithm::EdDSA);
     encode(&header, &claims, &encoding_key).unwrap()
+}
+
+static INIT: Once = Once::new();
+
+/// Inicializa o ambiente de teste uma vez
+pub fn init_test_env() {
+    INIT.call_once(|| {
+        dotenvy::dotenv().ok();
+        std::env::set_var("DISABLE_RATE_LIMIT", "true");
+        std::env::set_var("RUST_LOG", "info,waterswamp=debug");
+
+        // Inicializa logging apenas se ainda não foi inicializado
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+    });
+}
+
+/// Limpa dados de teste do banco (mantém alice e bob do seeding)
+pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
+    // Remove refresh tokens dos usuários de teste
+    sqlx::query(
+        r#"
+        DELETE FROM refresh_tokens 
+        WHERE user_id IN (
+            SELECT id FROM users WHERE username LIKE 'test_user_%'
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Remove email verification tokens dos usuários de teste
+    sqlx::query(
+        r#"
+        DELETE FROM email_verification_tokens 
+        WHERE user_id IN (
+            SELECT id FROM users WHERE username LIKE 'test_user_%'
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Remove MFA setup tokens dos usuários de teste
+    sqlx::query(
+        r#"
+        DELETE FROM mfa_setup_tokens 
+        WHERE user_id IN (
+            SELECT id FROM users WHERE username LIKE 'test_user_%'
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Remove usuários de teste
+    sqlx::query(
+        r#"
+        DELETE FROM users 
+        WHERE username LIKE 'test_user_%'
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Cria um usuário de teste e retorna suas credenciais
+pub async fn create_test_user(
+    pool: &PgPool,
+) -> Result<(String, String, String), Box<dyn std::error::Error>> {
+    use core_services::security::hash_password;
+
+    let counter = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
+    let username = format!("test_user_{}", counter);
+    let email = format!("test_{}@test.com", counter);
+    let password = "SecureP@ssw0rd!123".to_string();
+
+    // Hash da senha (operação blocking)
+    let password_clone = password.clone();
+    let password_hash =
+        tokio::task::spawn_blocking(move || hash_password(&password_clone)).await??;
+
+    // Insere no banco
+    sqlx::query(
+        r#"
+        INSERT INTO users (username, email, password_hash)
+        VALUES ($1, $2, $3)
+        "#,
+    )
+    .bind(&username)
+    .bind(&email)
+    .bind(&password_hash)
+    .execute(pool)
+    .await?;
+
+    Ok((username, email, password))
+}
+
+/// Cria um usuário de teste via endpoint /register
+pub async fn register_test_user(
+    server: &axum_test::TestServer,
+) -> Result<(String, String, String), Box<dyn std::error::Error>> {
+    let counter = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
+    let username = format!("test_user_{}", counter);
+    let email = format!("test_{}@test.com", counter);
+    let password = "SecureP@ssw0rd!123".to_string();
+
+    let response = server
+        .post("/register")
+        .json(&serde_json::json!({
+            "username": username,
+            "email": email,
+            "password": password
+        }))
+        .await;
+
+    if response.status_code() != 200 {
+        return Err(format!(
+            "Falha ao registrar usuário: status={}, body={}",
+            response.status_code(),
+            response.text()
+        )
+        .into());
+    }
+
+    Ok((username, email, password))
 }
