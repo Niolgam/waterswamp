@@ -384,11 +384,13 @@ mod tests {
             ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST
         );
 
-        // Verifica se está dentro do esperado (~200-500ms)
+        // [FIX] Ajusta expectativa se estiver rodando em DEBUG
+        let max_expected = if cfg!(debug_assertions) { 3000 } else { 1000 };
+
         assert!(
-            avg_ms >= 100 && avg_ms <= 1000,
-            "Performance fora do esperado: {}ms (esperado: 100-1000ms)",
-            avg_ms
+            avg_ms >= 100 && avg_ms <= max_expected,
+            "Performance fora do esperado: {}ms (esperado: 100-{}ms). Considere rodar com --release.",
+            avg_ms, max_expected
         );
     }
 
@@ -412,10 +414,13 @@ mod tests {
         println!("   Total: {:?} para {} iterações", duration, iterations);
         println!("   Média: {}ms por verificação", avg_ms);
 
+        // [FIX] Ajusta expectativa se estiver rodando em DEBUG
+        let max_expected = if cfg!(debug_assertions) { 3000 } else { 1000 };
+
         assert!(
-            avg_ms >= 100 && avg_ms <= 1000,
-            "Performance fora do esperado: {}ms",
-            avg_ms
+            avg_ms >= 100 && avg_ms <= max_expected,
+            "Performance fora do esperado: {}ms (esperado: 100-{}ms). Considere rodar com --release.",
+            avg_ms, max_expected
         );
     }
 
