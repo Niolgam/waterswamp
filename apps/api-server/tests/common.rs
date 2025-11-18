@@ -364,3 +364,35 @@ pub async fn register_test_user(
 
     Ok((username, email, password))
 }
+
+pub async fn create_unique_test_user(
+    pool: &PgPool,
+) -> Result<(String, String, String), Box<dyn std::error::Error>> {
+    use core_services::security::hash_password;
+    use uuid::Uuid;
+
+    // Use UUID for absolute uniqueness across parallel tests
+    let unique_id = Uuid::new_v4();
+    let username = format!("test_user_{}", unique_id);
+    let email = format!("test_{}@test.com", unique_id);
+    let password = "SecureP@ssw0rd!123".to_string();
+
+    let password_clone = password.clone();
+    let password_hash =
+        tokio::task::spawn_blocking(move || hash_password(&password_clone)).await??;
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (username, email, password_hash, email_verified)
+        VALUES ($1, $2, $3, TRUE)
+        ON CONFLICT (username) DO NOTHING
+        "#,
+    )
+    .bind(&username)
+    .bind(&email)
+    .bind(&password_hash)
+    .execute(pool)
+    .await?;
+
+    Ok((username, email, password))
+}

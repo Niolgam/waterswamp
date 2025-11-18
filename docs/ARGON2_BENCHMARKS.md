@@ -188,3 +188,18 @@ Se você sabe que o servidor tem menos recursos:
 const ARGON2_M_COST: u32 = 32768; // 32 MiB
 const ARGON2_T_COST: u32 = 2;     // 2 iterations
 const ARGON2_P_COST: u32 = 2;     // 2 threads
+
+📈 Queries Prometheus (Depois de Adicionar Métricas)
+
+# Tempo médio de hash (últimos 5min)
+rate(password_hash_duration_seconds_sum{operation="hash"}[5m]) 
+/ rate(password_hash_duration_seconds_count{operation="hash"}[5m])
+
+# Percentil 95 (tempo que 95% das operações ficam abaixo)
+histogram_quantile(0.95, 
+  rate(password_hash_duration_seconds_bucket{operation="hash"}[5m])
+)
+
+# Operações que demoraram > 500ms
+password_hash_duration_seconds_bucket{le="0.5",operation="hash"} 
+- password_hash_duration_seconds_bucket{le="1.0",operation="hash"}

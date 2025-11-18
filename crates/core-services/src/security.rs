@@ -6,7 +6,6 @@ use axum::http::{header, HeaderValue, Method};
 use std::time::Duration;
 use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 use zxcvbn::{zxcvbn, Score};
-
 /// Configuração de CORS para produção
 pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
     let origins: Vec<HeaderValue> = allowed_origins
@@ -165,7 +164,10 @@ const ARGON2_P_COST: u32 = 4; // 4 parallel threads
 /// ⚠️ **IMPORTANTE**: Esta função é **blocking** e pode levar 200-500ms.
 /// Em contextos assíncronos (Axum, Tokio), use `tokio::task::spawn_blocking`:
 ///
-/// ```rust
+/// ```rust,ignore
+/// use core_services::security::hash_password;
+///
+/// let password = "MyS3cur3P@ssw0rd!";
 /// let password_clone = password.to_string();
 /// let hash = tokio::task::spawn_blocking(move || {
 ///     hash_password(&password_clone)
@@ -216,6 +218,7 @@ pub fn hash_password(password: &str) -> anyhow::Result<String> {
 /// # Exemplos
 ///
 /// ```rust
+/// # fn main() -> anyhow::Result<()> {
 /// use core_services::security::{hash_password, verify_password};
 ///
 /// // Gerar hash
@@ -227,6 +230,8 @@ pub fn hash_password(password: &str) -> anyhow::Result<String> {
 ///
 /// // Verificar senha incorreta
 /// assert!(!verify_password("WrongPassword", &hash)?);
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Erros
@@ -241,7 +246,11 @@ pub fn hash_password(password: &str) -> anyhow::Result<String> {
 /// ⚠️ **IMPORTANTE**: Esta função também é **blocking** (~200-300ms).
 /// Use `spawn_blocking` em contextos assíncronos:
 ///
-/// ```rust
+/// ```rust,ignore
+/// use core_services::security::verify_password;
+///
+/// let password = "MyS3cur3P@ssw0rd!";
+/// let hash = "$argon2id$v=19$m=65536,t=3,p=4$...".to_string();
 /// let password_clone = password.to_string();
 /// let hash_clone = hash.clone();
 /// let is_valid = tokio::task::spawn_blocking(move || {

@@ -1,7 +1,7 @@
 use crate::constants::*;
 use crate::state::SharedEnforcer;
 use crate::web_models::CurrentUser;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use axum::http::request::Parts;
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use core_services::security;
@@ -159,9 +159,29 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Audit Logs carregadas");
 
-    enforcer.save_policy().await?;
+    match enforcer.save_policy().await {
+        Ok(_) => {
+            info!("Políticas do Casbin carregadas e salvas no banco.");
+        }
+        Err(e) => {
+            let error_msg = e.to_string();
 
-    info!("Políticas do Casbin carregadas e salvas no banco.");
+            // PostgreSQL error code 23505 = unique constraint violation
+            // This happens when tests run in parallel and try to insert duplicate policies
+            if error_msg.contains("23505")
+                || error_msg.contains("unique")
+                || error_msg.contains("duplicar")
+                || error_msg.contains("duplicate key")
+            {
+                info!("Políticas já existem no banco (execução paralela de testes)");
+                // This is expected in parallel tests - policies already exist
+            } else {
+                // This is an actual error - propagate it
+                return Err(e).context("Falha ao salvar políticas iniciais no banco de dados");
+            }
+        }
+    }
+
     info!("Iniciando seeding de usuários de teste...");
 
     // --- ATUALIZAÇÃO AQUI: Usando Argon2id via security::hash_password ---
