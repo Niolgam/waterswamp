@@ -292,18 +292,22 @@ async fn test_admin_list_users_pagination_and_search() {
 async fn test_admin_update_user_role_and_password() {
     let app = common::spawn_app().await;
 
-    // 1. Criar utilizador 'charlie' com role 'user'
+    let unique_username = format!("charlie_{}", uuid::Uuid::new_v4());
+    let unique_email = format!("{}@example.com", unique_username);
     let create_response = app
         .api
         .post("/api/admin/users")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "username": "charlie",
-            "email": "charlie@example.com",
+           "username": unique_username,
+           "email": unique_email,
             "password": "PasswordCharlie123!",
             "role": "user"
         }))
         .await;
+
+    create_response.assert_status_ok();
+
     let charlie_id = create_response.json::<UserDetailDto>().user.id;
 
     // 2. Atualizar Role de 'user' para 'admin'

@@ -437,12 +437,12 @@ impl<'a> AuditLogRepository<'a> {
                 user_agent, request_id, duration_ms, created_at
             FROM audit_logs
             WHERE action = 'login_failed'
-            AND created_at >= NOW() - ($1 || ' hours')::INTERVAL
+            AND created_at >= NOW() - ($1 * INTERVAL '1 hour')
             ORDER BY created_at DESC
             LIMIT $2
             "#,
         )
-        .bind(hours.to_string())
+        .bind(hours as i32)
         .bind(limit)
         .fetch_all(self.pool)
         .await
@@ -457,7 +457,7 @@ impl<'a> AuditLogRepository<'a> {
         sqlx::query_as::<_, SuspiciousIpRow>(
             r#"
             SELECT 
-                ip_address::TEXT as ip_address,
+                host(ip_address) as ip_address,
                 COUNT(*) as failed_attempts,
                 COUNT(DISTINCT username) as unique_usernames,
                 MIN(created_at) as first_attempt,
@@ -465,13 +465,13 @@ impl<'a> AuditLogRepository<'a> {
             FROM audit_logs
             WHERE action = 'login_failed'
             AND ip_address IS NOT NULL
-            AND created_at >= NOW() - ($1 || ' hours')::INTERVAL
+            AND created_at >= NOW() - ($1 * INTERVAL '1 hour')
             GROUP BY ip_address
             HAVING COUNT(*) >= $2
             ORDER BY failed_attempts DESC
             "#,
         )
-        .bind(hours.to_string())
+        .bind(hours as i32)
         .bind(threshold)
         .fetch_all(self.pool)
         .await
@@ -482,10 +482,10 @@ impl<'a> AuditLogRepository<'a> {
         let result = sqlx::query(
             r#"
             DELETE FROM audit_logs 
-            WHERE created_at < NOW() - ($1 || ' days')::INTERVAL
-            "#,
+            WHERE created_at < NOW() - ($1 * INTERVAL '1 day')
+        "#,
         )
-        .bind(retention_days.to_string())
+        .bind(retention_days as i32)
         .execute(self.pool)
         .await?;
 
