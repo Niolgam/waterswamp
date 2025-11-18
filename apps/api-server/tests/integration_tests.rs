@@ -2,6 +2,7 @@ mod common;
 
 use axum_test::TestServer;
 use serde_json::{json, Value};
+use uuid::Uuid;
 
 /// Helper to perform real login and retrieve the access_token.
 /// Used to test the actual /login endpoint integration.
@@ -85,6 +86,18 @@ async fn test_protected_routes_missing_token_fail_401() {
 async fn test_standard_user_flow_bob() {
     let app = common::spawn_app().await;
 
+    // [FIX] Ensure MFA is disabled for Bob so standard login works
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'bob'")
+        .fetch_one(&app.db_auth)
+        .await
+        .unwrap();
+
+    sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
+        .bind(user_id)
+        .execute(&app.db_auth)
+        .await
+        .unwrap();
+
     // 1. Real Login as "bob" (Standard User)
     let token_bob = login_and_get_token(&app.api, "bob").await;
 
@@ -106,6 +119,18 @@ async fn test_standard_user_flow_bob() {
 #[tokio::test]
 async fn test_admin_flow_alice() {
     let app = common::spawn_app().await;
+
+    // [FIX] Ensure MFA is disabled for Alice so standard login works
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+        .fetch_one(&app.db_auth)
+        .await
+        .unwrap();
+
+    sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
+        .bind(user_id)
+        .execute(&app.db_auth)
+        .await
+        .unwrap();
 
     // 1. Real Login as "alice" (Admin User)
     let token_alice = login_and_get_token(&app.api, "alice").await;

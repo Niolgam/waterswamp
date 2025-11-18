@@ -99,6 +99,18 @@ async fn test_reset_password_happy_path_and_session_revocation() {
     let app = common::spawn_app().await;
     let client = &app.api;
 
+    // [FIX] Ensure MFA is disabled for Bob so standard login works
+    let bob_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'bob'")
+        .fetch_one(&app.db_auth)
+        .await
+        .unwrap();
+
+    sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
+        .bind(bob_id)
+        .execute(&app.db_auth)
+        .await
+        .unwrap();
+
     // 1. Bob (user_id 'bob_id') existe com senha "password123"
     // Vamos primeiro fazer login para obter um refresh token
     let login_payload = LoginPayload {
@@ -112,11 +124,7 @@ async fn test_reset_password_happy_path_and_session_revocation() {
     let original_refresh_token = original_tokens["refresh_token"].as_str().unwrap();
 
     // 2. Bob esquece a senha. Geramos um token de reset para ele
-    let bob_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'bob'")
-        .fetch_one(&app.db_auth)
-        .await
-        .unwrap();
-
+    // (bob_id already fetched above)
     let reset_token = generate_reset_token(bob_id);
 
     // 3. Bob redefine a senha

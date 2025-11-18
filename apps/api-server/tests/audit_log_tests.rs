@@ -378,40 +378,52 @@ async fn test_cleanup_old_logs() {
     let app = common::spawn_app().await;
 
     // Use unique action names to avoid conflicts with parallel tests
-    let old_action = format!("old_action_{}", uuid::Uuid::new_v4());
-    let recent_action = format!("recent_action_{}", uuid::Uuid::new_v4());
+    let old_action = format!("old_action_{}", Uuid::new_v4());
+    let recent_action = format!("recent_action_{}", Uuid::new_v4());
 
-    // Create an old log entry (manually set old timestamp)
+    // Create an old log entry (manually set old timestamp: 100 days ago)
     sqlx::query(
         r#"
         INSERT INTO audit_logs (action, resource, created_at)
         VALUES ($1, $2, NOW() - INTERVAL '100 days')
         "#,
     )
-    .bind(&old_action) // Changed from "old_action"
+    .bind(&old_action)
     .bind("/old")
     .execute(&app.db_logs)
     .await
     .unwrap();
 
-    // Create a recent log entry
+    // Create a recent log entry (default timestamp: now)
     sqlx::query(
         r#"
         INSERT INTO audit_logs (action, resource)
         VALUES ($1, $2)
         "#,
     )
-    .bind(&recent_action) // Changed from "recent_action"
+    .bind(&recent_action)
     .bind("/recent")
     .execute(&app.db_logs)
     .await
     .unwrap();
 
-    // ... cleanup call stays the same ...
+    // --- MISSING CODE RESTORED BELOW ---
+    // Trigger the cleanup for logs older than 90 days
+    let response = app
+        .api
+        .post("/api/admin/audit-logs/cleanup")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "retention_days": 90
+        }))
+        .await;
+
+    response.assert_status_ok();
+    // -----------------------------------
 
     // Verify old log is gone - use parameterized query
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_logs WHERE action = $1")
-        .bind(&old_action) // Added binding
+        .bind(&old_action)
         .fetch_one(&app.db_logs)
         .await
         .unwrap();
@@ -420,7 +432,7 @@ async fn test_cleanup_old_logs() {
 
     // Verify recent log still exists - use parameterized query
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_logs WHERE action = $1")
-        .bind(&recent_action) // Added binding
+        .bind(&recent_action)
         .fetch_one(&app.db_logs)
         .await
         .unwrap();
