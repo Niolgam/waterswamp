@@ -1,6 +1,6 @@
 use casbin::Enforcer;
+use core_services::jwt::JwtService;
 use email_service::EmailSender;
-use jsonwebtoken::{DecodingKey, EncodingKey};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,8 +17,7 @@ pub struct AppState {
     pub policy_cache: PolicyCache,
     pub db_pool_auth: PgPool,
     pub db_pool_logs: PgPool,
-    pub encoding_key: EncodingKey,
-    pub decoding_key: DecodingKey,
+    pub jwt_service: JwtService,
     pub email_service: Arc<dyn EmailSender + Send + Sync>,
     pub audit_service: AuditService,
 }

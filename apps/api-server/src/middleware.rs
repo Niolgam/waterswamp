@@ -7,8 +7,7 @@ use axum::{
     response::Response,
 };
 use casbin::CoreApi;
-use domain::models::Claims;
-use jsonwebtoken::{decode, Algorithm, Validation};
+use domain::models::TokenType;
 
 pub async fn mw_authenticate(
     State(state): State<AppState>,
@@ -18,11 +17,13 @@ pub async fn mw_authenticate(
     let token = extract_token(req.headers())
         .ok_or_else(|| AppError::Unauthorized("Token não encontrado".to_string()))?;
 
-    let validation = Validation::new(Algorithm::EdDSA);
-    let token_data = decode::<Claims>(&token, &state.decoding_key, &validation)
+    // Verifica o token usando o JwtService (suporta rotação de chaves)
+    let claims = state
+        .jwt_service
+        .verify_token(&token, TokenType::Access)
         .map_err(|_| AppError::Unauthorized("Token inválido ou expirado".to_string()))?;
 
-    let user_id = token_data.claims.sub;
+    let user_id = claims.sub;
 
     // Fetch username from database
     let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
@@ -40,7 +41,7 @@ pub async fn mw_authenticate(
         username,
     };
 
-    let claims = token_data.claims;
+    // Injeta os claims e o usuário atual na requisição
     req.extensions_mut().insert(claims);
     req.extensions_mut().insert(current_user);
 

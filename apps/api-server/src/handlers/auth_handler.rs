@@ -1,9 +1,7 @@
 use anyhow::Context;
 use axum::{extract::State, Json};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, Algorithm, Header, Validation};
 use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -11,25 +9,22 @@ use crate::{
     error::AppError,
     handlers::{
         email_verification_handler::create_verification_token,
-        mfa_handler::{generate_mfa_challenge_token, MfaRequiredResponse},
+        mfa_handler::generate_mfa_challenge_token,
     },
     state::AppState,
 };
 use core_services::security::{hash_password, validate_password_strength, verify_password};
 use domain::models::{
-    Claims, ForgotPasswordPayload, LoginPayload, LoginResponse, RefreshTokenPayload,
-    RegisterPayload, ResetPasswordPayload, TokenType,
+    ForgotPasswordPayload, LoginPayload, LoginResponse, RefreshTokenPayload, RegisterPayload,
+    ResetPasswordPayload, TokenType,
 };
-use persistence::repositories::{
-    auth_repository::AuthRepository, mfa_repository::MfaRepository, user_repository::UserRepository,
-};
+use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 
 const ACCESS_TOKEN_EXPIRY_SECONDS: i64 = 3600; // 1 hora
 const REFRESH_TOKEN_EXPIRY_SECONDS: i64 = 604800; // 7 dias
 const PASSWORD_RESET_EXPIRY_SECONDS: i64 = 900; // 15 minutos
 
 /// POST /login
-/// UPDATED: Now checks for MFA and returns MFA challenge if enabled
 pub async fn handler_login(
     State(state): State<AppState>,
     Json(payload): Json<LoginPayload>,
@@ -89,7 +84,6 @@ pub async fn handler_login(
 }
 
 /// POST /register
-/// UPDATED: Now sends email verification
 pub async fn handler_register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterPayload>,
@@ -128,12 +122,12 @@ pub async fn handler_register(
     // Generate tokens
     let (access_token, refresh_token_raw) = generate_tokens(&state, user.id).await?;
 
-    // NEW: Generate and send email verification token
+    // Generate and send email verification token
     let verification_token = create_verification_token(&state, user.id)
         .await
         .context("Falha ao criar token de verificação")?;
 
-    // Send verification email (instead of just welcome email)
+    // Send verification email
     state.email_service.send_verification_email(
         payload.email.clone(),
         &user.username,
@@ -235,21 +229,14 @@ pub async fn handler_refresh_token(
         }
     };
 
-    // 3. Generate new Access Token
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-    let claims = Claims {
-        sub: user_id,
-        exp: now + ACCESS_TOKEN_EXPIRY_SECONDS,
-        iat: now,
-        token_type: TokenType::Access,
-    };
-
-    let header = Header::new(Algorithm::EdDSA);
-    let access_token =
-        encode(&header, &claims, &state.encoding_key).context("Falha ao codificar JWT")?;
+    // 3. Generate new Access Token using JwtService
+    let access_token = state
+        .jwt_service
+        .generate_token(user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
+        .map_err(|e| {
+            tracing::error!("Erro ao gerar access token: {:?}", e);
+            AppError::Anyhow(e)
+        })?;
 
     // 4. Generate and save new Refresh Token
     let new_refresh_token_raw = Uuid::new_v4().to_string();
@@ -317,21 +304,18 @@ pub async fn handler_forgot_password(
     let user = user_repo.find_by_email(&payload.email).await?;
 
     if let Some(user) = user {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
-        let claims = Claims {
-            sub: user.id,
-            exp: now + PASSWORD_RESET_EXPIRY_SECONDS,
-            iat: now,
-            token_type: TokenType::PasswordReset,
-        };
-
-        let header = Header::new(Algorithm::EdDSA);
-        let token =
-            encode(&header, &claims, &state.encoding_key).context("Falha ao gerar JWT de reset")?;
+        // Generate reset token using JwtService
+        let token = state
+            .jwt_service
+            .generate_token(
+                user.id,
+                TokenType::PasswordReset,
+                PASSWORD_RESET_EXPIRY_SECONDS,
+            )
+            .map_err(|e| {
+                tracing::error!("Erro ao gerar reset token: {:?}", e);
+                AppError::Anyhow(e)
+            })?;
 
         state
             .email_service
@@ -354,22 +338,11 @@ pub async fn handler_reset_password(
 
     validate_password_strength(&payload.new_password).map_err(AppError::BadRequest)?;
 
-    let mut validation = Validation::new(Algorithm::EdDSA);
-    validation.leeway = 5;
-
-    let token_data =
-        decode::<Claims>(&payload.token, &state.decoding_key, &validation).map_err(|e| {
-            tracing::warn!(error = %e, "Falha na validação do token de reset");
-            AppError::Unauthorized("Token inválido ou expirado".to_string())
-        })?;
-
-    let claims = token_data.claims;
-
-    if claims.token_type != TokenType::PasswordReset {
-        return Err(AppError::Unauthorized(
-            "Token inválido (tipo incorreto)".to_string(),
-        ));
-    }
+    // Verify reset token using JwtService
+    let claims = state
+        .jwt_service
+        .verify_token(&payload.token, TokenType::PasswordReset)
+        .map_err(|_| AppError::Unauthorized("Token inválido ou expirado".to_string()))?;
 
     let user_id = claims.sub;
 
@@ -400,31 +373,26 @@ pub async fn handler_reset_password(
 
 // --- Helpers ---
 
+/// Hash SHA-256 para refresh tokens (tokens opacos)
+/// Tokens opacos NÃO usam JwtService
 fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
     format!("{:x}", hasher.finalize())
 }
 
+/// Gera par de tokens (Access JWT + Refresh Opaque)
 async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, String), AppError> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+    // 1. Generate Access Token (JWT) via JwtService
+    let access_token = state
+        .jwt_service
+        .generate_token(user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
+        .map_err(|e| {
+            tracing::error!("Erro ao gerar access token: {:?}", e);
+            AppError::Anyhow(e)
+        })?;
 
-    // 1. Generate Access Token
-    let claims = Claims {
-        sub: user_id,
-        exp: now + ACCESS_TOKEN_EXPIRY_SECONDS,
-        iat: now,
-        token_type: TokenType::Access,
-    };
-
-    let header = Header::new(Algorithm::EdDSA);
-    let access_token =
-        encode(&header, &claims, &state.encoding_key).context("Falha ao gerar JWT")?;
-
-    // 2. Generate Refresh Token
+    // 2. Generate Refresh Token (Opaque)
     let refresh_token_raw = Uuid::new_v4().to_string();
     let refresh_token_hash = hash_token(&refresh_token_raw);
     let family_id = Uuid::new_v4();

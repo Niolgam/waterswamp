@@ -1,15 +1,13 @@
 use anyhow::Context;
 use axum::{extract::State, Json};
-use jsonwebtoken::{decode, encode, Algorithm, Header, Validation};
 use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
 use totp_rs::{Algorithm as TotpAlgorithm, Secret, TOTP};
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::{error::AppError, state::AppState, web_models::CurrentUser};
 use core_services::security::verify_password;
-use domain::models::Claims;
+use domain::models::TokenType; // Adicionado TokenType
 use persistence::repositories::{mfa_repository::MfaRepository, user_repository::UserRepository};
 
 use serde::{Deserialize, Serialize};
@@ -20,10 +18,20 @@ const MFA_CHALLENGE_EXPIRY_SECONDS: i64 = 300; // 5 minutes
 const BACKUP_CODES_COUNT: usize = 10;
 const BACKUP_CODE_LENGTH: usize = 12;
 
-// =============================================================================
-// REQUEST/RESPONSE TYPES
-// =============================================================================
+// ... (Mantenha as structs de Request/Response idênticas às originais aqui) ...
+// Vou omitir as structs para brevidade, pois elas não mudam.
+// Certifique-se de manter: MfaSetupResponse, MfaVerifySetupPayload, etc.
+// até MfaChallengeClaims (embora MfaChallengeClaims agora venha do domain,
+// mas se estiver redefinido aqui localmente, remova-o e use domain::models::MfaChallengeClaims se possível,
+// ou deixe como está se for usado apenas internamente, mas o JwtService usa o do domain).
 
+// IMPORTANTE: Remova a struct MfaChallengeClaims local se ela for conflitante,
+// mas como o handler usava uma local, vamos atualizar para usar a lógica do JwtService
+// que retorna domain::models::MfaChallengeClaims.
+
+// =============================================================================
+// REQUEST/RESPONSE TYPES (Copiados para contexto, mantenha no arquivo)
+// =============================================================================
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MfaSetupResponse {
     pub secret: String,
@@ -104,20 +112,13 @@ pub struct MfaStatusResponse {
     pub backup_codes_remaining: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MfaChallengeClaims {
-    pub sub: Uuid,
-    pub exp: i64,
-    pub iat: i64,
-    pub token_type: String,
-}
+// Removida MfaChallengeClaims local, pois usaremos o JwtService que lida com domain::models
 
 // =============================================================================
 // HANDLERS
 // =============================================================================
 
 /// POST /auth/mfa/setup
-/// Initiates MFA setup by generating a TOTP secret and QR code.
 pub async fn handler_mfa_setup(
     State(state): State<AppState>,
     current_user: CurrentUser,
@@ -125,25 +126,20 @@ pub async fn handler_mfa_setup(
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    // 1. Check if MFA is already enabled
     if mfa_repo.is_mfa_enabled(current_user.id).await? {
         return Err(AppError::BadRequest(
             "MFA já está ativado para esta conta".to_string(),
         ));
     }
 
-    // 2. Get user info for QR code
     let user = user_repo
         .find_by_id(current_user.id)
         .await?
         .ok_or_else(|| AppError::NotFound("Usuário não encontrado".to_string()))?;
 
-    // 3. Generate TOTP secret
     let secret = Secret::generate_secret();
     let secret_base32 = secret.to_encoded().to_string();
 
-    // 4. Create TOTP instance for QR code URL
-    // FIXED: totp-rs 5.7.0 API requires issuer and account_name in constructor
     let totp = TOTP::new(
         TotpAlgorithm::SHA1,
         6,
@@ -152,15 +148,13 @@ pub async fn handler_mfa_setup(
         secret
             .to_bytes()
             .map_err(|e| anyhow::anyhow!("Erro ao converter secret: {}", e))?,
-        Some("Waterswamp".to_string()), // issuer
-        user.username.clone(),          // account_name
+        Some("Waterswamp".to_string()),
+        user.username.clone(),
     )
     .map_err(|e| anyhow::anyhow!("Erro ao criar TOTP: {}", e))?;
 
-    // FIXED: get_url() now takes no arguments (issuer and account_name are in constructor)
     let qr_code_url = totp.get_url();
 
-    // 5. Save setup token (temporary storage)
     let setup_id = mfa_repo
         .save_setup_token(current_user.id, &secret_base32, MFA_SETUP_EXPIRY_MINUTES)
         .await?;
@@ -175,7 +169,6 @@ pub async fn handler_mfa_setup(
 }
 
 /// POST /auth/mfa/verify-setup
-/// Completes MFA setup by verifying the TOTP code.
 pub async fn handler_mfa_verify_setup(
     State(state): State<AppState>,
     current_user: CurrentUser,
@@ -186,30 +179,24 @@ pub async fn handler_mfa_verify_setup(
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    // 1. Parse setup token
     let setup_id = Uuid::parse_str(&payload.setup_token)
         .map_err(|_| AppError::BadRequest("Token de setup inválido".to_string()))?;
 
-    // 2. Find valid setup token
     let (user_id, secret) = mfa_repo
         .find_valid_setup_token(setup_id)
         .await?
         .ok_or_else(|| AppError::BadRequest("Token de setup expirado ou inválido".to_string()))?;
 
-    // 3. Verify it belongs to current user
     if user_id != current_user.id {
         return Err(AppError::Forbidden);
     }
 
-    // 4. Get user info for TOTP
     let user = user_repo.find_by_id(user_id).await?.unwrap();
 
-    // 5. Verify TOTP code
     let secret_bytes = Secret::Encoded(secret.clone())
         .to_bytes()
         .map_err(|e| anyhow::anyhow!("Erro ao decodificar secret: {}", e))?;
 
-    // FIXED: Include issuer and account_name
     let totp = TOTP::new(
         TotpAlgorithm::SHA1,
         6,
@@ -230,18 +217,14 @@ pub async fn handler_mfa_verify_setup(
         ));
     }
 
-    // 6. Generate backup codes
     let (backup_codes_plain, backup_codes_hashed) = generate_backup_codes();
 
-    // 7. Enable MFA
     mfa_repo
         .enable_mfa(current_user.id, &secret, &backup_codes_hashed)
         .await?;
 
-    // 8. Complete setup (delete temporary token)
     mfa_repo.complete_setup(setup_id).await?;
 
-    // 9. Send notification email
     state
         .email_service
         .send_mfa_enabled_email(user.email, &user.username);
@@ -257,38 +240,25 @@ pub async fn handler_mfa_verify_setup(
 }
 
 /// POST /auth/mfa/verify
-/// Verifies MFA code during login flow.
 pub async fn handler_mfa_verify(
     State(state): State<AppState>,
     Json(payload): Json<MfaVerifyPayload>,
 ) -> Result<Json<MfaVerifyResponse>, AppError> {
     payload.validate()?;
 
-    // 1. Decode MFA challenge token
-    let mut validation = Validation::new(Algorithm::EdDSA);
-    validation.leeway = 5;
-
-    let token_data =
-        decode::<MfaChallengeClaims>(&payload.mfa_token, &state.decoding_key, &validation)
-            .map_err(|e| {
-                tracing::warn!(error = %e, "Falha na validação do token MFA");
-                AppError::Unauthorized("Token MFA inválido ou expirado".to_string())
-            })?;
-
-    let claims = token_data.claims;
-
-    // 2. Verify token type
-    if claims.token_type != "mfa_challenge" {
-        return Err(AppError::Unauthorized(
-            "Token inválido (tipo incorreto)".to_string(),
-        ));
-    }
+    // 1. Verify MFA challenge token using JwtService
+    let claims = state
+        .jwt_service
+        .verify_mfa_token(&payload.mfa_token)
+        .map_err(|e| {
+            tracing::warn!(error = %e, "Falha na validação do token MFA");
+            AppError::Unauthorized("Token MFA inválido ou expirado".to_string())
+        })?;
 
     let user_id = claims.sub;
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    // 3. Get MFA info
     let (mfa_enabled, mfa_secret, backup_codes) = mfa_repo
         .get_mfa_info(user_id)
         .await?
@@ -299,21 +269,15 @@ pub async fn handler_mfa_verify(
     }
 
     let secret = mfa_secret.unwrap();
-
-    // Get username for TOTP
     let user = user_repo.find_by_id(user_id).await?.unwrap();
-
     let mut backup_code_used = false;
 
-    // 4. Check if code is TOTP (6 digits) or backup code (12 chars)
     let code_valid = if payload.code.len() == 6 && payload.code.chars().all(|c| c.is_ascii_digit())
     {
-        // Try TOTP
         let secret_bytes = Secret::Encoded(secret)
             .to_bytes()
             .map_err(|e| anyhow::anyhow!("Erro ao decodificar secret: {}", e))?;
 
-        // FIXED: Include issuer and account_name
         let totp = TOTP::new(
             TotpAlgorithm::SHA1,
             6,
@@ -328,12 +292,10 @@ pub async fn handler_mfa_verify(
         totp.check_current(&payload.code)
             .map_err(|e| anyhow::anyhow!("Erro ao verificar TOTP: {}", e))?
     } else {
-        // Try backup code
         let code_hash = hash_backup_code(&payload.code);
 
         if let Some(codes) = backup_codes {
             if codes.contains(&code_hash) {
-                // Valid backup code - remove it
                 mfa_repo.remove_backup_code(user_id, &code_hash).await?;
                 mfa_repo
                     .record_backup_code_usage(user_id, &code_hash, None)
@@ -354,7 +316,7 @@ pub async fn handler_mfa_verify(
         return Err(AppError::Unauthorized("Código MFA inválido".to_string()));
     }
 
-    // 5. Generate access and refresh tokens
+    // 5. Generate tokens using updated helper
     let (access_token, refresh_token) = generate_tokens(&state, user_id).await?;
 
     if backup_code_used {
@@ -373,7 +335,6 @@ pub async fn handler_mfa_verify(
 }
 
 /// POST /auth/mfa/disable
-/// Disables MFA for the current user.
 pub async fn handler_mfa_disable(
     State(state): State<AppState>,
     current_user: CurrentUser,
@@ -384,14 +345,12 @@ pub async fn handler_mfa_disable(
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    // 1. Get user's password hash and MFA secret
     let user_with_hash: (String, Option<String>) =
         sqlx::query_as("SELECT password_hash, mfa_secret FROM users WHERE id = $1")
             .bind(current_user.id)
             .fetch_one(&state.db_pool_auth)
             .await?;
 
-    // 2. Verify password
     let password_hash = user_with_hash.0.clone();
     let password_valid =
         tokio::task::spawn_blocking(move || verify_password(&payload.password, &password_hash))
@@ -403,10 +362,8 @@ pub async fn handler_mfa_disable(
         return Err(AppError::Unauthorized("Senha incorreta".to_string()));
     }
 
-    // 3. Get username for TOTP
     let user = user_repo.find_by_id(current_user.id).await?.unwrap();
 
-    // 4. Verify TOTP code
     let secret = user_with_hash
         .1
         .ok_or_else(|| AppError::BadRequest("MFA não está ativado".to_string()))?;
@@ -415,7 +372,6 @@ pub async fn handler_mfa_disable(
         .to_bytes()
         .map_err(|e| anyhow::anyhow!("Erro ao decodificar secret: {}", e))?;
 
-    // FIXED: Include issuer and account_name
     let totp = TOTP::new(
         TotpAlgorithm::SHA1,
         6,
@@ -434,7 +390,6 @@ pub async fn handler_mfa_disable(
         return Err(AppError::BadRequest("Código TOTP inválido".to_string()));
     }
 
-    // 5. Disable MFA
     mfa_repo.disable_mfa(current_user.id).await?;
 
     tracing::warn!(user_id = %current_user.id, event_type = "mfa_disabled", "MFA desativado");
@@ -446,7 +401,6 @@ pub async fn handler_mfa_disable(
 }
 
 /// POST /auth/mfa/regenerate-backup-codes
-/// Regenerates backup codes for the current user.
 pub async fn handler_mfa_regenerate_backup_codes(
     State(state): State<AppState>,
     current_user: CurrentUser,
@@ -457,19 +411,16 @@ pub async fn handler_mfa_regenerate_backup_codes(
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    // 1. Verify MFA is enabled
     if !mfa_repo.is_mfa_enabled(current_user.id).await? {
         return Err(AppError::BadRequest("MFA não está ativado".to_string()));
     }
 
-    // 2. Get user's password hash and MFA secret
     let user_info: (String, Option<String>) =
         sqlx::query_as("SELECT password_hash, mfa_secret FROM users WHERE id = $1")
             .bind(current_user.id)
             .fetch_one(&state.db_pool_auth)
             .await?;
 
-    // 3. Verify password
     let password_hash = user_info.0;
     let password_valid =
         tokio::task::spawn_blocking(move || verify_password(&payload.password, &password_hash))
@@ -481,10 +432,8 @@ pub async fn handler_mfa_regenerate_backup_codes(
         return Err(AppError::Unauthorized("Senha incorreta".to_string()));
     }
 
-    // 4. Get username for TOTP
     let user = user_repo.find_by_id(current_user.id).await?.unwrap();
 
-    // 5. Verify TOTP code
     let secret = user_info
         .1
         .ok_or_else(|| AppError::BadRequest("MFA secret não encontrado".to_string()))?;
@@ -493,7 +442,6 @@ pub async fn handler_mfa_regenerate_backup_codes(
         .to_bytes()
         .map_err(|e| anyhow::anyhow!("Erro ao decodificar secret: {}", e))?;
 
-    // FIXED: Include issuer and account_name
     let totp = TOTP::new(
         TotpAlgorithm::SHA1,
         6,
@@ -512,10 +460,8 @@ pub async fn handler_mfa_regenerate_backup_codes(
         return Err(AppError::BadRequest("Código TOTP inválido".to_string()));
     }
 
-    // 6. Generate new backup codes
     let (backup_codes_plain, backup_codes_hashed) = generate_backup_codes();
 
-    // 7. Update backup codes
     mfa_repo
         .update_backup_codes(current_user.id, &backup_codes_hashed)
         .await?;
@@ -530,7 +476,6 @@ pub async fn handler_mfa_regenerate_backup_codes(
 }
 
 /// GET /auth/mfa/status
-/// Returns MFA status for the current user.
 pub async fn handler_mfa_status(
     State(state): State<AppState>,
     current_user: CurrentUser,
@@ -555,8 +500,6 @@ pub async fn handler_mfa_status(
 // HELPER FUNCTIONS
 // =============================================================================
 
-/// Generates a set of backup codes.
-/// Returns (plain codes for user, hashed codes for storage).
 fn generate_backup_codes() -> (Vec<String>, Vec<String>) {
     let mut plain_codes = Vec::with_capacity(BACKUP_CODES_COUNT);
     let mut hashed_codes = Vec::with_capacity(BACKUP_CODES_COUNT);
@@ -570,10 +513,9 @@ fn generate_backup_codes() -> (Vec<String>, Vec<String>) {
     (plain_codes, hashed_codes)
 }
 
-/// Generates a single backup code (alphanumeric, 12 chars).
 fn generate_backup_code() -> String {
     use rand::Rng;
-    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Avoid confusing chars like 0/O, 1/I
+    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let mut rng = rand::thread_rng();
 
     (0..BACKUP_CODE_LENGTH)
@@ -584,57 +526,33 @@ fn generate_backup_code() -> String {
         .collect()
 }
 
-/// Hashes a backup code for secure storage.
 fn hash_backup_code(code: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(code.to_uppercase().as_bytes());
     format!("{:x}", hasher.finalize())
 }
 
-/// Generates an MFA challenge token (used during login).
+/// Generates an MFA challenge token using JwtService
 pub fn generate_mfa_challenge_token(state: &AppState, user_id: Uuid) -> anyhow::Result<String> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-
-    let claims = MfaChallengeClaims {
-        sub: user_id,
-        exp: now + MFA_CHALLENGE_EXPIRY_SECONDS,
-        iat: now,
-        token_type: "mfa_challenge".to_string(),
-    };
-
-    let header = Header::new(Algorithm::EdDSA);
-    let token = encode(&header, &claims, &state.encoding_key)
-        .context("Falha ao gerar MFA challenge token")?;
-
-    Ok(token)
+    state
+        .jwt_service
+        .generate_mfa_token(user_id, MFA_CHALLENGE_EXPIRY_SECONDS)
 }
 
-/// Helper to generate access and refresh tokens (reused from auth_handler).
+/// Helper to generate tokens using JwtService (updated to use state.jwt_service)
 async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, String), AppError> {
     use chrono::{Duration, Utc};
-    use domain::models::TokenType;
-
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
 
     // 1. Generate Access Token
-    let claims = Claims {
-        sub: user_id,
-        exp: now + 3600, // 1 hour
-        iat: now,
-        token_type: TokenType::Access,
-    };
+    let access_token = state
+        .jwt_service
+        .generate_token(user_id, TokenType::Access, 3600)
+        .map_err(|e| {
+            tracing::error!("Erro ao gerar access token: {:?}", e);
+            AppError::Anyhow(e)
+        })?;
 
-    let header = Header::new(Algorithm::EdDSA);
-    let access_token =
-        encode(&header, &claims, &state.encoding_key).context("Falha ao gerar JWT")?;
-
-    // 2. Generate Refresh Token
+    // 2. Generate Refresh Token (Opaque)
     let refresh_token_raw = Uuid::new_v4().to_string();
     let refresh_token_hash = {
         let mut hasher = Sha256::new();

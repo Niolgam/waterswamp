@@ -3,12 +3,10 @@ use crate::{
     rate_limit::login_rate_limiter,
     state::AppState,
 };
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::routing::get;
+use axum::{routing::post, Router};
 
-pub fn router(state: AppState) -> Router<AppState> {
+pub fn router(_state: AppState) -> Router<AppState> {
     // Auth routes (existing + new)
     let auth_routes = Router::new()
         // Existing auth routes

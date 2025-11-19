@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
+use core_services::jwt::JwtService;
 use email_service::config::EmailConfig;
 use email_service::EmailService;
-use jsonwebtoken::{DecodingKey, EncodingKey};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -49,11 +49,12 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     let enforcer = casbin_setup::setup_casbin(pool_auth.clone()).await?;
     info!("✅ Casbin inicializado");
 
-    let encoding_key = EncodingKey::from_ed_pem(config.jwt_private_key.as_bytes())
-        .context("Falha ao carregar chave privada EdDSA")?;
-
-    let decoding_key = DecodingKey::from_ed_pem(config.jwt_public_key.as_bytes())
-        .context("Falha ao carregar chave pública EdDSA")?;
+    info!("🔑 Inicializando serviço JWT (EdDSA)...");
+    let jwt_service = JwtService::new(
+        config.jwt_private_key.as_bytes(),
+        config.jwt_public_key.as_bytes(),
+    )
+    .context("Falha ao inicializar JwtService")?;
 
     info!("📧 Inicializando serviço de email...");
     let email_config =
@@ -73,8 +74,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         policy_cache,
         db_pool_auth: pool_auth,
         db_pool_logs: pool_logs,
-        encoding_key,
-        decoding_key,
+        jwt_service,
         email_service: Arc::new(email_service),
         audit_service,
     };

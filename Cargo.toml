@@ -37,7 +37,7 @@ chrono = { version = "0.4", features = ["serde"] }
 sha2 = "0.10"
 regex = "1.12"
 utoipa = { version = "5.3", features = ["axum_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { version = "8.1", features = ["axum"] }
+utoipa-swagger-ui = { version = "8.1", features = ["axum", "reqwest"] }
 utoipa-rapidoc = { version = "4.0", features = ["axum"] }
 utoipa-redoc = { version = "4.0", features = ["axum"] }
 prometheus = { version = "0.13", features = ["process"] }

@@ -189,6 +189,7 @@ async fn test_reset_password_invalid_tokens() {
         .await;
 
     assert_eq!(res_expirado.status_code(), 401);
+    // ATUALIZADO: Match com mensagem de erro genérica
     assert!(res_expirado.text().contains("expirado") || res_expirado.text().contains("inválido"));
 
     // 2. Cenário: Token de Tipo Errado (usando um Access Token)
@@ -203,7 +204,15 @@ async fn test_reset_password_invalid_tokens() {
         .await;
 
     assert_eq!(res_tipo_errado.status_code(), 401);
-    assert!(res_tipo_errado.text().contains("tipo incorreto"));
+
+    // ATUALIZADO: Corrigido a asserção para aceitar "inválido" ou "expirado"
+    // O novo handler retorna "Token inválido ou expirado" para qualquer erro de token
+    let error_text = res_tipo_errado.text();
+    assert!(
+        error_text.contains("inválido") || error_text.contains("expirado"),
+        "Erro inesperado: '{}'. Esperado 'inválido' ou 'expirado'",
+        error_text
+    );
 }
 
 #[tokio::test]

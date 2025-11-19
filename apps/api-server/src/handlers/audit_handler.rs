@@ -7,9 +7,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::{error::AppError, state::AppState};
-use persistence::repositories::audit_logs_repository::{
-    AuditLogEntryRow, AuditLogRepository, AuditLogStatsRow, SuspiciousIpRow,
-};
+use persistence::repositories::audit_logs_repository::{AuditLogEntryRow, AuditLogRepository};
 
 // =============================================================================
 // REQUEST/RESPONSE TYPES

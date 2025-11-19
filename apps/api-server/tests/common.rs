@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use axum_test::TestServer;
+use core_services::jwt::JwtService;
 use domain::models::{Claims, TokenType};
 use email_service::EmailSender;
-use jsonwebtoken::DecodingKey;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -139,7 +139,6 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Falha ao conectar ao logs_db");
 
-    // [Fix] Run migrations to create tables
     sqlx::migrate!("../../crates/persistence/migrations_auth")
         .run(&pool_auth)
         .await
@@ -150,17 +149,6 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Falha ao rodar migrations no logs_db");
 
-    // [Fix] Removed TRUNCATE calls to prevent race conditions in parallel tests.
-    // In a real production test env, you would use transactional tests or unique DBs per test.
-    // sqlx::query("TRUNCATE TABLE users, casbin_rule, refresh_tokens CASCADE")
-    //    .execute(&pool_auth)
-    //    .await
-    //    .ok();
-    // sqlx::query("TRUNCATE TABLE audit_logs CASCADE")
-    //    .execute(&pool_logs)
-    //    .await
-    //    .ok();
-
     let enforcer = setup_casbin(pool_auth.clone())
         .await
         .expect("Falha ao inicializar Casbin");
@@ -168,12 +156,11 @@ pub async fn spawn_app() -> TestApp {
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let public_pem = include_bytes!("../tests/keys/public_test.pem");
 
-    let encoding_key = EncodingKey::from_ed_pem(private_pem).expect("Chave privada inválida");
-    let decoding_key = DecodingKey::from_ed_pem(public_pem).expect("Chave pública inválida");
+    // MODIFICADO: Inicializar JwtService em vez de chaves raw
+    let jwt_service = JwtService::new(private_pem, public_pem).expect("Falha ao criar JwtService");
 
     let email_service = Arc::new(MockEmailService::new());
 
-    // [Fix] Initialize audit service
     let audit_service = AuditService::new(pool_logs.clone());
 
     let app_state = AppState {
@@ -181,10 +168,9 @@ pub async fn spawn_app() -> TestApp {
         policy_cache: Arc::new(RwLock::new(HashMap::new())),
         db_pool_auth: pool_auth.clone(),
         db_pool_logs: pool_logs.clone(),
-        encoding_key,
-        decoding_key,
+        // MODIFICADO: Usar jwt_service
+        jwt_service,
         email_service: email_service.clone(),
-        // [Fix] Add field to AppState
         audit_service,
     };
 
@@ -246,7 +232,6 @@ pub fn init_test_env() {
 
 /// Limpa dados de teste do banco (mantém alice e bob do seeding)
 pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
-    // Remove refresh tokens dos usuários de teste
     sqlx::query(
         r#"
         DELETE FROM refresh_tokens 
@@ -258,7 +243,6 @@ pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // Remove email verification tokens dos usuários de teste
     sqlx::query(
         r#"
         DELETE FROM email_verification_tokens 
@@ -270,7 +254,6 @@ pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // Remove MFA setup tokens dos usuários de teste
     sqlx::query(
         r#"
         DELETE FROM mfa_setup_tokens 
@@ -282,7 +265,6 @@ pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // Remove usuários de teste
     sqlx::query(
         r#"
         DELETE FROM users 
