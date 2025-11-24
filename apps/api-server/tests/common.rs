@@ -378,3 +378,36 @@ pub async fn create_unique_test_user(
 
     Ok((username, email, password))
 }
+
+pub fn generate_reset_token(user_id: Uuid) -> String {
+    generate_custom_token(user_id, TokenType::PasswordReset, 900) // 15 minutos
+}
+
+pub fn generate_custom_token(
+    user_id: Uuid,
+    token_type: TokenType,
+    expires_in_seconds: i64,
+) -> String {
+    let private_pem = include_bytes!("../tests/keys/private_test.pem");
+    let encoding_key = EncodingKey::from_ed_pem(private_pem).unwrap();
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let claims = Claims {
+        sub: user_id,
+        exp: now + expires_in_seconds,
+        iat: now,
+        token_type,
+    };
+
+    let header = Header::new(Algorithm::EdDSA);
+    encode(&header, &claims, &encoding_key).unwrap()
+}
+
+/// Gera um token expirado para testes de validação.
+pub fn generate_expired_token(user_id: Uuid, token_type: TokenType) -> String {
+    generate_custom_token(user_id, token_type, -60) // Expirado há 60 segundos
+}
