@@ -10,35 +10,35 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::config::config::Config;
 use crate::handlers::audit_services::AuditService;
 
-pub mod casbin_setup;
-pub mod config;
-mod constants;
-pub mod error;
+pub mod infra;
+pub use infra::casbin_setup;
+pub use infra::config;
+pub use infra::errors as error;
 pub mod handlers;
-pub mod logging;
-pub mod metrics;
+pub use infra::telemetry;
 mod middleware;
 pub mod openapi;
-pub mod rate_limit;
 pub mod routes;
 pub mod shutdown;
-pub mod state;
+pub use infra::state;
+pub mod api;
+pub mod extractors;
+pub mod utils;
 pub mod web_models;
 
 pub async fn run(addr: SocketAddr) -> Result<()> {
     // ⭐ 1. Inicializar logging ANTES de tudo
-    let log_config = logging::LoggingConfig::default();
-    logging::init_logging(log_config)?;
+    let log_config = telemetry::LoggingConfig::default();
+    telemetry::init_logging(log_config)?;
 
     // ⭐ 2. Inicializar timestamp de uptime
     handlers::health_handler::init_server_start_time();
 
     info!("🚀 Iniciando Waterswamp API...");
 
-    let config = Config::from_env()?;
+    let config = config::Config::from_env()?;
 
     info!("🔌 Conectando aos bancos de dados...");
     let pool_auth = PgPool::connect(&config.auth_db).await?;

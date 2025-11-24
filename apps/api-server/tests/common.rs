@@ -13,7 +13,7 @@ use tera::Context as TeraContext;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 use waterswamp::casbin_setup::setup_casbin;
-use waterswamp::config::config::Config;
+use waterswamp::config::Config;
 use waterswamp::handlers::audit_services::AuditService;
 use waterswamp::routes::build;
 use waterswamp::state::AppState;

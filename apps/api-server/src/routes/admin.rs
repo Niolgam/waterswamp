@@ -1,5 +1,5 @@
 use crate::handlers::{admin_handler, audit_handler};
-use crate::{rate_limit::admin_rate_limiter, state::AppState};
+use crate::{middleware::rate_limit::admin_rate_limiter, state::AppState};
 use axum::{
     routing::{delete, get, post, put},
     Router,

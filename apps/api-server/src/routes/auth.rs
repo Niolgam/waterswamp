@@ -1,6 +1,6 @@
 use crate::{
     handlers::{auth_handler, email_verification_handler, mfa_handler},
-    rate_limit::login_rate_limiter,
+    middleware::login_rate_limiter,
     state::AppState,
 };
 use axum::routing::get;

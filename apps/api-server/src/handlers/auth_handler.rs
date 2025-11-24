@@ -12,6 +12,7 @@ use crate::{
         mfa_handler::generate_mfa_challenge_token,
     },
     state::AppState,
+    utils::{generate_tokens_helper, hash_token},
 };
 use core_services::security::{hash_password, validate_password_strength, verify_password};
 use domain::models::{
@@ -71,7 +72,7 @@ pub async fn handler_login(
     }
 
     // 4. Generate tokens (no MFA)
-    let (access_token, refresh_token_raw) = generate_tokens(&state, user_id).await?;
+    let (access_token, refresh_token_raw) = generate_tokens_helper(&state, user_id).await?;
 
     tracing::info!(user_id = %user_id, event_type = "user_login", "Usuário autenticado");
 
@@ -120,7 +121,7 @@ pub async fn handler_register(
         .await?;
 
     // Generate tokens
-    let (access_token, refresh_token_raw) = generate_tokens(&state, user.id).await?;
+    let (access_token, refresh_token_raw) = generate_tokens_helper(&state, user.id).await?;
 
     // Generate and send email verification token
     let verification_token = create_verification_token(&state, user.id)
@@ -369,50 +370,4 @@ pub async fn handler_reset_password(
     Ok(Json(
         serde_json::json!({"message": "Senha atualizada com sucesso"}),
     ))
-}
-
-// --- Helpers ---
-
-/// Hash SHA-256 para refresh tokens (tokens opacos)
-/// Tokens opacos NÃO usam JwtService
-fn hash_token(token: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(token.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-/// Gera par de tokens (Access JWT + Refresh Opaque)
-async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, String), AppError> {
-    // 1. Generate Access Token (JWT) via JwtService
-    let access_token = state
-        .jwt_service
-        .generate_token(user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
-        .map_err(|e| {
-            tracing::error!("Erro ao gerar access token: {:?}", e);
-            AppError::Anyhow(e)
-        })?;
-
-    // 2. Generate Refresh Token (Opaque)
-    let refresh_token_raw = Uuid::new_v4().to_string();
-    let refresh_token_hash = hash_token(&refresh_token_raw);
-    let family_id = Uuid::new_v4();
-
-    let expires_at = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECONDS);
-
-    // 3. Save Refresh Token
-    sqlx::query(
-        r#"
-        INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id, parent_token_hash)
-        VALUES ($1, $2, $3, $4, NULL)
-        "#,
-    )
-    .bind(user_id)
-    .bind(&refresh_token_hash)
-    .bind(expires_at)
-    .bind(family_id)
-    .execute(&state.db_pool_auth)
-    .await
-    .context("Falha ao salvar refresh token inicial")?;
-
-    Ok((access_token, refresh_token_raw))
 }

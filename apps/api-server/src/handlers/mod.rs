@@ -1,6 +1,5 @@
 pub mod admin_handler;
 pub mod audit_handler;
-pub mod audit_middleware;
 pub mod audit_services;
 pub mod auth_handler;
 pub mod email_verification_handler;
