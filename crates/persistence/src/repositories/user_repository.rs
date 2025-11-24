@@ -1,4 +1,4 @@
-use domain::models::UserDto;
+use domain::models::{UserDto, UserDtoExtended};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -22,6 +22,44 @@ impl<'a> UserRepository<'a> {
         .bind(id)
         .fetch_optional(self.pool)
         .await
+    }
+
+    pub async fn find_extended_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<UserDtoExtended>, sqlx::Error> {
+        // Ensure you select 'role' here. Assuming 'role' column exists in users table.
+        sqlx::query_as::<_, UserDtoExtended>(
+            r#"
+            SELECT 
+                id, username, email, role, 
+                email_verified, email_verified_at, mfa_enabled, 
+                created_at, updated_at 
+            FROM users 
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(self.pool)
+        .await
+    }
+
+    pub async fn get_password_hash(&self, id: Uuid) -> Result<Option<String>, sqlx::Error> {
+        sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(self.pool)
+            .await
+    }
+
+    /// Mark email as unverified (helper for update_email)
+    pub async fn mark_email_unverified(&self, id: Uuid) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "UPDATE users SET email_verified = false, email_verified_at = NULL WHERE id = $1",
+        )
+        .bind(id)
+        .execute(self.pool)
+        .await?;
+        Ok(())
     }
 
     /// Busca um usuário pelo Username.

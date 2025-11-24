@@ -3,9 +3,12 @@
 //! Data Transfer Objects para operações de self-service de usuários.
 
 use chrono::NaiveDateTime;
+use domain::models::UserDtoExtended;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
+
+use crate::utils::{ROLE_ADMIN, ROLE_USER};
 
 // Re-export do domain para tipos compartilhados
 
@@ -19,9 +22,30 @@ pub struct ProfileResponse {
     pub id: Uuid,
     pub username: String,
     pub email: String,
+    pub role: String,
     pub email_verified: bool,
     pub mfa_enabled: bool,
-    pub created_at: NaiveDateTime,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<UserDtoExtended> for ProfileResponse {
+    fn from(user: UserDtoExtended) -> Self {
+        // Parse role string to Enum, defaulting to User if invalid
+        let role = match user.role.as_str() {
+            "admin" => ROLE_ADMIN,
+            _ => ROLE_USER,
+        };
+
+        Self {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            role: role.to_string(),
+            email_verified: user.email_verified,
+            mfa_enabled: user.mfa_enabled,
+            created_at: user.created_at,
+        }
+    }
 }
 
 /// Request para atualizar perfil

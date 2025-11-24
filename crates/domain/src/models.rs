@@ -248,6 +248,7 @@ pub struct UserDtoExtended {
     pub id: Uuid,
     pub username: String,
     pub email: String,
+    pub role: String,
     pub email_verified: bool,
     pub email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
     pub mfa_enabled: bool,

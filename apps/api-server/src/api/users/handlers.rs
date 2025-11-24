@@ -3,6 +3,7 @@
 //! Handlers para gerenciamento de perfil e senha do próprio usuário.
 
 use axum::{extract::State, http::StatusCode, Json};
+use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use tracing::{error, info, instrument};
 use validator::Validate;
 
@@ -13,294 +14,211 @@ use crate::{
 
 use super::contracts::{
     ChangePasswordRequest, ChangePasswordResponse, ProfileResponse, UpdateProfileRequest,
-    UpdateProfileResponse,
 };
-
-// =============================================================================
-// HANDLERS
-// =============================================================================
+//
+// ============================================================================
+// Handlers
+// ============================================================================
 
 /// GET /api/v1/users/profile
 ///
-/// Retorna as informações do perfil do usuário autenticado.
-#[instrument(skip(state, current_user))]
+/// Returns the authenticated user's profile information.
+#[instrument(skip_all)]
 pub async fn get_profile(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user_session: CurrentUser,
 ) -> Result<Json<ProfileResponse>, AppError> {
-    info!(user_id = %user.id, username = %user.username, "Buscando perfil do usuário");
+    info!(user_id = ?user_session.id, username = %user_session.username, "Fetching user profile");
 
-    // Buscar dados completos do usuário
-    let user_data: (String, String, bool, bool, chrono::NaiveDateTime) = sqlx::query_as(
-        r#"
-        SELECT username, email, email_verified, mfa_enabled, created_at
-        FROM users
-        WHERE id = $1
-        "#,
-    )
-    .bind(user.id)
-    .fetch_one(&state.db_pool_auth)
-    .await
-    .map_err(|e| {
-        error!(user_id = %user.id, error = ?e, "Erro ao buscar perfil");
-        AppError::NotFound("Usuário não encontrado".to_string())
-    })?;
+    // 1. Instanciar o repositório usando o pool do state
+    let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    Ok(Json(ProfileResponse {
-        id: user.id,
-        username: user_data.0,
-        email: user_data.1,
-        email_verified: user_data.2,
-        mfa_enabled: user_data.3,
-        created_at: user_data.4,
-    }))
+    // 2. Usar o repositório
+    let user = user_repo
+        .find_extended_by_id(user_session.id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+    Ok(Json(ProfileResponse::from(user)))
 }
 
 /// PUT /api/v1/users/profile
 ///
-/// Atualiza o perfil do usuário autenticado (username e/ou email).
+/// Updates the authenticated user's profile (username and/or email).
 ///
-/// **Nota:** Se o email for alterado, será marcado como não verificado.
-#[instrument(skip(state, current_user, payload))]
+/// **Note:** If email is changed, it will require re-verification.
+#[instrument(skip_all)]
 pub async fn update_profile(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user_session: CurrentUser,
     Json(payload): Json<UpdateProfileRequest>,
-) -> Result<Json<UpdateProfileResponse>, AppError> {
-    // 1. Validar payload
-    payload.validate().map_err(|e| {
-        error!(user_id = %user.id, validation_errors = ?e, "Validação falhou");
-        AppError::Validation(e.to_string())
-    })?;
+) -> Result<Json<ProfileResponse>, AppError> {
+    // Validate payload
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
 
-    // 2. Verificar se há algo para atualizar
+    // Check if there's anything to update
     if payload.username.is_none() && payload.email.is_none() {
-        return Err(AppError::ValidationError(
-            "Pelo menos um campo (username ou email) deve ser fornecido".to_string(),
+        return Err(AppError::BadRequest(
+            "At least one field (username or email) must be provided".to_string(),
         ));
     }
 
-    let user_id = user.id;
+    let user_id = user_session.id;
+
+    // 1. Instanciar repositório
+    let user_repo = UserRepository::new(&state.db_pool_auth);
+
+    // Fetch current user data
+    let current_user_data = user_repo
+        .find_extended_by_id(user_id)
+        .await?
+        .ok_or(AppError::NotFound("User not found".to_string()))?;
+
     info!(
-        user_id = %user_id,
+        ?user_id,
         new_username = ?payload.username,
         new_email = ?payload.email,
-        "Atualizando perfil"
+        "Updating user profile"
     );
 
-    // 3. Buscar dados atuais do usuário
-    let current_user_data: (String, String) =
-        sqlx::query_as("SELECT username, email FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(&state.db_pool_auth)
-            .await?;
-
-    let current_username = current_user_data.0;
-    let current_email = current_user_data.1;
-
-    // 4. Verificar conflito de username
+    // Check if username is taken (if being changed)
     if let Some(ref new_username) = payload.username {
-        if new_username != &current_username {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND id != $2)",
-            )
-            .bind(new_username)
-            .bind(user_id)
-            .fetch_one(&state.db_pool_auth)
-            .await?;
-
-            if exists {
-                error!(user_id = %user_id, new_username = %new_username, "Username já em uso");
-                return Err(AppError::Conflict("Username já está em uso".to_string()));
+        if new_username != &current_user_data.username {
+            if user_repo
+                .exists_by_username_excluding(new_username, user_id)
+                .await?
+            {
+                return Err(AppError::Conflict("Username already taken".to_string()));
             }
         }
     }
 
-    // 5. Verificar conflito de email
-    let mut email_changed = false;
+    // Check if email is taken (if being changed)
     if let Some(ref new_email) = payload.email {
-        if new_email != &current_email {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND id != $2)",
-            )
-            .bind(new_email)
-            .bind(user_id)
-            .fetch_one(&state.db_pool_auth)
-            .await?;
-
-            if exists {
-                error!(user_id = %user_id, new_email = %new_email, "Email já em uso");
-                return Err(AppError::Conflict("Email já está em uso".to_string()));
+        if new_email != &current_user_data.email {
+            if user_repo
+                .exists_by_email_excluding(new_email, user_id)
+                .await?
+            {
+                return Err(AppError::Conflict("Email already taken".to_string()));
             }
-            email_changed = true;
         }
     }
 
-    // 6. Atualizar username se fornecido
-    if let Some(new_username) = &payload.username {
-        if new_username != &current_username {
-            sqlx::query("UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2")
-                .bind(new_username)
-                .bind(user_id)
-                .execute(&state.db_pool_auth)
-                .await?;
-
-            info!(user_id = %user_id, new_username = %new_username, "Username atualizado");
+    // Update username if provided
+    if let Some(new_username) = payload.username {
+        if new_username != current_user_data.username {
+            user_repo.update_username(user_id, &new_username).await?;
+            info!(?user_id, %new_username, "Username updated successfully");
         }
     }
 
-    // 7. Atualizar email se fornecido
-    if let Some(new_email) = &payload.email {
-        if new_email != &current_email {
-            sqlx::query(
-                "UPDATE users SET email = $1, email_verified = FALSE, updated_at = NOW() WHERE id = $2",
-            )
-            .bind(new_email)
-            .bind(user_id)
-            .execute(&state.db_pool_auth)
-            .await?;
+    // Update email if provided
+    if let Some(new_email) = payload.email {
+        if new_email != current_user_data.email {
+            user_repo.update_email(user_id, &new_email).await?;
+
+            // Mark email as unverified since it changed
+            user_repo.mark_email_unverified(user_id).await?;
 
             info!(
-                user_id = %user_id,
-                new_email = %new_email,
-                "Email atualizado (requer verificação)"
+                ?user_id,
+                %new_email, "Email updated successfully (requires re-verification)"
             );
         }
     }
 
-    // 8. Buscar dados atualizados
-    let updated_data: (String, String, bool, bool, chrono::NaiveDateTime) = sqlx::query_as(
-        r#"
-        SELECT username, email, email_verified, mfa_enabled, created_at
-        FROM users
-        WHERE id = $1
-        "#,
-    )
-    .bind(user_id)
-    .fetch_one(&state.db_pool_auth)
-    .await?;
+    // Fetch updated user
+    let updated_user = user_repo
+        .find_extended_by_id(user_id)
+        .await?
+        .ok_or_else(|| {
+            error!(?user_id, "User not found after update");
+            AppError::NotFound("User not found".to_string())
+        })?;
 
-    info!(user_id = %user_id, email_changed = %email_changed, "Perfil atualizado");
+    info!(?user_id, "Profile updated successfully");
 
-    Ok(Json(UpdateProfileResponse {
-        id: user_id,
-        username: updated_data.0,
-        email: updated_data.1,
-        email_verified: updated_data.2,
-        mfa_enabled: updated_data.3,
-        created_at: updated_data.4,
-        email_changed,
-    }))
+    Ok(Json(ProfileResponse::from(updated_user)))
 }
 
 /// PUT /api/v1/users/password
 ///
-/// Altera a senha do usuário autenticado.
+/// Changes the authenticated user's password.
 ///
-/// Requer a senha atual para verificação de segurança.
-/// Após alteração, todas as sessões (refresh tokens) são revogadas.
-#[instrument(skip(state, current_user, payload))]
+/// Requires the current password for security verification.
+/// After changing password, all refresh tokens are revoked.
+#[instrument(skip_all)]
 pub async fn change_password(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user_session: CurrentUser,
     Json(payload): Json<ChangePasswordRequest>,
 ) -> Result<(StatusCode, Json<ChangePasswordResponse>), AppError> {
-    use core_services::security::{hash_password, validate_password_strength, verify_password};
-
-    // 1. Validar payload
-    payload.validate().map_err(|e| {
-        error!(user_id = %user.id, validation_errors = ?e, "Validação falhou");
-        AppError::Validation(e.to_string())
-    })?;
-
-    let user_id = user.id;
-    info!(user_id = %user_id, "Tentativa de alteração de senha");
-
-    // 2. Buscar hash da senha atual
-    let current_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
-        .bind(user_id)
-        .fetch_one(&state.db_pool_auth)
-        .await?;
-
-    // 3. Verificar senha atual
-    let current_password = payload.current_password.clone();
-    let password_valid =
-        tokio::task::spawn_blocking(move || verify_password(&current_password, &current_hash))
-            .await
-            .map_err(|e| {
-                error!(error = ?e, "Erro na task de verificação de senha");
-                AppError::Anyhow(anyhow::anyhow!("Erro interno"))
-            })?
-            .map_err(|_| AppError::Unauthorized("Senha atual incorreta".to_string()))?;
-
-    if !password_valid {
-        error!(user_id = %user_id, "Verificação de senha atual falhou");
-        return Err(AppError::Unauthorized("Senha atual incorreta".to_string()));
+    // Validate payload
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
     }
 
-    // 4. Verificar se nova senha é diferente da atual
-    let new_password_for_check = payload.new_password.clone();
-    let current_hash_for_check: String =
-        sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(&state.db_pool_auth)
-            .await?;
+    let user_id = user_session.id;
+    info!(?user_id, "Attempting to change password");
 
-    let same_as_current = tokio::task::spawn_blocking(move || {
-        verify_password(&new_password_for_check, &current_hash_for_check)
-    })
-    .await
-    .map_err(|e| {
-        error!(error = ?e, "Erro na task de verificação");
-        AppError::Anyhow(anyhow::anyhow!("Erro interno"))
-    })?
-    .unwrap_or(false);
+    // 1. Instanciar repositórios
+    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let auth_repo = AuthRepository::new(&state.db_pool_auth);
 
-    if same_as_current {
-        error!(user_id = %user_id, "Nova senha igual à atual");
-        return Err(AppError::Validation(
-            "Nova senha deve ser diferente da senha atual".to_string(),
+    // 2. Get current password hash
+    let stored_hash = user_repo
+        .get_password_hash(user_id)
+        .await?
+        .ok_or(AppError::NotFound("User not found".to_string()))?;
+
+    // 3. Verify current password
+    let is_valid =
+        core_services::security::verify_password(&payload.current_password, &stored_hash)
+            .map_err(|_| AppError::Anyhow(anyhow::anyhow!("Error verifying password")))?;
+
+    if !is_valid {
+        error!(?user_id, "Current password verification failed");
+        return Err(AppError::Unauthorized(
+            "Current password is incorrect".to_string(),
         ));
     }
 
-    // 5. Validar força da nova senha
-    validate_password_strength(&payload.new_password).map_err(|e| {
-        error!(user_id = %user_id, error = %e, "Senha fraca");
-        AppError::BadRequest(e)
-    })?;
+    // 4. Check if new password is different from current
+    let new_password_same_as_current =
+        core_services::security::verify_password(&payload.new_password, &stored_hash)
+            .unwrap_or(false);
 
-    // 6. Gerar hash da nova senha
-    let new_password = payload.new_password.clone();
-    let new_hash = tokio::task::spawn_blocking(move || hash_password(&new_password))
-        .await
-        .map_err(|e| {
-            error!(error = ?e, "Erro na task de hash");
-            AppError::Anyhow(anyhow::anyhow!("Erro interno"))
-        })?
-        .map_err(|e| {
-            error!(error = ?e, "Erro ao gerar hash");
-            AppError::Anyhow(e)
-        })?;
+    if new_password_same_as_current {
+        error!(?user_id, "New password is the same as current password");
+        return Err(AppError::BadRequest(
+            "New password must be different from current password".to_string(),
+        ));
+    }
 
-    // 7. Atualizar senha no banco
-    sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
-        .bind(&new_hash)
-        .bind(user_id)
-        .execute(&state.db_pool_auth)
-        .await?;
+    // 5. Update password
+    let new_hash = core_services::security::hash_password(&payload.new_password)
+        .map_err(|_| AppError::Anyhow(anyhow::anyhow!("Error hashing password")))?;
 
-    // 8. Revogar todos os refresh tokens
-    sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1 AND revoked = FALSE")
-        .bind(user_id)
-        .execute(&state.db_pool_auth)
-        .await?;
+    user_repo.update_password(user_id, &new_hash).await?;
+
+    // Revoke all refresh tokens for security
+    auth_repo.revoke_all_user_tokens(user_id).await?;
 
     info!(
-        user_id = %user_id,
-        "Senha alterada com sucesso, todas as sessões revogadas"
+        ?user_id,
+        "Password changed successfully, all refresh tokens revoked"
     );
 
-    Ok((StatusCode::OK, Json(ChangePasswordResponse::default())))
+    Ok((
+        StatusCode::OK,
+        Json(ChangePasswordResponse {
+            message: "Password changed successfully. Please log in again with your new password."
+                .to_string(),
+        }),
+    ))
 }
 
 // =============================================================================
@@ -309,11 +227,39 @@ pub async fn change_password(
 
 #[cfg(test)]
 mod tests {
+    use domain::models::UserDtoExtended;
+    use uuid::Uuid;
+
+    use crate::utils::ROLE_USER;
+
     use super::*;
 
     #[test]
     fn test_change_password_response_default() {
         let response = ChangePasswordResponse::default();
         assert!(response.message.contains("sucesso"));
+    }
+
+    #[test]
+    fn test_profile_response_from_user_dto() {
+        let user_dto = UserDtoExtended {
+            id: Uuid::new_v4(),
+            username: "testuser".to_string(),
+            email: "test@example.com".to_string(),
+            role: "user".to_string(),
+            email_verified: true,
+            email_verified_at: None,
+            mfa_enabled: false,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let response = ProfileResponse::from(user_dto);
+
+        assert_eq!(response.username, "testuser");
+        assert_eq!(response.email, "test@example.com");
+        assert_eq!(response.role, ROLE_USER);
+        assert!(response.email_verified);
+        assert!(!response.mfa_enabled);
     }
 }

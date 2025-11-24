@@ -80,23 +80,6 @@ where
 }
 
 // =============================================================================
-// WRAPPER TUPLE STRUCT (para pattern matching)
-// =============================================================================
-
-/// Wrapper para uso com pattern matching em handlers.
-///
-/// Permite a sintaxe: `CurrentUser(user): CurrentUser`
-///
-/// Este é um alias para o mesmo tipo, mas permite desestruturação.
-impl std::ops::Deref for CurrentUser {
-    type Target = CurrentUser;
-
-    fn deref(&self) -> &Self::Target {
-        self
-    }
-}
-
-// =============================================================================
 // TESTS
 // =============================================================================
 
@@ -113,14 +96,5 @@ mod tests {
 
         assert_eq!(user.id, user_id);
         assert_eq!(user.username, username);
-    }
-
-    #[test]
-    fn test_current_user_clone() {
-        let user = CurrentUser::new(Uuid::new_v4(), "test".to_string());
-        let cloned = user.clone();
-
-        assert_eq!(user.id, cloned.id);
-        assert_eq!(user.username, cloned.username);
     }
 }
