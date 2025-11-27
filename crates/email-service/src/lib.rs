@@ -1,47 +1,14 @@
-pub mod config;
-
-use crate::config::EmailConfig;
-use anyhow::Context;
 use async_trait::async_trait;
-use htmlescape;
-use lettre::{
-    message::header::ContentType,
-    transport::smtp::{
-        authentication::Credentials,
-        client::{Tls, TlsParameters},
-    },
-    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
-};
-use once_cell::sync::Lazy;
-use serde_json;
-use std::collections::HashMap;
-use tera::{Context as TeraContext, Tera, Value};
+use std::sync::Arc;
+use tera::Context as TeraContext;
+use tokio::sync::Mutex;
 
-// Inicializa o Tera (motor de templates)
-pub static TERA: Lazy<Tera> = Lazy::new(|| {
-    let mut tera = match Tera::new("crates/email_service/templates/**/*.html") {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!("Falha ao carregar templates de email: {}", e);
-            std::process::exit(1);
-        }
-    };
+// ============================================================================
+// TRAIT EmailSender
+// ============================================================================
 
-    tera.register_filter(
-        "safe_html",
-        |value: &Value, _args: &HashMap<String, Value>| {
-            let s = value.as_str().unwrap_or_default().replace('\n', "<br>");
-            Ok(serde_json::to_value(htmlescape::encode_minimal(&s)).unwrap())
-        },
-    );
-    tera
-});
-
-// ===================================================================
-// 1. THE TRAIT (INTERFACE) - EXTENDED
-// ===================================================================
 #[async_trait]
-pub trait EmailSender {
+pub trait EmailSender: Send + Sync {
     async fn send_email(
         &self,
         to_email: String,
@@ -52,170 +19,144 @@ pub trait EmailSender {
 
     fn send_welcome_email(&self, to_email: String, username: &str);
     fn send_password_reset_email(&self, to_email: String, username: &str, token: &str);
-
-    // NEW: Email Verification
     fn send_verification_email(&self, to_email: String, username: &str, token: &str);
-
-    // NEW: MFA Notifications
     fn send_mfa_enabled_email(&self, to_email: String, username: &str);
+
+    // Métodos para testes (implementação padrão vazia)
+    async fn get_sent_emails(&self) -> Vec<SentEmail> {
+        vec![]
+    }
+
+    async fn clear_sent_emails(&self) {
+        // Default vazio
+    }
 }
 
-// ===================================================================
-// 2. THE REAL SERVICE (IMPLEMENTATION)
-// ===================================================================
+// ============================================================================
+// SentEmail (para testes)
+// ============================================================================
 
-#[derive(Clone)]
-pub struct EmailService {
-    transport: AsyncSmtpTransport<Tokio1Executor>,
-    from_email: String,
+#[derive(Clone, Debug)]
+pub struct SentEmail {
+    pub to: String,
+    pub subject: String,
+    pub template: String,
 }
 
-impl EmailService {
-    /// Inicializa o EmailService
-    pub fn new(config: EmailConfig) -> anyhow::Result<Self> {
-        let creds = Credentials::new(config.smtp_user.clone(), config.smtp_pass.clone());
+// ============================================================================
+// MockEmailService (para testes)
+// ============================================================================
 
-        let mut transport_builder = AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp_host)?
-            .port(config.smtp_port)
-            .credentials(creds);
+#[derive(Clone, Debug)]
+pub struct MockEmail {
+    pub to: String,
+    pub subject: String,
+    pub template: String,
+    pub context: TeraContext,
+}
 
-        // TLS opcional
-        if config.smtp_host != "127.0.0.1" {
-            let tls_params = TlsParameters::new(config.smtp_host.clone())?;
-            transport_builder = transport_builder.tls(Tls::Required(tls_params));
-        }
+#[derive(Clone, Default)]
+pub struct MockEmailService {
+    messages: Arc<Mutex<Vec<MockEmail>>>,
+}
 
-        let transport = transport_builder.build();
-
-        Ok(Self {
-            transport,
-            from_email: config.from_email,
-        })
+impl MockEmailService {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
 #[async_trait]
-impl EmailSender for EmailService {
+impl EmailSender for MockEmailService {
     async fn send_email(
         &self,
         to_email: String,
         subject: String,
         template: &str,
-        mut context: TeraContext,
+        context: TeraContext,
     ) -> anyhow::Result<()> {
-        let base_url =
-            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
-        context.insert("base_url", &base_url);
-
-        // Add current year for footer
-        let current_year = chrono::Utc::now().format("%Y").to_string();
-        context.insert("current_year", &current_year);
-
-        let html_body = TERA
-            .render(template, &context)
-            .with_context(|| format!("Falha ao renderizar template de email: {}", template))?;
-
-        let email = Message::builder()
-            .from(self.from_email.parse()?)
-            .to(to_email.parse()?)
-            .subject(subject)
-            .header(ContentType::TEXT_HTML)
-            .body(html_body)?;
-
-        self.transport.send(email).await?;
+        let mut guard = self.messages.lock().await;
+        guard.push(MockEmail {
+            to: to_email,
+            subject,
+            template: template.to_string(),
+            context,
+        });
         Ok(())
     }
 
     fn send_welcome_email(&self, to_email: String, username: &str) {
         let mut context = TeraContext::new();
         context.insert("username", username);
-
         let service = self.clone();
         let subject = "Bem-vindo ao Waterswamp!".to_string();
         let template = "welcome.html".to_string();
-
         tokio::spawn(async move {
-            tracing::info!(to = %to_email, template = %template, "A enviar email de boas-vindas...");
-            if let Err(e) = service
+            let _ = service
                 .send_email(to_email, subject, &template, context)
-                .await
-            {
-                tracing::error!(error = ?e, "Falha ao enviar email");
-            }
+                .await;
         });
     }
 
     fn send_password_reset_email(&self, to_email: String, username: &str, token: &str) {
         let mut context = TeraContext::new();
         context.insert("username", username);
-
-        let base_url =
-            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
-
-        let reset_link = format!("{}/reset-password-form?token={}", base_url, token);
+        let reset_link = format!("http://mock.test/reset?token={}", token);
         context.insert("reset_link", &reset_link);
-
         let service = self.clone();
         let subject = "Redefina sua senha do Waterswamp".to_string();
         let template = "reset_password.html".to_string();
-
         tokio::spawn(async move {
-            tracing::info!(to = %to_email, template = %template, "A enviar email de reset de senha...");
-            if let Err(e) = service
+            let _ = service
                 .send_email(to_email, subject, &template, context)
-                .await
-            {
-                tracing::error!(error = ?e, "Falha ao enviar email de reset");
-            }
+                .await;
         });
     }
 
     fn send_verification_email(&self, to_email: String, username: &str, token: &str) {
         let mut context = TeraContext::new();
         context.insert("username", username);
-
-        let base_url =
-            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
-
-        let verification_link = format!("{}/verify-email?token={}", base_url, token);
+        let verification_link = format!("http://mock.test/verify-email?token={}", token);
         context.insert("verification_link", &verification_link);
-
         let service = self.clone();
         let subject = "Verifique seu email - Waterswamp".to_string();
         let template = "email_verification.html".to_string();
-
         tokio::spawn(async move {
-            tracing::info!(to = %to_email, template = %template, "A enviar email de verificação...");
-            if let Err(e) = service
+            let _ = service
                 .send_email(to_email, subject, &template, context)
-                .await
-            {
-                tracing::error!(error = ?e, "Falha ao enviar email de verificação");
-            }
+                .await;
         });
     }
 
     fn send_mfa_enabled_email(&self, to_email: String, username: &str) {
         let mut context = TeraContext::new();
         context.insert("username", username);
-
-        let enabled_at = chrono::Utc::now()
-            .format("%Y-%m-%d %H:%M:%S UTC")
-            .to_string();
-        context.insert("enabled_at", &enabled_at);
-
+        context.insert("enabled_at", "2025-01-01 00:00:00 UTC");
         let service = self.clone();
         let subject = "MFA Ativado - Waterswamp".to_string();
         let template = "mfa_enabled.html".to_string();
-
         tokio::spawn(async move {
-            tracing::info!(to = %to_email, template = %template, "A enviar notificação de MFA ativado...");
-            if let Err(e) = service
+            let _ = service
                 .send_email(to_email, subject, &template, context)
-                .await
-            {
-                tracing::error!(error = ?e, "Falha ao enviar notificação de MFA");
-            }
+                .await;
         });
+    }
+
+    // Implementar métodos de teste
+    async fn get_sent_emails(&self) -> Vec<SentEmail> {
+        let guard = self.messages.lock().await;
+        guard
+            .iter()
+            .map(|email| SentEmail {
+                to: email.to.clone(),
+                subject: email.subject.clone(),
+                template: email.template.clone(),
+            })
+            .collect()
+    }
+
+    async fn clear_sent_emails(&self) {
+        let mut guard = self.messages.lock().await;
+        guard.clear();
     }
 }

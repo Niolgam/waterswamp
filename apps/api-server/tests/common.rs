@@ -2,15 +2,14 @@ use async_trait::async_trait;
 use axum_test::TestServer;
 use core_services::jwt::JwtService;
 use domain::models::{Claims, TokenType};
-use email_service::EmailSender;
+use email_service::{EmailSender, MockEmailService}; // IMPORTAR do crate
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Once;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tera::Context as TeraContext;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 use waterswamp::casbin_setup::setup_casbin;
 use waterswamp::config::Config;
@@ -18,102 +17,12 @@ use waterswamp::handlers::audit_services::AuditService;
 use waterswamp::routes::build;
 use waterswamp::state::AppState;
 
-#[derive(Clone)]
-#[allow(dead_code)]
-pub struct MockEmail {
-    pub to: String,
-    pub subject: String,
-    pub template: String,
-    pub context: TeraContext,
-}
+// REMOVER: Não defina MockEmailService aqui!
+// REMOVER: Não defina MockEmail aqui!
 
-#[derive(Clone, Default)]
-pub struct MockEmailService {
-    pub messages: Arc<Mutex<Vec<MockEmail>>>,
-}
-
-impl MockEmailService {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-#[async_trait]
-impl EmailSender for MockEmailService {
-    async fn send_email(
-        &self,
-        to_email: String,
-        subject: String,
-        template: &str,
-        context: TeraContext,
-    ) -> anyhow::Result<()> {
-        let mut guard = self.messages.lock().await;
-        guard.push(MockEmail {
-            to: to_email,
-            subject,
-            template: template.to_string(),
-            context,
-        });
-        Ok(())
-    }
-
-    fn send_welcome_email(&self, to_email: String, username: &str) {
-        let mut context = TeraContext::new();
-        context.insert("username", username);
-        let service = self.clone();
-        let subject = "Bem-vindo ao Waterswamp!".to_string();
-        let template = "welcome.html".to_string();
-        tokio::spawn(async move {
-            let _ = service
-                .send_email(to_email, subject, &template, context)
-                .await;
-        });
-    }
-
-    fn send_password_reset_email(&self, to_email: String, username: &str, token: &str) {
-        let mut context = TeraContext::new();
-        context.insert("username", username);
-        let reset_link = format!("http://mock.test/reset?token={}", token);
-        context.insert("reset_link", &reset_link);
-        let service = self.clone();
-        let subject = "Redefina sua senha do Waterswamp".to_string();
-        let template = "reset_password.html".to_string();
-        tokio::spawn(async move {
-            let _ = service
-                .send_email(to_email, subject, &template, context)
-                .await;
-        });
-    }
-
-    fn send_verification_email(&self, to_email: String, username: &str, token: &str) {
-        let mut context = TeraContext::new();
-        context.insert("username", username);
-        let verification_link = format!("http://mock.test/verify-email?token={}", token);
-        context.insert("verification_link", &verification_link);
-        let service = self.clone();
-        let subject = "Verifique seu email - Waterswamp".to_string();
-        let template = "email_verification.html".to_string();
-        tokio::spawn(async move {
-            let _ = service
-                .send_email(to_email, subject, &template, context)
-                .await;
-        });
-    }
-
-    fn send_mfa_enabled_email(&self, to_email: String, username: &str) {
-        let mut context = TeraContext::new();
-        context.insert("username", username);
-        context.insert("enabled_at", "2025-01-01 00:00:00 UTC");
-        let service = self.clone();
-        let subject = "MFA Ativado - Waterswamp".to_string();
-        let template = "mfa_enabled.html".to_string();
-        tokio::spawn(async move {
-            let _ = service
-                .send_email(to_email, subject, &template, context)
-                .await;
-        });
-    }
-}
+// ============================================================================
+// TestApp
+// ============================================================================
 
 #[allow(dead_code)]
 pub struct TestApp {
@@ -127,7 +36,6 @@ pub struct TestApp {
 
 pub async fn spawn_app() -> TestApp {
     dotenvy::dotenv().ok();
-
     std::env::set_var("DISABLE_RATE_LIMIT", "true");
 
     let config = Config::from_env().expect("Falha ao carregar config de teste");
@@ -156,11 +64,8 @@ pub async fn spawn_app() -> TestApp {
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let public_pem = include_bytes!("../tests/keys/public_test.pem");
 
-    // MODIFICADO: Inicializar JwtService em vez de chaves raw
     let jwt_service = JwtService::new(private_pem, public_pem).expect("Falha ao criar JwtService");
-
-    let email_service = Arc::new(MockEmailService::new());
-
+    let email_service = Arc::new(MockEmailService::new()); // Agora vem do crate
     let audit_service = AuditService::new(pool_logs.clone());
 
     let app_state = AppState {
@@ -168,7 +73,6 @@ pub async fn spawn_app() -> TestApp {
         policy_cache: Arc::new(RwLock::new(HashMap::new())),
         db_pool_auth: pool_auth.clone(),
         db_pool_logs: pool_logs.clone(),
-        // MODIFICADO: Usar jwt_service
         jwt_service,
         email_service: email_service.clone(),
         audit_service,
@@ -193,9 +97,69 @@ pub async fn spawn_app() -> TestApp {
         db_logs: pool_logs,
         admin_token: generate_test_token(alice_id),
         user_token: generate_test_token(bob_id),
-        email_service: email_service,
+        email_service,
     }
 }
+
+/// Helper para criar AppState de teste (reutiliza lógica do spawn_app)
+pub async fn create_test_app_state() -> AppState {
+    dotenvy::dotenv().ok();
+    std::env::set_var("DISABLE_RATE_LIMIT", "true");
+
+    let config = Config::from_env().expect("Falha ao carregar config de teste");
+
+    let pool_auth = PgPool::connect(&config.auth_db)
+        .await
+        .expect("Falha ao conectar ao auth_db");
+    let pool_logs = PgPool::connect(&config.logs_db)
+        .await
+        .expect("Falha ao conectar ao logs_db");
+
+    sqlx::migrate!("../../crates/persistence/migrations_auth")
+        .run(&pool_auth)
+        .await
+        .expect("Falha ao rodar migrations no auth_db");
+
+    sqlx::migrate!("../../crates/persistence/migrations_logs")
+        .run(&pool_logs)
+        .await
+        .expect("Falha ao rodar migrations no logs_db");
+
+    let enforcer = setup_casbin(pool_auth.clone())
+        .await
+        .expect("Falha ao inicializar Casbin");
+
+    let private_pem = include_bytes!("../tests/keys/private_test.pem");
+    let public_pem = include_bytes!("../tests/keys/public_test.pem");
+
+    let jwt_service = JwtService::new(private_pem, public_pem).expect("Falha ao criar JwtService");
+    let email_service = Arc::new(MockEmailService::new()); // Agora vem do crate
+    let audit_service = AuditService::new(pool_logs.clone());
+
+    AppState {
+        enforcer,
+        policy_cache: Arc::new(RwLock::new(HashMap::new())),
+        db_pool_auth: pool_auth,
+        db_pool_logs: pool_logs,
+        jwt_service,
+        email_service,
+        audit_service,
+    }
+}
+
+/// Helper para criar TestServer com as novas rotas de api::auth
+pub async fn create_api_auth_test_server(state: AppState) -> TestServer {
+    use axum::Router;
+    use waterswamp::api;
+
+    let app = Router::new()
+        .nest("/auth", api::auth::router())
+        .with_state(state);
+
+    TestServer::new(app).unwrap()
+}
+
+// ... resto das funções (generate_test_token, init_test_env, etc) ...
 
 pub fn generate_test_token(user_id: Uuid) -> String {
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
@@ -218,19 +182,15 @@ pub fn generate_test_token(user_id: Uuid) -> String {
 
 static INIT: Once = Once::new();
 
-/// Inicializa o ambiente de teste uma vez
 pub fn init_test_env() {
     INIT.call_once(|| {
         dotenvy::dotenv().ok();
         std::env::set_var("DISABLE_RATE_LIMIT", "true");
         std::env::set_var("RUST_LOG", "info,waterswamp=debug");
-
-        // Inicializa logging apenas se ainda não foi inicializado
         let _ = tracing_subscriber::fmt().with_test_writer().try_init();
     });
 }
 
-/// Limpa dados de teste do banco (mantém alice e bob do seeding)
 pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
@@ -277,7 +237,6 @@ pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Cria um usuário de teste e retorna suas credenciais
 pub async fn create_test_user(
     pool: &PgPool,
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
@@ -292,12 +251,10 @@ pub async fn create_test_user(
     let email = format!("test_{}@test.com", counter);
     let password = "SecureP@ssw0rd!123".to_string();
 
-    // Hash da senha (operação blocking)
     let password_clone = password.clone();
     let password_hash =
         tokio::task::spawn_blocking(move || hash_password(&password_clone)).await??;
 
-    // Insere no banco
     sqlx::query(
         r#"
         INSERT INTO users (username, email, password_hash)
@@ -313,7 +270,6 @@ pub async fn create_test_user(
     Ok((username, email, password))
 }
 
-/// Cria um usuário de teste via endpoint /register
 pub async fn register_test_user(
     server: &axum_test::TestServer,
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
@@ -353,7 +309,6 @@ pub async fn create_unique_test_user(
     use core_services::security::hash_password;
     use uuid::Uuid;
 
-    // Use UUID for absolute uniqueness across parallel tests
     let unique_id = Uuid::new_v4();
     let username = format!("test_user_{}", unique_id);
     let email = format!("test_{}@test.com", unique_id);
@@ -380,7 +335,7 @@ pub async fn create_unique_test_user(
 }
 
 pub fn generate_reset_token(user_id: Uuid) -> String {
-    generate_custom_token(user_id, TokenType::PasswordReset, 900) // 15 minutos
+    generate_custom_token(user_id, TokenType::PasswordReset, 900)
 }
 
 pub fn generate_custom_token(
@@ -407,7 +362,6 @@ pub fn generate_custom_token(
     encode(&header, &claims, &encoding_key).unwrap()
 }
 
-/// Gera um token expirado para testes de validação.
 pub fn generate_expired_token(user_id: Uuid, token_type: TokenType) -> String {
-    generate_custom_token(user_id, token_type, -60) // Expirado há 60 segundos
+    generate_custom_token(user_id, token_type, -60)
 }

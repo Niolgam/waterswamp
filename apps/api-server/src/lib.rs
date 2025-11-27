@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use core_services::jwt::JwtService;
-use email_service::config::EmailConfig;
-use email_service::EmailService;
+use email_service::{EmailSender, MockEmailService};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::net::SocketAddr;

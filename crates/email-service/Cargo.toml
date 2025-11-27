@@ -19,7 +19,7 @@ tera = { workspace = true }
 htmlescape = { workspace = true }
 
 # Outros
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "sync", "rt-multi-thread"] }
 tracing = { workspace = true }
 anyhow = { workspace = true }
 once_cell = { workspace = true }
