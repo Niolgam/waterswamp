@@ -4,8 +4,10 @@
 //! before cutover in PARTE 6
 
 use axum_test::TestServer;
+use domain::models::TokenType;
 use serde_json::json;
-use uuid::Uuid;
+use sqlx::Row; // Import Row trait for runtime queries
+use uuid::Uuid; // Import TokenType for JWT generation
 
 mod common;
 use common::{
@@ -42,7 +44,18 @@ async fn register_user(
     );
 
     let body: serde_json::Value = response.json();
-    let user_id = Uuid::parse_str(body["user_id"].as_str().unwrap()).unwrap();
+
+    // Debug print if user_id is missing to trace the error
+    if body.get("user_id").is_none() {
+        println!("DEBUG REGISTER RESPONSE BODY: {:?}", body);
+    }
+
+    let user_id = Uuid::parse_str(
+        body["user_id"]
+            .as_str()
+            .expect("user_id field missing in registration response"),
+    )
+    .unwrap();
     let access_token = body["access_token"].as_str().unwrap().to_string();
     let refresh_token = body["refresh_token"].as_str().unwrap().to_string();
 
@@ -135,7 +148,7 @@ async fn test_api_auth_login_invalid_credentials() {
     assert!(body["error"]
         .as_str()
         .unwrap()
-        .contains("Credenciais inválidas"));
+        .contains("Usuário ou senha inválidos."));
 
     println!("✅ test_api_auth_login_invalid_credentials: PASSED");
 }
@@ -191,14 +204,12 @@ async fn test_api_auth_login_with_mfa_enabled() {
         .await
         .expect("Failed to create test user");
 
-    // Enable MFA for user
-    sqlx::query!(
-        "UPDATE users SET mfa_enabled = true WHERE username = $1",
-        username
-    )
-    .execute(&state.db_pool_auth)
-    .await
-    .unwrap();
+    // Enable MFA for user - Runtime query
+    sqlx::query("UPDATE users SET mfa_enabled = true WHERE username = $1")
+        .bind(&username)
+        .execute(&state.db_pool_auth)
+        .await
+        .unwrap();
 
     // Attempt login
     let response = server
@@ -213,6 +224,12 @@ async fn test_api_auth_login_with_mfa_enabled() {
     assert_eq!(response.status_code(), 200);
 
     let body: serde_json::Value = response.json();
+
+    // Debug print if mfa_required is missing
+    if body.get("mfa_required").is_none() {
+        println!("DEBUG MFA LOGIN RESPONSE BODY: {:?}", body);
+    }
+
     assert_eq!(body["mfa_required"].as_bool().unwrap(), true);
     assert!(body["mfa_token"].as_str().unwrap().len() > 0);
     assert_eq!(body["access_token"].as_str().unwrap(), "");
@@ -255,17 +272,15 @@ async fn test_api_auth_register_success() {
     assert!(body["refresh_token"].as_str().unwrap().len() > 0);
     assert!(body["message"].as_str().unwrap().contains("sucesso"));
 
-    // Verify user in database
-    let user = sqlx::query!(
-        "SELECT id, username, email FROM users WHERE username = $1",
-        username
-    )
-    .fetch_one(&state.db_pool_auth)
-    .await
-    .unwrap();
+    // Verify user in database - Runtime query
+    let row = sqlx::query("SELECT id, username, email FROM users WHERE username = $1")
+        .bind(&username)
+        .fetch_one(&state.db_pool_auth)
+        .await
+        .unwrap();
 
-    assert_eq!(user.username, username);
-    assert_eq!(user.email, email);
+    assert_eq!(row.get::<String, _>("username"), username);
+    assert_eq!(row.get::<String, _>("email"), email);
 
     cleanup_test_users(&state.db_pool_auth).await.ok();
     println!("✅ test_api_auth_register_success: PASSED");
@@ -318,18 +333,21 @@ async fn test_api_auth_register_duplicate_email() {
         .await
         .expect("Failed to create test user");
 
-    // Get email of created user
-    let user = sqlx::query!("SELECT email FROM users WHERE username = $1", username)
+    // Get email of created user - Runtime query
+    let row = sqlx::query("SELECT email FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&state.db_pool_auth)
         .await
         .unwrap();
+
+    let user_email: String = row.get("email");
 
     // Attempt to register with same email
     let response = server
         .post("/auth/register")
         .json(&json!({
             "username": "differentuser",
-            "email": user.email,
+            "email": user_email,
             "password": "SecurePass123!",
         }))
         .await;
@@ -371,7 +389,10 @@ async fn test_api_auth_register_weak_password() {
     assert_eq!(response.status_code(), 400);
 
     let body: serde_json::Value = response.json();
-    assert!(body["error"].as_str().unwrap().contains("muito fraca"));
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("Senha deve ter no mínimo 8 caracteres"));
 
     println!("✅ test_api_auth_register_weak_password: PASSED");
 }
@@ -544,7 +565,10 @@ async fn test_api_auth_refresh_token_reuse_detection() {
     assert_eq!(response.status_code(), 401);
 
     let body: serde_json::Value = response.json();
-    assert!(body["error"].as_str().unwrap().contains("revogado"));
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("Sessão invalidada por segurança"));
 
     cleanup_test_users(&state.db_pool_auth).await.ok();
     println!("✅ test_api_auth_refresh_token_reuse_detection: PASSED");
@@ -634,11 +658,13 @@ async fn test_api_auth_forgot_password_existing_email() {
         .await
         .expect("Failed to create test user");
 
-    // Get user email
-    let user = sqlx::query!("SELECT email FROM users WHERE username = $1", username)
+    // Get user email - Runtime query
+    let row = sqlx::query("SELECT email FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&state.db_pool_auth)
         .await
         .unwrap();
+    let user_email: String = row.get("email");
 
     // Clear email service
     state.email_service.clear_sent_emails().await;
@@ -647,7 +673,7 @@ async fn test_api_auth_forgot_password_existing_email() {
     let response = server
         .post("/auth/forgot-password")
         .json(&json!({
-            "email": user.email,
+            "email": user_email,
         }))
         .await;
 
@@ -658,7 +684,7 @@ async fn test_api_auth_forgot_password_existing_email() {
     assert!(body["message"]
         .as_str()
         .unwrap()
-        .contains("receberá instruções"));
+        .contains("Se este email estiver registado"));
 
     // Give async email task time to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -666,7 +692,7 @@ async fn test_api_auth_forgot_password_existing_email() {
     // Verify email was sent
     let sent_emails = state.email_service.get_sent_emails().await;
     assert_eq!(sent_emails.len(), 1);
-    assert_eq!(sent_emails[0].to, user.email);
+    assert_eq!(sent_emails[0].to, user_email);
     assert!(sent_emails[0].subject.contains("Redefina"));
 
     cleanup_test_users(&state.db_pool_auth).await.ok();
@@ -698,7 +724,7 @@ async fn test_api_auth_forgot_password_nonexistent_email() {
     assert!(body["message"]
         .as_str()
         .unwrap()
-        .contains("receberá instruções"));
+        .contains("Se este email estiver registado"));
 
     // Give async email task time (shouldn't send)
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -722,31 +748,26 @@ async fn test_api_auth_reset_password_success() {
         .await
         .expect("Failed to create test user");
 
-    // Get user
-    let user = sqlx::query!("SELECT id, email FROM users WHERE username = $1", username)
+    // Get user info - Runtime query
+    let row = sqlx::query("SELECT id, email FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&state.db_pool_auth)
         .await
         .unwrap();
+    let user_id: Uuid = row.get("id");
+    let user_email: String = row.get("email");
 
-    // Request password reset
+    // Request password reset (trigger flow)
     server
         .post("/auth/forgot-password")
-        .json(&json!({"email": user.email}))
+        .json(&json!({"email": user_email}))
         .await;
 
-    // For testing, generate a new token and update DB directly
-    use waterswamp::utils::helpers::hash_token;
-    let reset_token = uuid::Uuid::new_v4().to_string();
-    let token_hash = hash_token(&reset_token);
-
-    sqlx::query!(
-        "UPDATE users SET password_reset_token = $1, password_reset_expires = NOW() + INTERVAL '1 hour' WHERE id = $2",
-        token_hash,
-        user.id
-    )
-    .execute(&state.db_pool_auth)
-    .await
-    .unwrap();
+    // Generate valid JWT for reset (using the same service as the app)
+    let reset_token = state
+        .jwt_service
+        .generate_token(user_id, TokenType::PasswordReset, 900)
+        .expect("Failed to generate token");
 
     // Reset password
     let new_password = "NewSecurePass123!";
@@ -808,7 +829,10 @@ async fn test_api_auth_reset_password_weak_password() {
     assert_eq!(response.status_code(), 400);
 
     let body: serde_json::Value = response.json();
-    assert!(body["error"].as_str().unwrap().contains("muito fraca"));
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("Nova senha deve ter no mínimo 8 caracteres"));
 
     println!("✅ test_api_auth_reset_password_weak_password: PASSED");
 }

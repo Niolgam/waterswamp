@@ -151,7 +151,11 @@ pub async fn login(
 
         info!(user_id = %user_id, "MFA challenge emitido");
 
-        return Ok(Json(serde_json::json!(MfaRequiredResponse::new(mfa_token))));
+        // Retorna o objeto serializado diretamente para o Value
+        return Ok(Json(
+            serde_json::to_value(MfaRequiredResponse::new(mfa_token))
+                .map_err(|e| AppError::Anyhow(e.into()))?,
+        ));
     }
 
     // 5. Gerar tokens (sem MFA)
@@ -159,11 +163,14 @@ pub async fn login(
 
     info!(user_id = %user_id, "Login realizado com sucesso");
 
-    Ok(Json(serde_json::json!(LoginResponse::new(
-        access_token,
-        refresh_token,
-        ACCESS_TOKEN_EXPIRY_SECONDS
-    ))))
+    Ok(Json(
+        serde_json::to_value(LoginResponse::new(
+            access_token,
+            refresh_token,
+            ACCESS_TOKEN_EXPIRY_SECONDS,
+        ))
+        .map_err(|e| AppError::Anyhow(e.into()))?,
+    ))
 }
 
 /// POST /register
@@ -172,7 +179,7 @@ pub async fn login(
 pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
-) -> Result<Json<RegisterResponse>, AppError> {
+) -> Result<(StatusCode, Json<RegisterResponse>), AppError> {
     // 1. Validar payload
     payload.validate().map_err(|e| {
         warn!(validation_errors = ?e, "Validação de registro falhou");
@@ -236,11 +243,15 @@ pub async fn register(
 
     info!(user_id = %user.id, "Novo usuário registrado");
 
-    Ok(Json(RegisterResponse::new(
-        access_token,
-        refresh_token,
-        ACCESS_TOKEN_EXPIRY_SECONDS,
-    )))
+    Ok((
+        StatusCode::CREATED,
+        Json(RegisterResponse::new(
+            access_token,
+            refresh_token,
+            ACCESS_TOKEN_EXPIRY_SECONDS,
+            user.id,
+        )),
+    ))
 }
 
 /// POST /refresh-token
