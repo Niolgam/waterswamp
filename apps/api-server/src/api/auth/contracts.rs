@@ -89,6 +89,8 @@ pub struct RegisterResponse {
     pub expires_in: i64,
     pub message: String,
     pub user_id: Uuid,
+    pub username: String, // Added field
+    pub email: String,    // Added field
 }
 
 impl RegisterResponse {
@@ -97,6 +99,8 @@ impl RegisterResponse {
         refresh_token: String,
         expires_in: i64,
         user_id: Uuid,
+        username: String, // Added param
+        email: String,    // Added param
     ) -> Self {
         Self {
             access_token,
@@ -106,6 +110,8 @@ impl RegisterResponse {
             message: "Registro realizado com sucesso. Verifique seu email para ativar a conta."
                 .to_string(),
             user_id,
+            username,
+            email,
         }
     }
 }

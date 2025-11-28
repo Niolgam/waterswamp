@@ -226,13 +226,35 @@ async fn test_api_auth_login_with_mfa_enabled() {
     let body: serde_json::Value = response.json();
 
     // Debug print if mfa_required is missing
-    if body.get("mfa_required").is_none() {
-        println!("DEBUG MFA LOGIN RESPONSE BODY: {:?}", body);
+
+    match body.get("mfa_required") {
+        Some(val) if val.is_boolean() && val.as_bool().unwrap() == true => {
+            // Sucesso: campo existe e é true
+        }
+        Some(val) => {
+            panic!(
+                "Falha no teste MFA: 'mfa_required' existe mas valor incorreto. Esperado: true, Recebido: {:?}. Body completo: {:?}",
+                val, body
+            );
+        }
+        None => {
+            panic!(
+                "Falha no teste MFA: Campo 'mfa_required' não encontrado no JSON. Body recebido: {:?}",
+                body
+            );
+        }
     }
 
-    assert_eq!(body["mfa_required"].as_bool().unwrap(), true);
+    if body.get("mfa_token").is_none() {
+        panic!("Falha no teste MFA: 'mfa_token' ausente. Body: {:?}", body);
+    }
     assert!(body["mfa_token"].as_str().unwrap().len() > 0);
-    assert_eq!(body["access_token"].as_str().unwrap(), "");
+
+    // FIX 2: Check that access_token is ABSENT (None), not an empty string.
+    // The MfaRequiredResponse struct does not contain an access_token field.
+    if body.get("access_token").is_some() && !body["access_token"].is_null() {
+        panic!("Falha no teste MFA: 'access_token' não deveria existir na resposta de desafio MFA. Body: {:?}", body);
+    }
 
     cleanup_test_users(&state.db_pool_auth).await.ok();
     println!("✅ test_api_auth_login_with_mfa_enabled: PASSED");

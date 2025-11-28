@@ -239,7 +239,7 @@ pub async fn register(
 
     state
         .email_service
-        .send_welcome_email(payload.email, &user.username);
+        .send_welcome_email(payload.email.clone(), &user.username);
 
     info!(user_id = %user.id, "Novo usuário registrado");
 
@@ -250,6 +250,8 @@ pub async fn register(
             refresh_token,
             ACCESS_TOKEN_EXPIRY_SECONDS,
             user.id,
+            user.username,
+            payload.email,
         )),
     ))
 }
