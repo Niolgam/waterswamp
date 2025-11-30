@@ -7,7 +7,8 @@ use axum::{
 use std::time::Instant;
 use uuid::Uuid;
 
-use crate::{state::AppState, web_models::CurrentUser};
+pub use crate::extractors::current_user::CurrentUser;
+use crate::state::AppState;
 
 /// Middleware that automatically logs audit events for all requests.
 /// This captures request metadata and response status for comprehensive auditing.

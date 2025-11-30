@@ -85,3 +85,36 @@ script = [
  "echo 'Criando migração LOGS na pasta migrations_logs/'",
  "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_logs"
 ]
+
+[tasks.reset-auth]
+description = "Deleta (Drop), Cria e Roda migrações do banco AUTH"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "echo 'Resetando banco AUTH...'",
+ # O -y confirma automaticamente sem pedir input
+ "sqlx database drop -y",
+ "sqlx database create",
+ "sqlx migrate run --source ../../crates/persistence/migrations_auth"
+]
+
+# --- Tarefa para RESETAR o banco LOGS ---
+[tasks.reset-logs]
+description = "Deleta (Drop), Cria e Roda migrações do banco LOGS"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_LOGS_DATABASE_URL",
+ "echo 'Resetando banco LOGS...'",
+ "sqlx database drop -y",
+ "sqlx database create",
+ "sqlx migrate run --source ../../crates/persistence/migrations_logs"
+]
+
+# --- Tarefa para RESETAR TUDO ---
+[tasks.reset-all]
+description = "Reseta ambos os bancos de dados"
+dependencies = ["reset-auth", "reset-logs"]

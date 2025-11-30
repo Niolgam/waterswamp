@@ -4,6 +4,7 @@ use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 
 use crate::{
+    api::{admin, auth, email_verification, mfa, users},
     infra::{cors, telemetry},
     middleware::audit,
     middleware::rate_limit::api_rate_limiter,
@@ -11,17 +12,21 @@ use crate::{
     state::AppState,
 };
 
-pub mod admin;
-pub mod auth;
 pub mod protected;
 pub mod public;
 
 pub fn build(app_state: AppState) -> Router {
-    let public_routes = public::router().merge(auth::router(app_state.clone()));
+    let public_routes = public::router()
+        .merge(auth::router())
+        .merge(email_verification::router())
+        .merge(mfa::router());
 
     // Routes that require authentication but NOT Casbin authorization
     // (any authenticated user can access these)
-    let authenticated_routes = auth::protected_auth_router()
+    let authenticated_routes = auth::protected_router()
+        .merge(email_verification::protected_router())
+        .merge(mfa::protected_router())
+        .merge(users::router())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             mw_authenticate,
@@ -31,7 +36,6 @@ pub fn build(app_state: AppState) -> Router {
     // Routes that require authentication AND Casbin authorization
     // (role-based access control)
     let protected_routes = protected::router()
-        .merge(admin::router())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             mw_authorize,
@@ -42,10 +46,24 @@ pub fn build(app_state: AppState) -> Router {
         ))
         .layer(api_rate_limiter());
 
+    let admin_routes = Router::new()
+        .nest("/api/admin", admin::router())
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            mw_authorize, // Verifica permissões Casbin
+        ))
+        .layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            mw_authenticate, // Verifica JWT
+        ))
+        // Rate limit para admin pode ser diferente, usando o padrão por enquanto
+        .layer(api_rate_limiter());
+
     let router = Router::new()
         .merge(public_routes)
         .merge(authenticated_routes)
         .merge(protected_routes)
+        .merge(admin_routes)
         .with_state(app_state.clone());
 
     apply_global_middleware(router, app_state)

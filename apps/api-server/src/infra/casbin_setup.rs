@@ -1,6 +1,6 @@
+pub use crate::extractors::current_user::CurrentUser;
 use crate::state::SharedEnforcer;
 use crate::utils::*;
-use crate::web_models::CurrentUser;
 use anyhow::{Context, Result};
 use axum::http::request::Parts;
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};

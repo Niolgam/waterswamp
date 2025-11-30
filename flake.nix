@@ -22,6 +22,8 @@
           # Se estiver usando rust via overlay, mantenha a linha abaixo,
           # senão o nix vai usar o cargo padrão do sistema se você rodar `nix develop`
           pkgs.rust-bin.stable.latest.default 
+          pkgs.cargo-make
+          pkgs.sqlx-cli
         ];
 
         # Bibliotecas que seu código precisa linkar (OpenSSL)

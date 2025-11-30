@@ -1,125 +1,109 @@
 use anyhow::Context;
 use axum::{extract::State, Json};
+use chrono::{Duration, Utc};
+use rand::Rng;
 use sha2::{Digest, Sha256};
 use totp_rs::{Algorithm as TotpAlgorithm, Secret, TOTP};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::{error::AppError, state::AppState, web_models::CurrentUser};
+use crate::{
+    extractors::current_user::CurrentUser,
+    infra::{errors::AppError, state::AppState},
+};
 use core_services::security::verify_password;
-use domain::models::TokenType; // Adicionado TokenType
+use domain::models::TokenType;
 use persistence::repositories::{mfa_repository::MfaRepository, user_repository::UserRepository};
 
-use serde::{Deserialize, Serialize};
+use super::contracts::*;
 
 // Constants
 const MFA_SETUP_EXPIRY_MINUTES: i64 = 15;
-const MFA_CHALLENGE_EXPIRY_SECONDS: i64 = 300; // 5 minutes
 const BACKUP_CODES_COUNT: usize = 10;
 const BACKUP_CODE_LENGTH: usize = 12;
+const ACCESS_TOKEN_EXPIRY_SECONDS: i64 = 3600;
+const REFRESH_TOKEN_EXPIRY_SECONDS: i64 = 604800; // 7 dias
 
-// ... (Mantenha as structs de Request/Response idênticas às originais aqui) ...
-// Vou omitir as structs para brevidade, pois elas não mudam.
-// Certifique-se de manter: MfaSetupResponse, MfaVerifySetupPayload, etc.
-// até MfaChallengeClaims (embora MfaChallengeClaims agora venha do domain,
-// mas se estiver redefinido aqui localmente, remova-o e use domain::models::MfaChallengeClaims se possível,
-// ou deixe como está se for usado apenas internamente, mas o JwtService usa o do domain).
+// --- Helper Functions ---
 
-// IMPORTANTE: Remova a struct MfaChallengeClaims local se ela for conflitante,
-// mas como o handler usava uma local, vamos atualizar para usar a lógica do JwtService
-// que retorna domain::models::MfaChallengeClaims.
-
-// =============================================================================
-// REQUEST/RESPONSE TYPES (Copiados para contexto, mantenha no arquivo)
-// =============================================================================
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MfaSetupResponse {
-    pub secret: String,
-    pub qr_code_url: String,
-    pub setup_token: String,
+fn hash_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
-#[derive(Debug, Deserialize, Serialize, Validate)]
-pub struct MfaVerifySetupPayload {
-    #[validate(length(min = 1, message = "Setup token não pode estar vazio"))]
-    pub setup_token: String,
-    #[validate(length(equal = 6, message = "Código TOTP deve ter 6 dígitos"))]
-    pub totp_code: String,
+fn hash_backup_code(code: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(code.to_uppercase().as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MfaSetupCompleteResponse {
-    pub enabled: bool,
-    pub backup_codes: Vec<String>,
-    pub message: String,
+fn generate_backup_code() -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let mut rng = rand::thread_rng();
+
+    (0..BACKUP_CODE_LENGTH)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
 }
 
-#[derive(Debug, Deserialize, Serialize, Validate)]
-pub struct MfaVerifyPayload {
-    #[validate(length(min = 1, message = "MFA token não pode estar vazio"))]
-    pub mfa_token: String,
-    #[validate(length(min = 6, max = 12, message = "Código deve ter entre 6 e 12 caracteres"))]
-    pub code: String,
+fn generate_backup_codes() -> (Vec<String>, Vec<String>) {
+    let mut plain_codes = Vec::with_capacity(BACKUP_CODES_COUNT);
+    let mut hashed_codes = Vec::with_capacity(BACKUP_CODES_COUNT);
+
+    for _ in 0..BACKUP_CODES_COUNT {
+        let code = generate_backup_code();
+        hashed_codes.push(hash_backup_code(&code));
+        plain_codes.push(code);
+    }
+
+    (plain_codes, hashed_codes)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MfaRequiredResponse {
-    pub mfa_required: bool,
-    pub mfa_token: String,
-    pub message: String,
+/// Helper local para gerar tokens (Access + Refresh)
+async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, String), AppError> {
+    // 1. Generate Access Token
+    let access_token = state
+        .jwt_service
+        .generate_token(user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
+        .map_err(|e| {
+            error!("Erro ao gerar access token: {:?}", e);
+            AppError::Anyhow(e)
+        })?;
+
+    // 2. Generate Refresh Token (Opaque)
+    let refresh_token_raw = Uuid::new_v4().to_string();
+    let refresh_token_hash = hash_token(&refresh_token_raw);
+    let family_id = Uuid::new_v4();
+    let expires_at = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECONDS);
+
+    // 3. Save Refresh Token
+    sqlx::query(
+        r#"
+        INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id, parent_token_hash)
+        VALUES ($1, $2, $3, $4, NULL)
+        "#,
+    )
+    .bind(user_id)
+    .bind(&refresh_token_hash)
+    .bind(expires_at)
+    .bind(family_id)
+    .execute(&state.db_pool_auth)
+    .await
+    .context("Falha ao salvar refresh token")?;
+
+    Ok((access_token, refresh_token_raw))
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MfaVerifyResponse {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub token_type: String,
-    pub expires_in: i64,
-    pub backup_code_used: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize, Validate)]
-pub struct MfaDisablePayload {
-    #[validate(length(min = 1, message = "Senha não pode estar vazia"))]
-    pub password: String,
-    #[validate(length(equal = 6, message = "Código TOTP deve ter 6 dígitos"))]
-    pub totp_code: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MfaDisableResponse {
-    pub disabled: bool,
-    pub message: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, Validate)]
-pub struct MfaRegenerateBackupCodesPayload {
-    #[validate(length(min = 1, message = "Senha não pode estar vazia"))]
-    pub password: String,
-    #[validate(length(equal = 6, message = "Código TOTP deve ter 6 dígitos"))]
-    pub totp_code: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MfaBackupCodesResponse {
-    pub backup_codes: Vec<String>,
-    pub message: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MfaStatusResponse {
-    pub enabled: bool,
-    pub backup_codes_remaining: Option<usize>,
-}
-
-// Removida MfaChallengeClaims local, pois usaremos o JwtService que lida com domain::models
-
-// =============================================================================
-// HANDLERS
-// =============================================================================
+// --- Handlers ---
 
 /// POST /auth/mfa/setup
-pub async fn handler_mfa_setup(
+/// Inicia o processo de configuração de MFA
+pub async fn setup(
     State(state): State<AppState>,
     current_user: CurrentUser,
 ) -> Result<Json<MfaSetupResponse>, AppError> {
@@ -159,7 +143,7 @@ pub async fn handler_mfa_setup(
         .save_setup_token(current_user.id, &secret_base32, MFA_SETUP_EXPIRY_MINUTES)
         .await?;
 
-    tracing::info!(user_id = %current_user.id, event_type = "mfa_setup_initiated", "Configuração de MFA iniciada");
+    info!(user_id = %current_user.id, "Configuração de MFA iniciada");
 
     Ok(Json(MfaSetupResponse {
         secret: secret_base32,
@@ -169,12 +153,13 @@ pub async fn handler_mfa_setup(
 }
 
 /// POST /auth/mfa/verify-setup
-pub async fn handler_mfa_verify_setup(
+/// Confirma a configuração e ativa o MFA
+pub async fn verify_setup(
     State(state): State<AppState>,
     current_user: CurrentUser,
-    Json(payload): Json<MfaVerifySetupPayload>,
+    Json(payload): Json<MfaVerifySetupRequest>,
 ) -> Result<Json<MfaSetupCompleteResponse>, AppError> {
-    payload.validate()?;
+    payload.validate().map_err(AppError::Validation)?;
 
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
     let user_repo = UserRepository::new(&state.db_pool_auth);
@@ -229,7 +214,7 @@ pub async fn handler_mfa_verify_setup(
         .email_service
         .send_mfa_enabled_email(user.email, &user.username);
 
-    tracing::info!(user_id = %current_user.id, event_type = "mfa_enabled", "MFA ativado com sucesso");
+    info!(user_id = %current_user.id, "MFA ativado com sucesso");
 
     Ok(Json(MfaSetupCompleteResponse {
         enabled: true,
@@ -240,18 +225,19 @@ pub async fn handler_mfa_verify_setup(
 }
 
 /// POST /auth/mfa/verify
-pub async fn handler_mfa_verify(
+/// Verifica código MFA durante o login
+pub async fn verify(
     State(state): State<AppState>,
-    Json(payload): Json<MfaVerifyPayload>,
+    Json(payload): Json<MfaVerifyRequest>,
 ) -> Result<Json<MfaVerifyResponse>, AppError> {
-    payload.validate()?;
+    payload.validate().map_err(AppError::Validation)?;
 
-    // 1. Verify MFA challenge token using JwtService
+    // 1. Verify MFA challenge token
     let claims = state
         .jwt_service
         .verify_mfa_token(&payload.mfa_token)
         .map_err(|e| {
-            tracing::warn!(error = %e, "Falha na validação do token MFA");
+            warn!(error = %e, "Falha na validação do token MFA");
             AppError::Unauthorized("Token MFA inválido ou expirado".to_string())
         })?;
 
@@ -312,35 +298,36 @@ pub async fn handler_mfa_verify(
     };
 
     if !code_valid {
-        tracing::warn!(user_id = %user_id, event_type = "mfa_verification_failed", "Verificação MFA falhou");
+        warn!(user_id = %user_id, "Verificação MFA falhou");
         return Err(AppError::Unauthorized("Código MFA inválido".to_string()));
     }
 
-    // 5. Generate tokens using updated helper
+    // 5. Generate tokens
     let (access_token, refresh_token) = generate_tokens(&state, user_id).await?;
 
     if backup_code_used {
-        tracing::warn!(user_id = %user_id, event_type = "mfa_backup_code_used", "Código de backup usado");
+        warn!(user_id = %user_id, "Código de backup usado");
     }
 
-    tracing::info!(user_id = %user_id, event_type = "mfa_verification_success", "Verificação MFA bem-sucedida");
+    info!(user_id = %user_id, "Verificação MFA bem-sucedida");
 
     Ok(Json(MfaVerifyResponse {
         access_token,
         refresh_token,
         token_type: "Bearer".to_string(),
-        expires_in: 3600,
+        expires_in: ACCESS_TOKEN_EXPIRY_SECONDS,
         backup_code_used,
     }))
 }
 
 /// POST /auth/mfa/disable
-pub async fn handler_mfa_disable(
+/// Desativa o MFA
+pub async fn disable(
     State(state): State<AppState>,
     current_user: CurrentUser,
-    Json(payload): Json<MfaDisablePayload>,
+    Json(payload): Json<MfaDisableRequest>,
 ) -> Result<Json<MfaDisableResponse>, AppError> {
-    payload.validate()?;
+    payload.validate().map_err(AppError::Validation)?;
 
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
     let user_repo = UserRepository::new(&state.db_pool_auth);
@@ -392,7 +379,7 @@ pub async fn handler_mfa_disable(
 
     mfa_repo.disable_mfa(current_user.id).await?;
 
-    tracing::warn!(user_id = %current_user.id, event_type = "mfa_disabled", "MFA desativado");
+    warn!(user_id = %current_user.id, "MFA desativado");
 
     Ok(Json(MfaDisableResponse {
         disabled: true,
@@ -401,12 +388,12 @@ pub async fn handler_mfa_disable(
 }
 
 /// POST /auth/mfa/regenerate-backup-codes
-pub async fn handler_mfa_regenerate_backup_codes(
+pub async fn regenerate_backup_codes(
     State(state): State<AppState>,
     current_user: CurrentUser,
-    Json(payload): Json<MfaRegenerateBackupCodesPayload>,
+    Json(payload): Json<MfaRegenerateBackupCodesRequest>,
 ) -> Result<Json<MfaBackupCodesResponse>, AppError> {
-    payload.validate()?;
+    payload.validate().map_err(AppError::Validation)?;
 
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
     let user_repo = UserRepository::new(&state.db_pool_auth);
@@ -466,7 +453,7 @@ pub async fn handler_mfa_regenerate_backup_codes(
         .update_backup_codes(current_user.id, &backup_codes_hashed)
         .await?;
 
-    tracing::info!(user_id = %current_user.id, event_type = "mfa_backup_codes_regenerated", "Códigos de backup regenerados");
+    info!(user_id = %current_user.id, "Códigos de backup regenerados");
 
     Ok(Json(MfaBackupCodesResponse {
         backup_codes: backup_codes_plain,
@@ -476,7 +463,7 @@ pub async fn handler_mfa_regenerate_backup_codes(
 }
 
 /// GET /auth/mfa/status
-pub async fn handler_mfa_status(
+pub async fn status(
     State(state): State<AppState>,
     current_user: CurrentUser,
 ) -> Result<Json<MfaStatusResponse>, AppError> {
@@ -494,88 +481,4 @@ pub async fn handler_mfa_status(
         enabled,
         backup_codes_remaining,
     }))
-}
-
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
-
-fn generate_backup_codes() -> (Vec<String>, Vec<String>) {
-    let mut plain_codes = Vec::with_capacity(BACKUP_CODES_COUNT);
-    let mut hashed_codes = Vec::with_capacity(BACKUP_CODES_COUNT);
-
-    for _ in 0..BACKUP_CODES_COUNT {
-        let code = generate_backup_code();
-        hashed_codes.push(hash_backup_code(&code));
-        plain_codes.push(code);
-    }
-
-    (plain_codes, hashed_codes)
-}
-
-fn generate_backup_code() -> String {
-    use rand::Rng;
-    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let mut rng = rand::thread_rng();
-
-    (0..BACKUP_CODE_LENGTH)
-        .map(|_| {
-            let idx = rng.gen_range(0..CHARSET.len());
-            CHARSET[idx] as char
-        })
-        .collect()
-}
-
-fn hash_backup_code(code: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(code.to_uppercase().as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
-/// Generates an MFA challenge token using JwtService
-pub fn generate_mfa_challenge_token(state: &AppState, user_id: Uuid) -> anyhow::Result<String> {
-    state
-        .jwt_service
-        .generate_mfa_token(user_id, MFA_CHALLENGE_EXPIRY_SECONDS)
-}
-
-/// Helper to generate tokens using JwtService (updated to use state.jwt_service)
-async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, String), AppError> {
-    use chrono::{Duration, Utc};
-
-    // 1. Generate Access Token
-    let access_token = state
-        .jwt_service
-        .generate_token(user_id, TokenType::Access, 3600)
-        .map_err(|e| {
-            tracing::error!("Erro ao gerar access token: {:?}", e);
-            AppError::Anyhow(e)
-        })?;
-
-    // 2. Generate Refresh Token (Opaque)
-    let refresh_token_raw = Uuid::new_v4().to_string();
-    let refresh_token_hash = {
-        let mut hasher = Sha256::new();
-        hasher.update(refresh_token_raw.as_bytes());
-        format!("{:x}", hasher.finalize())
-    };
-    let family_id = Uuid::new_v4();
-    let expires_at = Utc::now() + Duration::seconds(604800); // 7 days
-
-    // 3. Save Refresh Token
-    sqlx::query(
-        r#"
-        INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id, parent_token_hash)
-        VALUES ($1, $2, $3, $4, NULL)
-        "#,
-    )
-    .bind(user_id)
-    .bind(&refresh_token_hash)
-    .bind(expires_at)
-    .bind(family_id)
-    .execute(&state.db_pool_auth)
-    .await
-    .context("Falha ao salvar refresh token")?;
-
-    Ok((access_token, refresh_token_raw))
 }

@@ -28,7 +28,8 @@ async fn test_registration_sends_verification_email() {
         }))
         .await;
 
-    response.assert_status_ok();
+    // ATUALIZADO: Espera 201 Created em vez de 200 OK
+    assert_eq!(response.status_code(), 201);
 
     // Wait for async email task
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -75,7 +76,8 @@ async fn test_verify_email_success() {
         }))
         .await;
 
-    register_response.assert_status_ok();
+    // ATUALIZADO: Espera 201 Created em vez de 200 OK
+    assert_eq!(register_response.status_code(), 201);
 
     // 2. Get the user ID
     let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")

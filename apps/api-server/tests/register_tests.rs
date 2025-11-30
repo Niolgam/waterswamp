@@ -16,19 +16,21 @@ async fn test_register_success() {
         .post("/register")
         .json(&json!({
             "username": unique_username,
-        "email": unique_email,
+            "email": unique_email,
             "password": "S3nh@Forte123"
         }))
         .await;
 
     // Debugging útil caso o teste falhe
-    if response.status_code() != StatusCode::OK {
+    // ATUALIZADO: Verifica se é CREATED (201)
+    if response.status_code() != StatusCode::CREATED {
         let body_text = response.text();
         println!("Erro no registro: {}", body_text);
         panic!("Registro falhou com status {}", response.status_code());
     }
 
-    response.assert_status_ok();
+    // ATUALIZADO: Asserção direta para 201
+    assert_eq!(response.status_code(), StatusCode::CREATED);
 
     let body: Value = response.json();
     assert!(body["access_token"].is_string(), "access_token missing");
@@ -54,7 +56,8 @@ async fn test_register_username_taken() {
         }))
         .await;
 
-    response1.assert_status_ok();
+    // ATUALIZADO: Espera 201 Created
+    assert_eq!(response1.status_code(), StatusCode::CREATED);
 
     // 2. Segundo registro (deve falhar com conflito)
     let response2 = app
@@ -153,7 +156,9 @@ async fn test_register_success_sends_welcome_email() {
         .await;
 
     // 2. Verificar se a API funcionou
-    response.assert_status_ok();
+    // ATUALIZADO: Espera 201 Created
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+
     let body: Value = response.json();
     assert!(body["access_token"].is_string(), "access_token missing");
 

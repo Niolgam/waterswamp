@@ -11,12 +11,8 @@ use tracing::info;
 
 use crate::handlers::audit_services::AuditService;
 
-pub mod infra;
-pub use infra::casbin_setup;
-pub use infra::config;
-pub use infra::errors as error;
 pub mod handlers;
-pub use infra::telemetry;
+pub mod infra;
 mod middleware;
 pub mod openapi;
 pub mod routes;
@@ -25,19 +21,18 @@ pub use infra::state;
 pub mod api;
 pub mod extractors;
 pub mod utils;
-pub mod web_models;
 
 pub async fn run(addr: SocketAddr) -> Result<()> {
     // ⭐ 1. Inicializar logging ANTES de tudo
-    let log_config = telemetry::LoggingConfig::default();
-    telemetry::init_logging(log_config)?;
+    let log_config = infra::telemetry::LoggingConfig::default();
+    infra::telemetry::init_logging(log_config)?;
 
     // ⭐ 2. Inicializar timestamp de uptime
     handlers::health_handler::init_server_start_time();
 
     info!("🚀 Iniciando Waterswamp API...");
 
-    let config = config::Config::from_env()?;
+    let config = infra::config::Config::from_env()?;
 
     info!("🔌 Conectando aos bancos de dados...");
     let pool_auth = PgPool::connect(&config.auth_db).await?;
@@ -45,7 +40,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     info!("✅ Conexões com bancos estabelecidas");
 
     info!("🔐 Inicializando Casbin...");
-    let enforcer = casbin_setup::setup_casbin(pool_auth.clone()).await?;
+    let enforcer = infra::casbin_setup::setup_casbin(pool_auth.clone()).await?;
     info!("✅ Casbin inicializado");
 
     info!("🔑 Inicializando serviço JWT (EdDSA)...");

@@ -3,17 +3,17 @@
 //! Handlers para autenticação: login, registro, refresh token, logout,
 //! forgot password e reset password.
 
+use crate::api::email_verification::create_verification_token;
 use anyhow::Context;
 use axum::{extract::State, http::StatusCode, Json};
 use chrono::{Duration, Utc};
+use core_services::security::{hash_password, validate_password_strength, verify_password};
+use domain::models::TokenType;
+use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use sha2::{Digest, Sha256};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
-
-use core_services::security::{hash_password, validate_password_strength, verify_password};
-use domain::models::TokenType;
-use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 
 use crate::infra::{errors::AppError, state::AppState};
 
@@ -83,22 +83,6 @@ fn generate_mfa_challenge_token(state: &AppState, user_id: Uuid) -> anyhow::Resu
     state
         .jwt_service
         .generate_mfa_token(user_id, MFA_CHALLENGE_EXPIRY_SECONDS)
-}
-
-/// Cria token de verificação de email
-async fn create_verification_token(state: &AppState, user_id: Uuid) -> anyhow::Result<String> {
-    use persistence::repositories::email_verification_repository::EmailVerificationRepository;
-
-    let verification_repo = EmailVerificationRepository::new(&state.db_pool_auth);
-    let verification_token = Uuid::new_v4().to_string();
-    let token_hash = hash_token(&verification_token);
-
-    verification_repo
-        .save_verification_token(user_id, &token_hash, 24) // 24 horas
-        .await
-        .context("Falha ao salvar token de verificação")?;
-
-    Ok(verification_token)
 }
 
 // =============================================================================

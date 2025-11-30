@@ -32,7 +32,7 @@ pub mod handlers;
 
 use axum::{routing::post, Router};
 
-use crate::infra::state::AppState;
+use crate::{infra::state::AppState, middleware::login_rate_limiter};
 
 // =============================================================================
 // RE-EXPORTS
@@ -72,13 +72,23 @@ pub use contracts::{
 /// let router = auth::router().with_state(app_state);
 /// ```
 pub fn router() -> Router<AppState> {
-    Router::new()
+    let auth_routes = Router::new()
+        // Autenticação Básica
         .route("/login", post(handlers::login))
         .route("/register", post(handlers::register))
         .route("/refresh-token", post(handlers::refresh_token))
         .route("/logout", post(handlers::logout))
         .route("/forgot-password", post(handlers::forgot_password))
-        .route("/reset-password", post(handlers::reset_password))
+        .route("/reset-password", post(handlers::reset_password));
+
+    auth_routes.layer(login_rate_limiter())
+}
+
+/// Cria o router para rotas de autenticação protegidas (requerem token de acesso).
+///
+/// Inclui: Status de Verificação, Configuração e Gestão de MFA.
+pub fn protected_router() -> Router<AppState> {
+    Router::new()
 }
 
 // =============================================================================

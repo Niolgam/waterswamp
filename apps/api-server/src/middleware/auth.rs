@@ -1,5 +1,5 @@
-use crate::web_models::CurrentUser;
-use crate::{error::AppError, state::AppState};
+pub use crate::extractors::current_user::CurrentUser;
+use crate::{infra::errors::AppError, state::AppState};
 use axum::{
     extract::{Request, State},
     http::HeaderMap,

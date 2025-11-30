@@ -3,7 +3,10 @@
 //! - `contracts` - DTOs de request/response
 //!
 
+pub mod admin;
 pub mod auth;
+pub mod email_verification;
+pub mod mfa;
 pub mod users;
 
 use axum::Router;

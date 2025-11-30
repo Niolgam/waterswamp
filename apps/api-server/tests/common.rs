@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use axum_test::TestServer;
 use core_services::jwt::JwtService;
 use domain::models::{Claims, TokenType};
@@ -11,9 +10,9 @@ use std::sync::Once;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use waterswamp::casbin_setup::setup_casbin;
-use waterswamp::config::Config;
 use waterswamp::handlers::audit_services::AuditService;
+use waterswamp::infra::casbin_setup::setup_casbin;
+use waterswamp::infra::config::Config;
 use waterswamp::routes::build;
 use waterswamp::state::AppState;
 
@@ -291,7 +290,7 @@ pub async fn register_test_user(
         }))
         .await;
 
-    if response.status_code() != 200 {
+    if response.status_code() != 201 {
         return Err(format!(
             "Falha ao registrar usuário: status={}, body={}",
             response.status_code(),
