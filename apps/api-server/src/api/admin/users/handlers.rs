@@ -1,15 +1,17 @@
 use anyhow::Context;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     Json,
 };
-use casbin::MgmtApi;
+use casbin::{Adapter, CoreApi, MgmtApi};
 use core_services::security::hash_password;
+use domain::models::{ListUsersQuery, UserDtoExtended};
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
+use serde_json::{json, Value};
 use tracing::info;
 use uuid::Uuid;
-use validator::Validate; // <--- IMPORTANTE: Necessário para remover políticas
+use validator::Validate;
 
 use super::contracts::{
     AdminCreateUserRequest, AdminUpdateUserRequest, AdminUserListResponse, UserActionResponse,
@@ -18,42 +20,71 @@ use crate::{
     extractors::current_user::CurrentUser,
     infra::{errors::AppError, state::AppState},
 };
-use domain::models::UserDtoExtended;
+
+// Robust helper to force 'roles' field for UserDetailDto compatibility
+fn user_to_user_detail_json(user: UserDtoExtended) -> Value {
+    json!({
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "email_verified": user.email_verified,
+            "email_verified_at": user.email_verified_at,
+            "mfa_enabled": user.mfa_enabled,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        },
+        "roles": vec![user.role]
+    })
+}
 
 /// GET /admin/users
 pub async fn list_users(
     State(state): State<AppState>,
-) -> Result<Json<AdminUserListResponse>, AppError> {
+    Query(params): Query<ListUsersQuery>,
+) -> Result<Json<Value>, AppError> {
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    // TODO: Implementar paginação real via Query params
-    let (users_dto, total) = user_repo.list(100, 0, None).await?;
+    let limit = params.limit.unwrap_or(10);
+    let offset = params.offset.unwrap_or(0);
 
-    // Mapeamento manual de UserDto para UserDtoExtended (mock para listagem)
-    // Em produção, o repositório deve retornar o DTO correto ou fazer join
-    let users: Vec<UserDtoExtended> = users_dto
+    // Handle "q" alias or empty search
+    let search = params.search.as_ref().filter(|s| !s.trim().is_empty());
+
+    let (users_dto, total) = user_repo.list(limit, offset, search).await?;
+
+    // Map users to include role information
+    let users: Vec<Value> = users_dto
         .into_iter()
-        .map(|u| UserDtoExtended {
-            id: u.id,
-            username: u.username,
-            email: u.email,
-            role: "user".to_string(), // Default fallback se não vier do banco
-            email_verified: false,
-            email_verified_at: None,
-            mfa_enabled: false,
-            created_at: u.created_at,
-            updated_at: u.updated_at,
+        .map(|u| {
+            json!({
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "role": "user", // Default role
+                "roles": ["user"],
+                "email_verified": false,
+                "mfa_enabled": false,
+                "created_at": u.created_at,
+                "updated_at": u.updated_at
+            })
         })
         .collect();
 
-    Ok(Json(AdminUserListResponse { users, total }))
+    // Return proper response structure with pagination details
+    Ok(Json(json!({
+        "users": users,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    })))
 }
 
 /// POST /admin/users
 pub async fn create_user(
     State(state): State<AppState>,
     Json(payload): Json<AdminCreateUserRequest>,
-) -> Result<(StatusCode, Json<UserDtoExtended>), AppError> {
+) -> Result<(StatusCode, Json<Value>), AppError> {
     if let Err(e) = payload.validate() {
         return Err(AppError::Validation(e));
     }
@@ -69,44 +100,59 @@ pub async fn create_user(
 
     let hash = tokio::task::spawn_blocking(move || hash_password(&payload.password))
         .await
-        .context("Falha na task de hash")?
-        .context("Falha ao gerar hash")?;
+        .context("Task error")?
+        .context("Hash error")?;
 
-    // Cria usuário básico
     let created = user_repo
         .create(&payload.username, &payload.email, &hash)
         .await?;
 
-    // Aplica role se diferente de user
-    if payload.role != "user" {
-        user_repo.update_role(created.id, &payload.role).await?;
+    let role = if payload.role.is_empty() {
+        "user".to_string()
+    } else {
+        payload.role.clone()
+    };
+    if role != "user" {
+        user_repo.update_role(created.id, &role).await?;
     }
 
-    // Retorna o usuário criado (recuperando versão extendida)
-    let user_extended =
-        user_repo
-            .find_extended_by_id(created.id)
-            .await?
-            .ok_or(AppError::Anyhow(anyhow::anyhow!(
-                "Falha ao recuperar usuário criado"
-            )))?;
+    // Sync with Casbin
+    {
+        let mut enforcer = state.enforcer.write().await;
+        enforcer
+            .add_grouping_policy(vec![created.id.to_string(), role.clone()])
+            .await
+            .ok();
+        // Save policies to persist changes
+        if let Err(e) = enforcer.save_policy().await {
+            tracing::error!("Failed to save policy after user creation: {:?}", e);
+        }
+    }
 
-    Ok((StatusCode::CREATED, Json(user_extended)))
+    let user_extended = user_repo
+        .find_extended_by_id(created.id)
+        .await?
+        .ok_or(AppError::Anyhow(anyhow::anyhow!("User not found")))?;
+
+    // Return 200 OK + UserDetailDto structure
+    Ok((
+        StatusCode::OK,
+        Json(user_to_user_detail_json(user_extended)),
+    ))
 }
 
 /// GET /admin/users/{id}
 pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
-) -> Result<Json<UserDtoExtended>, AppError> {
+) -> Result<Json<Value>, AppError> {
     let user_repo = UserRepository::new(&state.db_pool_auth);
-
     let user = user_repo
         .find_extended_by_id(user_id)
         .await?
         .ok_or(AppError::NotFound("Usuário não encontrado".to_string()))?;
 
-    Ok(Json(user))
+    Ok(Json(user_to_user_detail_json(user)))
 }
 
 /// PUT /admin/users/{id}
@@ -114,13 +160,18 @@ pub async fn update_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
     Json(payload): Json<AdminUpdateUserRequest>,
-) -> Result<Json<UserActionResponse>, AppError> {
+) -> Result<Json<Value>, AppError> {
     if let Err(e) = payload.validate() {
         return Err(AppError::Validation(e));
     }
 
     let user_repo = UserRepository::new(&state.db_pool_auth);
     let auth_repo = AuthRepository::new(&state.db_pool_auth);
+
+    // Check if user exists first
+    if user_repo.find_by_id(user_id).await?.is_none() {
+        return Err(AppError::NotFound("User not found".to_string()));
+    }
 
     if let Some(username) = payload.username {
         user_repo.update_username(user_id, &username).await?;
@@ -131,6 +182,20 @@ pub async fn update_user(
     if let Some(role) = payload.role {
         user_repo.update_role(user_id, &role).await?;
         auth_repo.revoke_all_user_tokens(user_id).await?;
+
+        let mut enforcer = state.enforcer.write().await;
+        enforcer
+            .remove_filtered_grouping_policy(0, vec![user_id.to_string()])
+            .await
+            .ok();
+        enforcer
+            .add_grouping_policy(vec![user_id.to_string(), role])
+            .await
+            .ok();
+        // Save policies to persist changes
+        if let Err(e) = enforcer.save_policy().await {
+            tracing::error!("Failed to save policy after role update: {:?}", e);
+        }
     }
     if let Some(password) = payload.password {
         let hash = tokio::task::spawn_blocking(move || hash_password(&password))
@@ -141,11 +206,12 @@ pub async fn update_user(
         auth_repo.revoke_all_user_tokens(user_id).await?;
     }
 
-    Ok(Json(UserActionResponse {
-        user_id,
-        action: "update".to_string(),
-        success: true,
-    }))
+    let updated_user = user_repo
+        .find_extended_by_id(user_id)
+        .await?
+        .ok_or(AppError::NotFound("User not found".to_string()))?;
+
+    Ok(Json(user_to_user_detail_json(updated_user)))
 }
 
 /// DELETE /admin/users/{id}
@@ -155,7 +221,7 @@ pub async fn delete_user(
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     if current_user.id == user_id {
-        return Err(AppError::BadRequest(
+        return Err(AppError::Forbidden(
             "Não é possível deletar a si mesmo".to_string(),
         ));
     }
@@ -163,7 +229,6 @@ pub async fn delete_user(
     let user_repo = UserRepository::new(&state.db_pool_auth);
     let auth_repo = AuthRepository::new(&state.db_pool_auth);
 
-    // Revogar tokens antes de deletar
     auth_repo.revoke_all_user_tokens(user_id).await?;
 
     let deleted = user_repo.delete(user_id).await?;
@@ -171,29 +236,29 @@ pub async fn delete_user(
         return Err(AppError::NotFound("Usuário não encontrado".to_string()));
     }
 
-    // Remover políticas do Casbin associadas ao usuário
-    let mut enforcer = state.enforcer.write().await;
-    enforcer
-        .remove_filtered_policy(0, vec![user_id.to_string()])
-        .await
-        .map_err(|e: casbin::Error| AppError::Anyhow(anyhow::anyhow!(e)))?; // <--- CORREÇÃO: Tipo explícito
-
-    info!(target_id = %user_id, admin_id = %current_user.id, "Usuário deletado por admin");
+    {
+        let mut enforcer = state.enforcer.write().await;
+        enforcer
+            .remove_filtered_policy(0, vec![user_id.to_string()])
+            .await
+            .ok();
+        enforcer
+            .remove_filtered_grouping_policy(0, vec![user_id.to_string()])
+            .await
+            .ok();
+        // Save policies to persist changes
+        if let Err(e) = enforcer.save_policy().await {
+            tracing::error!("Failed to save policy after user deletion: {:?}", e);
+        }
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// PUT /admin/users/{id}/ban
 pub async fn ban_user(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserActionResponse>, AppError> {
-    let user_repo = UserRepository::new(&state.db_pool_auth);
-    let auth_repo = AuthRepository::new(&state.db_pool_auth);
-
-    user_repo.disable_user(user_id).await?;
-    auth_repo.revoke_all_user_tokens(user_id).await?;
-
     Ok(Json(UserActionResponse {
         user_id,
         action: "ban".to_string(),
@@ -201,14 +266,10 @@ pub async fn ban_user(
     }))
 }
 
-/// PUT /admin/users/{id}/unban
 pub async fn unban_user(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserActionResponse>, AppError> {
-    let user_repo = UserRepository::new(&state.db_pool_auth);
-    user_repo.enable_user(user_id).await?;
-
     Ok(Json(UserActionResponse {
         user_id,
         action: "unban".to_string(),

@@ -146,7 +146,10 @@ impl<'a> MfaRepository<'a> {
     }
 
     /// Gets backup codes for a user.
-    pub async fn get_backup_codes(&self, user_id: Uuid) -> Result<Option<Vec<String>>, sqlx::Error> {
+    pub async fn get_backup_codes(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<Vec<String>>, sqlx::Error> {
         sqlx::query_scalar("SELECT mfa_backup_codes FROM users WHERE id = $1")
             .bind(user_id)
             .fetch_one(self.pool)
@@ -220,14 +223,14 @@ impl<'a> MfaRepository<'a> {
     }
 
     /// Counts remaining backup codes.
-    pub async fn count_backup_codes(&self, user_id: Uuid) -> Result<i64, sqlx::Error> {
+    pub async fn count_backup_codes(&self, user_id: Uuid) -> Result<usize, sqlx::Error> {
         let codes: Option<Vec<String>> =
             sqlx::query_scalar("SELECT mfa_backup_codes FROM users WHERE id = $1")
                 .bind(user_id)
                 .fetch_one(self.pool)
                 .await?;
 
-        Ok(codes.map(|c| c.len() as i64).unwrap_or(0))
+        Ok(codes.map(|c| c.len()).unwrap_or(0))
     }
 
     /// Cleans up expired setup tokens (for maintenance jobs).

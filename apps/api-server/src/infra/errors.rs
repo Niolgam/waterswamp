@@ -15,18 +15,20 @@ pub enum AppError {
     #[error("Não autorizado: {0}")]
     Unauthorized(String),
 
-    #[error("Acesso negado")]
-    Forbidden,
+    #[error("Acesso negado: {0}")]
+    Forbidden(String),
 
     #[error("Não encontrado: {0}")]
     NotFound(String),
 
-    // Novos erros para regras de negócio
     #[error("Conflito: {0}")]
     Conflict(String),
 
     #[error("Requisição inválida: {0}")]
     BadRequest(String),
+
+    #[error("Erro interno: {0}")]
+    Internal(String),
 
     #[error("Erro interno: {0}")]
     Anyhow(#[from] anyhow::Error),
@@ -44,7 +46,7 @@ impl IntoResponse for AppError {
         // 1. Log do erro real no servidor (para nós, desenvolvedores)
         // Erros 4xx não precisam ser logados como ERROR, podem ser INFO ou WARN
         match &self {
-            AppError::Database(_) | AppError::Anyhow(_) => {
+            AppError::Database(_) | AppError::Anyhow(_) | AppError::Internal(_) => {
                 tracing::error!("Erro interno na requisição: {:?}", self)
             }
             _ => tracing::info!("Erro cliente na requisição: {:?}", self),
@@ -61,14 +63,12 @@ impl IntoResponse for AppError {
                 StatusCode::UNAUTHORIZED,
                 "Usuário ou senha inválidos.".to_string(),
             ),
-            AppError::Forbidden => (
-                StatusCode::FORBIDDEN,
-                "Você não tem permissão para acessar este recurso.".to_string(),
-            ),
+            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::Validation(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::Anyhow(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Erro interno inesperado.".to_string(),

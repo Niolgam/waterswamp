@@ -22,3 +22,10 @@ pub struct UserActionResponse {
     pub action: String,
     pub success: bool,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct PaginationParams {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+}

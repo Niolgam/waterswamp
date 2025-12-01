@@ -109,7 +109,7 @@ pub async fn mw_authorize(
             object,
             action
         );
-        return Err(AppError::Forbidden);
+        return Err(AppError::Forbidden("Access denied".to_string()));
     }
 
     tracing::info!(

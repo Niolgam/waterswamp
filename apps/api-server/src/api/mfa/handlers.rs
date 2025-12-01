@@ -173,7 +173,7 @@ pub async fn verify_setup(
         .ok_or_else(|| AppError::BadRequest("Token de setup expirado ou inválido".to_string()))?;
 
     if user_id != current_user.id {
-        return Err(AppError::Forbidden);
+        return Err(AppError::Forbidden("Access denied".to_string()));
     }
 
     let user = user_repo.find_by_id(user_id).await?.unwrap();
@@ -472,7 +472,7 @@ pub async fn status(
     let enabled = mfa_repo.is_mfa_enabled(current_user.id).await?;
 
     let backup_codes_remaining = if enabled {
-        Some(mfa_repo.count_backup_codes(current_user.id).await? as usize)
+        Some(mfa_repo.count_backup_codes(current_user.id).await?)
     } else {
         None
     };
