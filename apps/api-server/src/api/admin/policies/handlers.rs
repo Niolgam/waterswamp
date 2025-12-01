@@ -6,6 +6,12 @@ use validator::Validate;
 use super::contracts::{PolicyListResponse, PolicyRequest, PolicyResponse};
 use crate::infra::{errors::AppError, state::AppState};
 
+async fn clear_policy_cache(state: &AppState) {
+    let mut cache = state.policy_cache.write().await;
+    cache.clear();
+    tracing::debug!("Policy cache cleared");
+}
+
 pub async fn list_policies(
     State(state): State<AppState>,
 ) -> Result<Json<PolicyListResponse>, AppError> {
@@ -28,12 +34,22 @@ pub async fn add_policy(
         if user_repo.find_by_id(user_id).await?.is_none() {
             return Err(AppError::NotFound("User not found".to_string()));
         }
+    } else {
+        // If subject is not a UUID, check if it's a valid username
+        let user_repo = UserRepository::new(&state.db_pool_auth);
+        if user_repo.find_by_username(&payload.sub).await?.is_none() {
+            return Err(AppError::NotFound("User not found".to_string()));
+        }
     }
 
     let mut enforcer = state.enforcer.write().await;
 
     let result = enforcer
-        .add_policy(vec![payload.sub, payload.obj, payload.act])
+        .add_policy(vec![
+            payload.sub.clone(),
+            payload.obj.clone(),
+            payload.act.clone(),
+        ])
         .await;
 
     match result {
@@ -43,6 +59,9 @@ pub async fn add_policy(
                 tracing::error!("Failed to save policy: {:?}", e);
                 // Don't fail the request - policy is in memory
             }
+
+            clear_policy_cache(&state).await;
+
             Ok((
                 StatusCode::CREATED,
                 Json(PolicyResponse {
@@ -84,6 +103,9 @@ pub async fn remove_policy(
             tracing::error!("Failed to save policy: {:?}", e);
             // Don't fail the request - policy is removed from memory
         }
+
+        clear_policy_cache(&state).await;
+
         Ok(Json(PolicyResponse {
             success: true,
             message: "Policy removed successfully".to_string(),

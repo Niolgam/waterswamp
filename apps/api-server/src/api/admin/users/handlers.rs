@@ -32,9 +32,9 @@ fn user_to_user_detail_json(user: UserDtoExtended) -> Value {
             "email_verified_at": user.email_verified_at,
             "mfa_enabled": user.mfa_enabled,
             "created_at": user.created_at,
-            "updated_at": user.updated_at
+            "updated_at": user.updated_at,
+             "roles": vec![user.role]
         },
-        "roles": vec![user.role]
     })
 }
 

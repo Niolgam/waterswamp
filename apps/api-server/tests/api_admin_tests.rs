@@ -99,12 +99,16 @@ async fn test_admin_remove_nonexistent_policy_returns_404() {
 async fn test_dynamic_permission_flow() {
     let app = common::spawn_app().await;
     let resource = "/admin/dashboard";
+    let bob_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'bob'")
+        .fetch_one(&app.db_auth)
+        .await
+        .expect("Bob not found in seed");
 
     // 0. Setup: Garante que Bob (utilizador normal) NÃO tem acesso inicial
     app.api
         .delete("/api/admin/policies")
         .json(&json!({
-            "subject": "bob",
+            "subject": bob_id.to_string(),
             "object": resource,
             "action": "GET"
         }))
@@ -125,7 +129,7 @@ async fn test_dynamic_permission_flow() {
         .post("/api/admin/policies")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "subject": "bob",
+            "subject": bob_id.to_string(),
             "object": resource,
             "action": "GET"
         }))
@@ -145,7 +149,7 @@ async fn test_dynamic_permission_flow() {
         .api
         .delete("/api/admin/policies")
         .json(&json!({
-            "subject": "bob",
+            "subject": bob_id.to_string(),
             "object": resource,
             "action": "GET"
         }))
