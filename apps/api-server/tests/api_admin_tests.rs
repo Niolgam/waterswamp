@@ -346,18 +346,23 @@ async fn test_admin_update_user_role_and_password() {
 async fn test_admin_delete_user_and_cannot_delete_self() {
     let app = common::spawn_app().await;
 
+    let unique_username = format!("dave_{}", uuid::Uuid::new_v4());
+    let unique_email = format!("dave_{}@example.com", uuid::Uuid::new_v4());
+
     // 1. Criar utilizador 'dave' para apagar
     let create_response = app
         .api
         .post("/api/admin/users")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "username": "dave_to_delete",
-            "email": "dave@example.com",
+            "username": unique_username,
+            "email": unique_email,
             "password": "PasswordDave123!",
             "role": "user"
         }))
         .await;
+
+    println!("Response text: {}", create_response.text());
     let dave_id = create_response.json::<UserDetailDto>().user.id;
 
     // 2. Apagar 'dave' (DEVE ter sucesso)

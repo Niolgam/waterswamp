@@ -44,6 +44,28 @@ pub async fn add_policy(
 
     let mut enforcer = state.enforcer.write().await;
 
+    let policy_exists = enforcer.has_policy(vec![
+        payload.sub.clone(),
+        payload.obj.clone(),
+        payload.act.clone(),
+    ]);
+
+    if policy_exists {
+        tracing::info!(
+            "Policy already exists: sub={}, obj={}, act={}",
+            payload.sub,
+            payload.obj,
+            payload.act
+        );
+        return Ok((
+            StatusCode::OK,
+            Json(PolicyResponse {
+                success: true,
+                message: "Policy already exists".to_string(),
+            }),
+        ));
+    }
+
     let result = enforcer
         .add_policy(vec![
             payload.sub.clone(),
@@ -55,9 +77,22 @@ pub async fn add_policy(
     match result {
         Ok(true) => {
             // Save policies to persist changes
-            if let Err(e) = enforcer.save_policy().await {
-                tracing::error!("Failed to save policy: {:?}", e);
-                // Don't fail the request - policy is in memory
+            match enforcer.save_policy().await {
+                Ok(_) => {
+                    tracing::debug!("Policy saved to database successfully");
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    // PostgreSQL error 23505 = unique constraint violation
+                    if error_msg.contains("23505")
+                        || error_msg.contains("unique")
+                        || error_msg.contains("duplicate")
+                    {
+                        tracing::warn!("Policy already exists in database (concurrent insert)");
+                    } else {
+                        tracing::error!("Failed to save policy to database: {:?}", e);
+                    }
+                }
             }
 
             clear_policy_cache(&state).await;
@@ -90,7 +125,7 @@ pub async fn add_policy(
 pub async fn remove_policy(
     State(state): State<AppState>,
     Json(payload): Json<PolicyRequest>,
-) -> Result<Json<PolicyResponse>, AppError> {
+) -> Result<StatusCode, AppError> {
     let mut enforcer = state.enforcer.write().await;
     let removed = enforcer
         .remove_policy(vec![payload.sub, payload.obj, payload.act])
@@ -105,11 +140,9 @@ pub async fn remove_policy(
         }
 
         clear_policy_cache(&state).await;
+        tracing::info!("Policy cache cleared after removal");
 
-        Ok(Json(PolicyResponse {
-            success: true,
-            message: "Policy removed successfully".to_string(),
-        }))
+        Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::NotFound("Policy not found".to_string()))
     }

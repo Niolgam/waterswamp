@@ -6,7 +6,7 @@ use axum::{
 };
 use casbin::{Adapter, CoreApi, MgmtApi};
 use core_services::security::hash_password;
-use domain::models::{ListUsersQuery, UserDtoExtended};
+use domain::models::{ListUsersQuery, UserDetailDto, UserDto, UserDtoExtended};
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use serde_json::{json, Value};
 use tracing::info;
@@ -21,21 +21,17 @@ use crate::{
     infra::{errors::AppError, state::AppState},
 };
 
-// Robust helper to force 'roles' field for UserDetailDto compatibility
-fn user_to_user_detail_json(user: UserDtoExtended) -> Value {
-    json!({
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "email_verified": user.email_verified,
-            "email_verified_at": user.email_verified_at,
-            "mfa_enabled": user.mfa_enabled,
-            "created_at": user.created_at,
-            "updated_at": user.updated_at,
-             "roles": vec![user.role]
+fn user_to_user_detail_dto(user: UserDtoExtended) -> UserDetailDto {
+    UserDetailDto {
+        user: UserDto {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
         },
-    })
+        roles: vec![user.role],
+    }
 }
 
 /// GET /admin/users
@@ -84,7 +80,7 @@ pub async fn list_users(
 pub async fn create_user(
     State(state): State<AppState>,
     Json(payload): Json<AdminCreateUserRequest>,
-) -> Result<(StatusCode, Json<Value>), AppError> {
+) -> Result<(StatusCode, Json<UserDetailDto>), AppError> {
     if let Err(e) = payload.validate() {
         return Err(AppError::Validation(e));
     }
@@ -135,24 +131,21 @@ pub async fn create_user(
         .ok_or(AppError::Anyhow(anyhow::anyhow!("User not found")))?;
 
     // Return 200 OK + UserDetailDto structure
-    Ok((
-        StatusCode::OK,
-        Json(user_to_user_detail_json(user_extended)),
-    ))
+    Ok((StatusCode::OK, Json(user_to_user_detail_dto(user_extended))))
 }
 
 /// GET /admin/users/{id}
 pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Json<UserDetailDto>, AppError> {
     let user_repo = UserRepository::new(&state.db_pool_auth);
     let user = user_repo
         .find_extended_by_id(user_id)
         .await?
         .ok_or(AppError::NotFound("Usuário não encontrado".to_string()))?;
 
-    Ok(Json(user_to_user_detail_json(user)))
+    Ok(Json(user_to_user_detail_dto(user)))
 }
 
 /// PUT /admin/users/{id}
@@ -160,7 +153,7 @@ pub async fn update_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
     Json(payload): Json<AdminUpdateUserRequest>,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Json<UserDetailDto>, AppError> {
     if let Err(e) = payload.validate() {
         return Err(AppError::Validation(e));
     }
@@ -211,7 +204,7 @@ pub async fn update_user(
         .await?
         .ok_or(AppError::NotFound("User not found".to_string()))?;
 
-    Ok(Json(user_to_user_detail_json(updated_user)))
+    Ok(Json(user_to_user_detail_dto(updated_user)))
 }
 
 /// DELETE /admin/users/{id}
