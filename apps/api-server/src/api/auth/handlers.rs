@@ -164,66 +164,48 @@ pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterResponse>), AppError> {
-    // 1. Validar payload
-    payload.validate().map_err(|e| {
+    if let Err(e) = payload.validate() {
         warn!(validation_errors = ?e, "Validação de registro falhou");
-        AppError::Validation(e)
-    })?;
-
-    // 2. Validar caracteres do username
-    if !payload
-        .username
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-    {
-        return Err(AppError::BadRequest("Username inválido".to_string()));
+        return Err(AppError::Validation(e));
     }
 
-    // 3. Validar força da senha
     validate_password_strength(&payload.password).map_err(AppError::BadRequest)?;
 
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
-    // 4. Verificar se username já existe
     if user_repo.exists_by_username(&payload.username).await? {
         return Err(AppError::Conflict("Username já está em uso".to_string()));
     }
 
-    // 5. Verificar se email já existe
     if user_repo.exists_by_email(&payload.email).await? {
         return Err(AppError::Conflict("Email já está em uso".to_string()));
     }
 
-    // 6. Hash da senha (operação blocking)
     let password_clone = payload.password.clone();
     let password_hash = tokio::task::spawn_blocking(move || hash_password(&password_clone))
         .await
         .context("Falha na task de hash")?
         .context("Erro ao gerar hash da senha")?;
 
-    // 7. Criar usuário
     let user = user_repo
         .create(&payload.username, &payload.email, &password_hash)
         .await?;
 
-    // 8. Gerar tokens
     let (access_token, refresh_token) = generate_tokens(&state, user.id).await?;
 
-    // 9. Criar e enviar token de verificação de email
     let verification_token = create_verification_token(&state, user.id)
         .await
         .context("Falha ao criar token de verificação")?;
 
-    // 10. Enviar emails (async, não bloqueia resposta)
     state.email_service.send_verification_email(
-        payload.email.clone(),
-        &user.username,
+        payload.email.as_str().to_string(),
+        user.username.as_str(),
         &verification_token,
     );
 
     state
         .email_service
-        .send_welcome_email(payload.email.clone(), &user.username);
+        .send_welcome_email(payload.email.as_str().to_string(), user.username.as_str());
 
     info!(user_id = %user.id, "Novo usuário registrado");
 
@@ -235,7 +217,7 @@ pub async fn register(
             ACCESS_TOKEN_EXPIRY_SECONDS,
             user.id,
             user.username,
-            payload.email,
+            payload.email.as_str().to_string(),
         )),
     ))
 }
@@ -426,8 +408,8 @@ pub async fn forgot_password(
 
         // 4. Enviar email (async)
         state.email_service.send_password_reset_email(
-            payload.email.clone(),
-            &user.username,
+            payload.email.as_str().to_string(),
+            user.username.as_str(),
             &token,
         );
 

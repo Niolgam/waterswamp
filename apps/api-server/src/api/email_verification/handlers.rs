@@ -135,8 +135,8 @@ pub async fn resend_verification(
 
     // 6. Enviar email
     state.email_service.send_verification_email(
-        payload.email.clone(),
-        &user.username,
+        payload.email.as_str().to_string(),
+        user.username.as_str(),
         &verification_token,
     );
 

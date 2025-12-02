@@ -1,7 +1,8 @@
 use axum::{extract::State, http::StatusCode, Json};
 use casbin::{Adapter, CoreApi, MgmtApi};
+use domain::value_objects::Username;
 use persistence::repositories::user_repository::UserRepository;
-use validator::Validate;
+use validator::Validate; // <--- Importante: Importar o Value Object
 
 use super::contracts::{PolicyListResponse, PolicyRequest, PolicyResponse};
 use crate::infra::{errors::AppError, state::AppState};
@@ -28,17 +29,32 @@ pub async fn add_policy(
         return Err(AppError::Validation(e));
     }
 
-    // Explicit check for non-existent user if subject looks like a UUID
+    // Verifica se o Subject (sub) existe no banco de dados antes de criar a policy
     if let Ok(user_id) = uuid::Uuid::parse_str(&payload.sub) {
+        // Caso 1: É um UUID
         let user_repo = UserRepository::new(&state.db_pool_auth);
         if user_repo.find_by_id(user_id).await?.is_none() {
-            return Err(AppError::NotFound("User not found".to_string()));
+            return Err(AppError::NotFound("User not found (UUID)".to_string()));
         }
     } else {
-        // If subject is not a UUID, check if it's a valid username
-        let user_repo = UserRepository::new(&state.db_pool_auth);
-        if user_repo.find_by_username(&payload.sub).await?.is_none() {
-            return Err(AppError::NotFound("User not found".to_string()));
+        // Caso 2: Não é UUID, tenta validar como Username
+        // Tenta converter String -> Username (Value Object)
+
+        if let Ok(username) = domain::value_objects::Username::try_from(payload.sub.as_str()) {
+            let user_repo = UserRepository::new(&state.db_pool_auth);
+
+            // Agora passamos &username (que é do tipo correto), não &payload.sub
+            if user_repo.find_by_username(&username).await?.is_none() {
+                return Err(AppError::NotFound("User not found (Username)".to_string()));
+            }
+        } else {
+            // Caso 3: Não é UUID e nem formato de Username válido.
+            // Pode ser um nome de Role (ex: "admin", "manager") ou grupo.
+            // Nesse caso, não validamos na tabela de usuários.
+            tracing::debug!(
+                "Subject '{}' is not a valid username format, skipping DB check (assumed role)",
+                payload.sub
+            );
         }
     }
 

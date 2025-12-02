@@ -7,20 +7,22 @@ use sqlx;
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::value_objects::{Email, Username};
+
 lazy_static::lazy_static! {
     static ref ROLE_REGEX: Regex =
         Regex::new(r"^(admin|user)$").unwrap();
 }
 
 // =============================================================================
-// AUTH - Payloads e Respostas
+// AUTH
 // =============================================================================
 
 #[derive(Debug, Validate, Deserialize, Serialize)]
 pub struct LoginPayload {
-    #[validate(length(min = 3, message = "Username muito curto"))]
-    pub username: String,
-    #[validate(length(min = 6, message = "Senha muito curta"))]
+    #[validate(length(min = 3))]
+    pub username: String, // Login aceita string genérica (pode ser email ou username)
+    #[validate(length(min = 6))]
     pub password: String,
 }
 
@@ -45,7 +47,7 @@ impl LoginResponse {
 
 #[derive(Debug, Validate, Deserialize, Serialize)]
 pub struct RefreshTokenPayload {
-    #[validate(length(min = 1, message = "Refresh token não pode estar vazio"))]
+    #[validate(length(min = 1))]
     pub refresh_token: String,
 }
 
@@ -67,7 +69,7 @@ impl RefreshTokenResponse {
 }
 
 // =============================================================================
-// USER
+// USER DTOs (AQUI ESTAVA O PROBLEMA DE TIPO)
 // =============================================================================
 
 #[derive(Debug, sqlx::FromRow)]
@@ -78,22 +80,48 @@ pub struct User {
 
 #[derive(Debug, Validate, Deserialize, Serialize)]
 pub struct RegisterPayload {
-    #[validate(length(
-        min = 3,
-        max = 50,
-        message = "Username deve ter entre 3 e 50 caracteres"
-    ))]
-    pub username: String,
+    // Validação automática via TryFrom no tipo
+    pub username: Username,
+    pub email: Email,
 
-    #[validate(email(message = "Email inválido"))]
-    pub email: String,
-
-    #[validate(length(min = 8, message = "Senha deve ter no mínimo 8 caracteres"))]
+    #[validate(length(min = 8))]
     pub password: String,
 }
 
+/// DTO de usuário (sem informações sensíveis)
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct UserDto {
+    pub id: Uuid,
+    pub username: Username, // Mudou de String para Username
+    pub email: Email,       // Mudou de String para Email
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// DTO estendido com informações de verificação e role
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct UserDtoExtended {
+    pub id: Uuid,
+    pub username: Username, // Mudou de String para Username
+    pub email: Email,       // Mudou de String para Email
+    pub role: String,
+    pub email_verified: bool,
+    pub email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub mfa_enabled: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// DTO detalhado do usuário, incluindo papéis
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserDetailDto {
+    #[serde(flatten)]
+    pub user: UserDto,
+    pub roles: Vec<String>,
+}
+
 // =============================================================================
-// JWT CLAIMS
+// JWT CLAIMS & OUTROS
 // =============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,10 +140,6 @@ pub enum TokenType {
     PasswordReset,
 }
 
-// =============================================================================
-// POLICIES (CASBIN)
-// =============================================================================
-
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct PolicyRequest {
     #[validate(length(min = 1))]
@@ -126,10 +150,6 @@ pub struct PolicyRequest {
     pub action: String,
 }
 
-// =============================================================================
-// ADMIN - User CRUD
-// =============================================================================
-
 #[derive(Debug, Deserialize)]
 pub struct ListUsersQuery {
     pub limit: Option<i64>,
@@ -137,76 +157,29 @@ pub struct ListUsersQuery {
     pub search: Option<String>,
 }
 
-/// DTO de usuário (sem informações sensíveis)
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct UserDto {
-    pub id: Uuid,
-    pub username: String,
-    pub email: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-/// DTO detalhado do usuário, incluindo papéis
-#[derive(Debug, Serialize, Deserialize)]
-pub struct UserDetailDto {
-    #[serde(flatten)]
-    pub user: UserDto,
-    /// Lista de papéis (ex: "admin", "user") atribuídos a este usuário
-    pub roles: Vec<String>,
-}
-
-/// Resposta paginada de usuários
-#[derive(Debug, Serialize)]
-pub struct PaginatedUsers {
-    pub users: Vec<UserDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
-/// Payload para criar usuário (admin)
 #[derive(Debug, Validate, Deserialize)]
 pub struct CreateUserPayload {
-    #[validate(length(min = 3, max = 50))]
-    pub username: String,
-
-    #[validate(email(message = "Email inválido"))]
-    pub email: String,
-
+    pub username: Username,
+    pub email: Email,
     #[validate(length(min = 8))]
     pub password: String,
-
-    #[validate(
-        length(min = 1),
-        regex(path = *ROLE_REGEX, message = "O papel deve ser 'admin' ou 'user'")
-    )]
+    #[validate(length(min = 1))]
     pub role: String,
 }
 
-/// Payload para atualizar usuário
 #[derive(Debug, Validate, Deserialize)]
 pub struct UpdateUserPayload {
-    #[validate(length(min = 3, max = 50))]
-    pub username: Option<String>,
-
-    #[validate(email(message = "Email inválido"))]
-    pub email: Option<String>,
-
+    pub username: Option<Username>,
+    pub email: Option<Email>,
     #[validate(length(min = 8))]
     pub password: Option<String>,
-
-    #[validate(
-        length(min = 1),
-        regex(path = *ROLE_REGEX, message = "O papel deve ser 'admin' ou 'user'")
-    )]
+    #[validate(length(min = 1))]
     pub role: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct ForgotPasswordPayload {
-    #[validate(email)]
-    pub email: String,
+    pub email: Email, // Mudou de String para Email
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
@@ -218,49 +191,26 @@ pub struct ResetPasswordPayload {
 }
 
 // =============================================================================
-// EMAIL VERIFICATION MODELS (Task 7)
+// EMAIL VERIFICATION & MFA MODELS
 // =============================================================================
 
-/// Payload for resending verification email
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct ResendVerificationPayload {
-    #[validate(email(message = "Email inválido"))]
-    pub email: String,
+    pub email: Email, // Mudou de String para Email
 }
 
-/// Payload for verifying email with token
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct VerifyEmailPayload {
-    #[validate(length(min = 1, message = "Token não pode estar vazio"))]
+    #[validate(length(min = 1))]
     pub token: String,
 }
 
-/// Response after email verification
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EmailVerificationResponse {
     pub verified: bool,
     pub message: String,
 }
 
-/// Extended User DTO with email verification status
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
-pub struct UserDtoExtended {
-    pub id: Uuid,
-    pub username: String,
-    pub email: String,
-    pub role: String,
-    pub email_verified: bool,
-    pub email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub mfa_enabled: bool,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-// =============================================================================
-// MFA/TOTP MODELS (Task 8)
-// =============================================================================
-
-/// Response for MFA setup initiation
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MfaSetupResponse {
     pub secret: String,
@@ -268,16 +218,14 @@ pub struct MfaSetupResponse {
     pub setup_token: String,
 }
 
-/// Payload for verifying MFA setup
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct MfaVerifySetupPayload {
-    #[validate(length(min = 1, message = "Setup token não pode estar vazio"))]
+    #[validate(length(min = 1))]
     pub setup_token: String,
-    #[validate(length(equal = 6, message = "Código TOTP deve ter 6 dígitos"))]
+    #[validate(length(equal = 6))]
     pub totp_code: String,
 }
 
-/// Response after successful MFA setup
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MfaSetupCompleteResponse {
     pub enabled: bool,
@@ -285,16 +233,14 @@ pub struct MfaSetupCompleteResponse {
     pub message: String,
 }
 
-/// Payload for MFA verification during login
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct MfaVerifyPayload {
-    #[validate(length(min = 1, message = "MFA token não pode estar vazio"))]
+    #[validate(length(min = 1))]
     pub mfa_token: String,
-    #[validate(length(min = 6, max = 12, message = "Código deve ter entre 6 e 12 caracteres"))]
+    #[validate(length(min = 6, max = 12))]
     pub code: String,
 }
 
-/// Login response when MFA is required
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MfaRequiredResponse {
     pub mfa_required: bool,
@@ -302,7 +248,6 @@ pub struct MfaRequiredResponse {
     pub message: String,
 }
 
-/// Response after successful MFA verification
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MfaVerifyResponse {
     pub access_token: String,
@@ -329,46 +274,40 @@ impl MfaVerifyResponse {
     }
 }
 
-/// Payload for disabling MFA
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct MfaDisablePayload {
-    #[validate(length(min = 1, message = "Senha não pode estar vazia"))]
+    #[validate(length(min = 1))]
     pub password: String,
-    #[validate(length(equal = 6, message = "Código TOTP deve ter 6 dígitos"))]
+    #[validate(length(equal = 6))]
     pub totp_code: String,
 }
 
-/// Response after disabling MFA
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MfaDisableResponse {
     pub disabled: bool,
     pub message: String,
 }
 
-/// Payload for regenerating backup codes
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct MfaRegenerateBackupCodesPayload {
-    #[validate(length(min = 1, message = "Senha não pode estar vazia"))]
+    #[validate(length(min = 1))]
     pub password: String,
-    #[validate(length(equal = 6, message = "Código TOTP deve ter 6 dígitos"))]
+    #[validate(length(equal = 6))]
     pub totp_code: String,
 }
 
-/// Response with new backup codes
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MfaBackupCodesResponse {
     pub backup_codes: Vec<String>,
     pub message: String,
 }
 
-/// MFA status for user
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MfaStatusResponse {
     pub enabled: bool,
     pub backup_codes_remaining: Option<usize>,
 }
 
-/// Claims for MFA challenge token
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MfaChallengeClaims {
     pub sub: Uuid,
@@ -376,7 +315,6 @@ pub struct MfaChallengeClaims {
     pub iat: i64,
     pub token_type: String,
 }
-
 // =============================================================================
 // AUDIT LOG - Core Types
 // =============================================================================

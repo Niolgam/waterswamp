@@ -34,7 +34,6 @@ use crate::infra::state::AppState;
 
 pub use contracts::{
     ChangePasswordRequest, ChangePasswordResponse, ProfileResponse, UpdateProfileRequest,
-    UpdateProfileResponse,
 };
 
 // =============================================================================

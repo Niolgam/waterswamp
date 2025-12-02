@@ -1,4 +1,5 @@
 use domain::models::{UserDto, UserDtoExtended};
+use domain::value_objects::{Email, Username}; // Importando Value Objects
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -49,7 +50,6 @@ impl<'a> UserRepository<'a> {
             .await
     }
 
-    /// Mark email as unverified (helper for update_email)
     pub async fn mark_email_unverified(&self, id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query(
             "UPDATE users SET email_verified = false, email_verified_at = NULL WHERE id = $1",
@@ -61,36 +61,39 @@ impl<'a> UserRepository<'a> {
     }
 
     /// Busca um usuário pelo Username.
-    pub async fn find_by_username(&self, username: &str) -> Result<Option<UserDto>, sqlx::Error> {
+    pub async fn find_by_username(
+        &self,
+        username: &Username,
+    ) -> Result<Option<UserDto>, sqlx::Error> {
         sqlx::query_as::<_, UserDto>(
             "SELECT id, username, email, created_at, updated_at FROM users WHERE username = $1",
         )
-        .bind(username)
+        .bind(username.as_str()) // Extrai string
         .fetch_optional(self.pool)
         .await
     }
 
-    pub async fn find_by_email(&self, email: &str) -> Result<Option<UserDto>, sqlx::Error> {
+    pub async fn find_by_email(&self, email: &Email) -> Result<Option<UserDto>, sqlx::Error> {
         sqlx::query_as::<_, UserDto>(
             "SELECT id, username, email, created_at, updated_at FROM users WHERE LOWER(email) = LOWER($1)",
         )
-        .bind(email)
+        .bind(email.as_str()) // Extrai string
         .fetch_optional(self.pool)
         .await
     }
 
     /// Verifica se um email já existe (case-insensitive).
-    pub async fn exists_by_email(&self, email: &str) -> Result<bool, sqlx::Error> {
+    pub async fn exists_by_email(&self, email: &Email) -> Result<bool, sqlx::Error> {
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1))")
-            .bind(email)
+            .bind(email.as_str())
             .fetch_one(self.pool)
             .await
     }
 
     /// Verifica se um username já existe.
-    pub async fn exists_by_username(&self, username: &str) -> Result<bool, sqlx::Error> {
+    pub async fn exists_by_username(&self, username: &Username) -> Result<bool, sqlx::Error> {
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
-            .bind(username)
+            .bind(username.as_str())
             .fetch_one(self.pool)
             .await
     }
@@ -98,26 +101,26 @@ impl<'a> UserRepository<'a> {
     /// Verifica se um email já existe, excluindo um ID.
     pub async fn exists_by_email_excluding(
         &self,
-        email: &str,
+        email: &Email,
         exclude_id: Uuid,
     ) -> Result<bool, sqlx::Error> {
         sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND id != $2)",
         )
-        .bind(email)
+        .bind(email.as_str())
         .bind(exclude_id)
         .fetch_one(self.pool)
         .await
     }
 
-    /// Verifica se um username já existe, excluindo um ID específico (útil para updates).
+    /// Verifica se um username já existe, excluindo um ID específico.
     pub async fn exists_by_username_excluding(
         &self,
-        username: &str,
+        username: &Username,
         exclude_id: Uuid,
     ) -> Result<bool, sqlx::Error> {
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND id != $2)")
-            .bind(username)
+            .bind(username.as_str())
             .bind(exclude_id)
             .fetch_one(self.pool)
             .await
@@ -126,8 +129,8 @@ impl<'a> UserRepository<'a> {
     /// Cria um novo usuário.
     pub async fn create(
         &self,
-        username: &str,
-        email: &str,
+        username: &Username,
+        email: &Email,
         password_hash: &str,
     ) -> Result<UserDto, sqlx::Error> {
         sqlx::query_as::<_, UserDto>(
@@ -137,17 +140,21 @@ impl<'a> UserRepository<'a> {
             RETURNING id, username, email, created_at, updated_at
             "#,
         )
-        .bind(username)
-        .bind(email)
+        .bind(username.as_str())
+        .bind(email.as_str())
         .bind(password_hash)
         .fetch_one(self.pool)
         .await
     }
 
     /// Atualiza o username de um usuário.
-    pub async fn update_username(&self, id: Uuid, new_username: &str) -> Result<(), sqlx::Error> {
+    pub async fn update_username(
+        &self,
+        id: Uuid,
+        new_username: &Username,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2")
-            .bind(new_username)
+            .bind(new_username.as_str())
             .bind(id)
             .execute(self.pool)
             .await?;
@@ -155,9 +162,9 @@ impl<'a> UserRepository<'a> {
     }
 
     /// Atualiza o email de um usuário.
-    pub async fn update_email(&self, id: Uuid, new_email: &str) -> Result<(), sqlx::Error> {
+    pub async fn update_email(&self, id: Uuid, new_email: &Email) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2")
-            .bind(new_email)
+            .bind(new_email.as_str())
             .bind(id)
             .execute(self.pool)
             .await?;
@@ -188,18 +195,6 @@ impl<'a> UserRepository<'a> {
         Ok(())
     }
 
-    /// Desativa um usuário (ban).
-    pub async fn disable_user(&self, _id: Uuid) -> Result<(), sqlx::Error> {
-        // Implementar lógica de desativação
-        Ok(())
-    }
-
-    /// Reativa um usuário (unban).
-    pub async fn enable_user(&self, _id: Uuid) -> Result<(), sqlx::Error> {
-        // Implementar lógica de reativação
-        Ok(())
-    }
-
     /// Deleta um usuário. Retorna true se deletou, false se não encontrou.
     pub async fn delete(&self, id: Uuid) -> Result<bool, sqlx::Error> {
         let result = sqlx::query("DELETE FROM users WHERE id = $1")
@@ -225,7 +220,6 @@ impl<'a> UserRepository<'a> {
 
         if let Some(_) = search {
             params_count += 1;
-            // Use ${0} to refer to the first argument (params_count)
             conditions.push(format!(
                 "(username ILIKE ${0} OR email ILIKE ${0})",
                 params_count

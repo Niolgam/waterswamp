@@ -133,7 +133,7 @@ pub async fn setup(
             .to_bytes()
             .map_err(|e| anyhow::anyhow!("Erro ao converter secret: {}", e))?,
         Some("Waterswamp".to_string()),
-        user.username.clone(),
+        user.username.as_str().to_string(),
     )
     .map_err(|e| anyhow::anyhow!("Erro ao criar TOTP: {}", e))?;
 
@@ -189,7 +189,7 @@ pub async fn verify_setup(
         30,
         secret_bytes,
         Some("Waterswamp".to_string()),
-        user.username.clone(),
+        user.username.as_str().to_string(),
     )
     .map_err(|e| anyhow::anyhow!("Erro ao criar TOTP: {}", e))?;
 
@@ -210,9 +210,10 @@ pub async fn verify_setup(
 
     mfa_repo.complete_setup(setup_id).await?;
 
-    state
-        .email_service
-        .send_mfa_enabled_email(user.email, &user.username);
+    state.email_service.send_mfa_enabled_email(
+        user.email.as_str().to_string(),
+        &user.username.as_str().to_string(),
+    );
 
     info!(user_id = %current_user.id, "MFA ativado com sucesso");
 
@@ -271,7 +272,7 @@ pub async fn verify(
             30,
             secret_bytes,
             Some("Waterswamp".to_string()),
-            user.username.clone(),
+            user.username.as_str().to_string(),
         )
         .map_err(|e| anyhow::anyhow!("Erro ao criar TOTP: {}", e))?;
 
@@ -366,7 +367,7 @@ pub async fn disable(
         30,
         secret_bytes,
         Some("Waterswamp".to_string()),
-        user.username,
+        user.username.as_str().to_string(),
     )
     .map_err(|e| anyhow::anyhow!("Erro ao criar TOTP: {}", e))?;
 
@@ -436,7 +437,7 @@ pub async fn regenerate_backup_codes(
         30,
         secret_bytes,
         Some("Waterswamp".to_string()),
-        user.username,
+        user.username.as_str().to_string(),
     )
     .map_err(|e| anyhow::anyhow!("Erro ao criar TOTP: {}", e))?;
 

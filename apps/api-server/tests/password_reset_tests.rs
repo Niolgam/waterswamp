@@ -42,17 +42,17 @@ async fn test_forgot_password_flow_and_email_mocking() {
 
     // "bob" existe no seed, o email dele é "bob@temp.example.com"
     let payload = ForgotPasswordPayload {
-        email: "bob@temp.example.com".to_string(),
+        email: "bob@temp.example.com".try_into().unwrap(), // Ajuste para Email type
     };
 
     // 1. Cenário: Email Existe
     let res = client.post("/forgot-password").json(&payload).await;
 
     assert_eq!(res.status_code(), 200);
-    assert!(res.text().contains("Se este email estiver registado"));
+    // CORREÇÃO: Mensagem atualizada conforme contracts.rs
+    assert!(res.text().contains("Se o email existir"));
 
     // Verifica se o MockEmailService "enviou" o email
-    // Aguarda um pouco para o spawn async completar
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let messages = app.email_service.messages.lock().await;
@@ -76,7 +76,7 @@ async fn test_forgot_password_flow_and_email_mocking() {
 
     // 2. Cenário: Email Não Existe
     let payload_nao_existe = ForgotPasswordPayload {
-        email: "naoexiste@example.com".to_string(),
+        email: "naoexiste@example.com".try_into().unwrap(),
     };
     let res_nao_existe = client
         .post("/forgot-password")
@@ -85,9 +85,8 @@ async fn test_forgot_password_flow_and_email_mocking() {
 
     // Assert: Deve retornar a MESMA resposta de sucesso para evitar enumeração
     assert_eq!(res_nao_existe.status_code(), 200);
-    assert!(res_nao_existe
-        .text()
-        .contains("Se este email estiver registado"));
+    // CORREÇÃO: Mensagem atualizada
+    assert!(res_nao_existe.text().contains("Se o email existir"));
 
     // Assert: Nenhum email novo foi enviado
     let messages_final = app.email_service.messages.lock().await;
@@ -112,7 +111,6 @@ async fn test_reset_password_happy_path_and_session_revocation() {
         .unwrap();
 
     // 1. Bob (user_id 'bob_id') existe com senha "password123"
-    // Vamos primeiro fazer login para obter um refresh token
     let login_payload = LoginPayload {
         username: "bob".to_string(),
         password: "password123".to_string(),
@@ -124,7 +122,6 @@ async fn test_reset_password_happy_path_and_session_revocation() {
     let original_refresh_token = original_tokens["refresh_token"].as_str().unwrap();
 
     // 2. Bob esquece a senha. Geramos um token de reset para ele
-    // (bob_id already fetched above)
     let reset_token = generate_reset_token(bob_id);
 
     // 3. Bob redefine a senha
@@ -135,7 +132,8 @@ async fn test_reset_password_happy_path_and_session_revocation() {
     let res_reset = client.post("/reset-password").json(&reset_payload).await;
 
     assert_eq!(res_reset.status_code(), 200);
-    assert!(res_reset.text().contains("Senha atualizada"));
+    // CORREÇÃO: Mensagem atualizada conforme ResetPasswordResponse
+    assert!(res_reset.text().contains("Senha redefinida com sucesso"));
 
     // 4. VERIFICAÇÃO: Login com senha antiga falha
     let res_login_antigo = client.post("/login").json(&login_payload).await;
@@ -189,7 +187,6 @@ async fn test_reset_password_invalid_tokens() {
         .await;
 
     assert_eq!(res_expirado.status_code(), 401);
-    // ATUALIZADO: Match com mensagem de erro genérica
     assert!(res_expirado.text().contains("expirado") || res_expirado.text().contains("inválido"));
 
     // 2. Cenário: Token de Tipo Errado (usando um Access Token)
@@ -205,8 +202,6 @@ async fn test_reset_password_invalid_tokens() {
 
     assert_eq!(res_tipo_errado.status_code(), 401);
 
-    // ATUALIZADO: Corrigido a asserção para aceitar "inválido" ou "expirado"
-    // O novo handler retorna "Token inválido ou expirado" para qualquer erro de token
     let error_text = res_tipo_errado.text();
     assert!(
         error_text.contains("inválido") || error_text.contains("expirado"),
@@ -235,7 +230,7 @@ async fn test_reset_password_weak_password() {
 
     assert_eq!(res_reset.status_code(), 400);
     let error_text = res_reset.text();
-    // Pode ser erro de validação do DTO (length) ou erro de força (zxcvbn)
+
     assert!(
         error_text.contains("Senha")
             || error_text.contains("senha")

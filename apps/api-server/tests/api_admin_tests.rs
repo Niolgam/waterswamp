@@ -1,6 +1,9 @@
 mod common;
 
-use domain::models::UserDetailDto;
+use domain::{
+    models::UserDetailDto,
+    value_objects::{Email, Username},
+};
 use http::StatusCode;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -192,8 +195,14 @@ async fn test_admin_create_user_and_get_user() {
 
     // 2. Verificar a Resposta (UserDetailDto)
     let user_detail: UserDetailDto = response.json();
-    assert_eq!(user_detail.user.username, unique_username);
-    assert_eq!(user_detail.user.email, unique_email);
+    assert_eq!(
+        user_detail.user.username,
+        Username::try_from(unique_username.clone()).unwrap()
+    );
+    assert_eq!(
+        user_detail.user.email,
+        Email::try_from(unique_email).unwrap()
+    );
     assert_eq!(user_detail.roles, vec!["user"]);
 
     let new_user_id = user_detail.user.id;
@@ -209,7 +218,10 @@ async fn test_admin_create_user_and_get_user() {
 
     // 4. Verificar Resposta do Get
     let fetched_user: UserDetailDto = get_response.json();
-    assert_eq!(fetched_user.user.username, unique_username);
+    assert_eq!(
+        fetched_user.user.username,
+        Username::try_from(unique_username).unwrap()
+    );
     assert_eq!(fetched_user.roles, vec!["user"]);
 }
 

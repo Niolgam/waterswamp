@@ -87,9 +87,11 @@ pub async fn create_user(
 
     let user_repo = UserRepository::new(&state.db_pool_auth);
 
+    // CORREÇÃO: payload.username é um Username, passamos referência &Username
     if user_repo.exists_by_username(&payload.username).await? {
         return Err(AppError::Conflict("Username já existe".to_string()));
     }
+    // CORREÇÃO: payload.email é um Email, passamos referência &Email
     if user_repo.exists_by_email(&payload.email).await? {
         return Err(AppError::Conflict("Email já existe".to_string()));
     }
@@ -99,6 +101,7 @@ pub async fn create_user(
         .context("Task error")?
         .context("Hash error")?;
 
+    // CORREÇÃO: Passando tipos fortes para o create
     let created = user_repo
         .create(&payload.username, &payload.email, &hash)
         .await?;
@@ -119,10 +122,7 @@ pub async fn create_user(
             .add_grouping_policy(vec![created.id.to_string(), role.clone()])
             .await
             .ok();
-        // Save policies to persist changes
-        if let Err(e) = enforcer.save_policy().await {
-            tracing::error!("Failed to save policy after user creation: {:?}", e);
-        }
+        let _ = enforcer.save_policy().await;
     }
 
     let user_extended = user_repo
@@ -130,7 +130,6 @@ pub async fn create_user(
         .await?
         .ok_or(AppError::Anyhow(anyhow::anyhow!("User not found")))?;
 
-    // Return 200 OK + UserDetailDto structure
     Ok((StatusCode::OK, Json(user_to_user_detail_dto(user_extended))))
 }
 
@@ -161,19 +160,35 @@ pub async fn update_user(
     let user_repo = UserRepository::new(&state.db_pool_auth);
     let auth_repo = AuthRepository::new(&state.db_pool_auth);
 
-    // Check if user exists first
     if user_repo.find_by_id(user_id).await?.is_none() {
         return Err(AppError::NotFound("User not found".to_string()));
     }
 
-    if let Some(username) = payload.username {
-        user_repo.update_username(user_id, &username).await?;
+    // 1. Username
+    // payload.username é Option<Username>. 'username' é &Username.
+    if let Some(ref username) = payload.username {
+        // Verifica duplicidade antes de atualizar
+        if user_repo
+            .exists_by_username_excluding(username, user_id)
+            .await?
+        {
+            return Err(AppError::Conflict("Username already taken".to_string()));
+        }
+        user_repo.update_username(user_id, username).await?;
     }
-    if let Some(email) = payload.email {
-        user_repo.update_email(user_id, &email).await?;
+
+    // 2. Email
+    // payload.email é Option<Email>. 'email' é &Email.
+    if let Some(ref email) = payload.email {
+        if user_repo.exists_by_email_excluding(email, user_id).await? {
+            return Err(AppError::Conflict("Email already taken".to_string()));
+        }
+        user_repo.update_email(user_id, email).await?;
     }
-    if let Some(role) = payload.role {
-        user_repo.update_role(user_id, &role).await?;
+
+    // 3. Role
+    if let Some(ref role) = payload.role {
+        user_repo.update_role(user_id, role).await?;
         auth_repo.revoke_all_user_tokens(user_id).await?;
 
         let mut enforcer = state.enforcer.write().await;
@@ -182,19 +197,22 @@ pub async fn update_user(
             .await
             .ok();
         enforcer
-            .add_grouping_policy(vec![user_id.to_string(), role])
+            .add_grouping_policy(vec![user_id.to_string(), role.clone()])
             .await
             .ok();
-        // Save policies to persist changes
-        if let Err(e) = enforcer.save_policy().await {
-            tracing::error!("Failed to save policy after role update: {:?}", e);
-        }
+        let _ = enforcer.save_policy().await;
     }
-    if let Some(password) = payload.password {
-        let hash = tokio::task::spawn_blocking(move || hash_password(&password))
-            .await
-            .context("Task error")?
-            .context("Hash error")?;
+
+    // 4. Password
+    if let Some(ref password) = payload.password {
+        let hash = tokio::task::spawn_blocking({
+            let pwd = password.clone();
+            move || hash_password(&pwd)
+        })
+        .await
+        .context("Task error")?
+        .context("Hash error")?;
+
         user_repo.update_password(user_id, &hash).await?;
         auth_repo.revoke_all_user_tokens(user_id).await?;
     }

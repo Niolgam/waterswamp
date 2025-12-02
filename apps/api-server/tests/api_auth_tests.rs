@@ -680,7 +680,6 @@ async fn test_api_auth_forgot_password_existing_email() {
         .await
         .expect("Failed to create test user");
 
-    // Get user email - Runtime query
     let row = sqlx::query("SELECT email FROM users WHERE username = $1")
         .bind(&username)
         .fetch_one(&state.db_pool_auth)
@@ -688,10 +687,8 @@ async fn test_api_auth_forgot_password_existing_email() {
         .unwrap();
     let user_email: String = row.get("email");
 
-    // Clear email service
     state.email_service.clear_sent_emails().await;
 
-    // Request password reset
     let response = server
         .post("/auth/forgot-password")
         .json(&json!({
@@ -699,19 +696,17 @@ async fn test_api_auth_forgot_password_existing_email() {
         }))
         .await;
 
-    // Assertions
     assert_eq!(response.status_code(), 200);
 
     let body: serde_json::Value = response.json();
+    // CORREÇÃO: Mensagem atualizada conforme contracts.rs
     assert!(body["message"]
         .as_str()
         .unwrap()
-        .contains("Se este email estiver registado"));
+        .contains("Se o email existir"));
 
-    // Give async email task time to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    // Verify email was sent
     let sent_emails = state.email_service.get_sent_emails().await;
     assert_eq!(sent_emails.len(), 1);
     assert_eq!(sent_emails[0].to, user_email);
@@ -728,10 +723,8 @@ async fn test_api_auth_forgot_password_nonexistent_email() {
     let state = create_test_app_state().await;
     let server = create_api_auth_test_server(state.clone()).await;
 
-    // Clear email service
     state.email_service.clear_sent_emails().await;
 
-    // Request password reset for non-existent email
     let response = server
         .post("/auth/forgot-password")
         .json(&json!({
@@ -739,19 +732,17 @@ async fn test_api_auth_forgot_password_nonexistent_email() {
         }))
         .await;
 
-    // Assertions - should still return 200 to prevent email enumeration
     assert_eq!(response.status_code(), 200);
 
     let body: serde_json::Value = response.json();
+    // CORREÇÃO: Mensagem atualizada conforme contracts.rs
     assert!(body["message"]
         .as_str()
         .unwrap()
-        .contains("Se este email estiver registado"));
+        .contains("Se o email existir"));
 
-    // Give async email task time (shouldn't send)
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    // Verify NO email was sent
     let sent_emails = state.email_service.get_sent_emails().await;
     assert_eq!(sent_emails.len(), 0);
 

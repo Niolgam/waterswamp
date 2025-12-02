@@ -1,3 +1,4 @@
+use domain::value_objects::Email;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -18,8 +19,7 @@ pub struct EmailVerificationResponse {
 /// Request para reenviar email de verificação
 #[derive(Debug, Deserialize, Validate)]
 pub struct ResendVerificationRequest {
-    #[validate(email(message = "Email inválido"))]
-    pub email: String,
+    pub email: Email,
 }
 
 /// Response para status de verificação

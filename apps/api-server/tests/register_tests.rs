@@ -22,14 +22,12 @@ async fn test_register_success() {
         .await;
 
     // Debugging útil caso o teste falhe
-    // ATUALIZADO: Verifica se é CREATED (201)
     if response.status_code() != StatusCode::CREATED {
         let body_text = response.text();
         println!("Erro no registro: {}", body_text);
         panic!("Registro falhou com status {}", response.status_code());
     }
 
-    // ATUALIZADO: Asserção direta para 201
     assert_eq!(response.status_code(), StatusCode::CREATED);
 
     let body: Value = response.json();
@@ -56,7 +54,6 @@ async fn test_register_username_taken() {
         }))
         .await;
 
-    // ATUALIZADO: Espera 201 Created
     assert_eq!(response1.status_code(), StatusCode::CREATED);
 
     // 2. Segundo registro (deve falhar com conflito)
@@ -70,8 +67,7 @@ async fn test_register_username_taken() {
         }))
         .await;
 
-    // O handler retorna AppError::Conflict
-    // que é mapeado para StatusCode::CONFLICT (409)
+    // O handler retorna AppError::Conflict -> 409
     assert_eq!(
         response2.status_code(),
         StatusCode::CONFLICT,
@@ -94,10 +90,10 @@ async fn test_register_weak_password() {
         }))
         .await;
 
-    // Mapeado para AppError::BadRequest
+    // Validação manual de força de senha no handler -> 400
     assert_eq!(
         response.status_code(),
-        StatusCode::BAD_REQUEST, // 400
+        StatusCode::BAD_REQUEST,
         "Senha fraca deveria retornar 400"
     );
 }
@@ -116,7 +112,7 @@ async fn test_register_short_password() {
         }))
         .await;
 
-    // Mapeado para AppError::Validation, que é 400
+    // Validação via #[validate] no handler -> 400
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
 }
 
@@ -128,13 +124,14 @@ async fn test_register_short_username() {
         .api
         .post("/register")
         .json(&json!({
-            "username": "ab",
+            "username": "ab", // Inválido para o tipo Username (min 3)
             "email": format!("shortuser_{}@example.com", uuid::Uuid::new_v4()),
             "password": "S3nh@Forte123"
         }))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+    // CORREÇÃO: Falha na desserialização do JSON (Value Object) -> 422
+    assert_eq!(response.status_code(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
@@ -156,7 +153,6 @@ async fn test_register_success_sends_welcome_email() {
         .await;
 
     // 2. Verificar se a API funcionou
-    // ATUALIZADO: Espera 201 Created
     assert_eq!(response.status_code(), StatusCode::CREATED);
 
     let body: Value = response.json();
