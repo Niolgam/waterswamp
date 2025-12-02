@@ -2,15 +2,15 @@
 //!
 //! Handlers para gerenciamento de perfil e senha do próprio usuário.
 
-use axum::{extract::State, http::StatusCode, Json};
-use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
-use tracing::{error, info, instrument};
-use validator::Validate;
-
 use crate::{
     extractors::current_user::CurrentUser,
     infra::{errors::AppError, state::AppState},
 };
+use axum::{extract::State, http::StatusCode, Json};
+use domain::ports::UserRepositoryPort;
+use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
+use tracing::{error, info, instrument};
+use validator::Validate;
 
 use super::contracts::{
     ChangePasswordRequest, ChangePasswordResponse, ProfileResponse, UpdateProfileRequest,

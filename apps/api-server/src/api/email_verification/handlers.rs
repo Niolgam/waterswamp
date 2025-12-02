@@ -1,16 +1,16 @@
-use anyhow::Context;
-use axum::{extract::State, Json};
-use sha2::{Digest, Sha256};
-use uuid::Uuid;
-use validator::Validate;
-
 use crate::{
     extractors::current_user::CurrentUser,
     infra::{errors::AppError, state::AppState},
 };
+use anyhow::Context;
+use axum::{extract::State, Json};
+use domain::ports::UserRepositoryPort;
 use persistence::repositories::{
     email_verification_repository::EmailVerificationRepository, user_repository::UserRepository,
 };
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
+use validator::Validate;
 
 use super::contracts::{
     EmailVerificationResponse, ResendVerificationRequest, VerificationStatusResponse,

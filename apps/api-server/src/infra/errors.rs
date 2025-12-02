@@ -3,6 +3,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use domain::errors::RepositoryError; // <--- Importante!
 use serde_json::json;
 use thiserror::Error;
 use validator::ValidationErrors;
@@ -11,6 +12,10 @@ use validator::ValidationErrors;
 pub enum AppError {
     #[error("Erro de banco de dados: {0}")]
     Database(#[from] sqlx::Error),
+
+    // Novo: Erro vindo da camada de domínio/repositório
+    #[error("Erro de repositório: {0}")]
+    Repository(#[from] RepositoryError),
 
     #[error("Não autorizado: {0}")]
     Unauthorized(String),
@@ -43,11 +48,14 @@ pub enum AppError {
 // Diz ao Axum como converter nosso erro em uma resposta HTTP
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        // 1. Log do erro real no servidor (para nós, desenvolvedores)
-        // Erros 4xx não precisam ser logados como ERROR, podem ser INFO ou WARN
+        // 1. Log do erro real no servidor
         match &self {
             AppError::Database(_) | AppError::Anyhow(_) | AppError::Internal(_) => {
                 tracing::error!("Erro interno na requisição: {:?}", self)
+            }
+            // Logar erros de repositório que sejam de infraestrutura (Database) como erro
+            AppError::Repository(RepositoryError::Database(_)) => {
+                tracing::error!("Erro de banco no repositório: {:?}", self)
             }
             _ => tracing::info!("Erro cliente na requisição: {:?}", self),
         }
@@ -58,6 +66,20 @@ impl IntoResponse for AppError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Erro interno no servidor.".to_string(),
             ),
+            // Mapeamento inteligente dos erros do Repositório
+            AppError::Repository(repo_err) => match repo_err {
+                RepositoryError::NotFound => {
+                    (StatusCode::NOT_FOUND, "Recurso não encontrado.".to_string())
+                }
+                RepositoryError::Duplicate(msg) => (
+                    StatusCode::CONFLICT,
+                    msg, // "Email já existe", etc.
+                ),
+                RepositoryError::Database(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Erro interno de persistência.".to_string(),
+                ),
+            },
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
             AppError::InvalidPassword => (
                 StatusCode::UNAUTHORIZED,

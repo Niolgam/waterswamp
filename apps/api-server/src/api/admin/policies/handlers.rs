@@ -1,8 +1,8 @@
 use axum::{extract::State, http::StatusCode, Json};
 use casbin::{Adapter, CoreApi, MgmtApi};
-use domain::value_objects::Username;
+use domain::ports::UserRepositoryPort;
 use persistence::repositories::user_repository::UserRepository;
-use validator::Validate; // <--- Importante: Importar o Value Object
+use validator::Validate;
 
 use super::contracts::{PolicyListResponse, PolicyRequest, PolicyResponse};
 use crate::infra::{errors::AppError, state::AppState};

@@ -9,6 +9,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use chrono::{Duration, Utc};
 use core_services::security::{hash_password, validate_password_strength, verify_password};
 use domain::models::TokenType;
+use domain::ports::UserRepositoryPort;
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use sha2::{Digest, Sha256};
 use tracing::{error, info, warn};

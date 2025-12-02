@@ -7,9 +7,9 @@ use axum::{
 use casbin::{Adapter, CoreApi, MgmtApi};
 use core_services::security::hash_password;
 use domain::models::{ListUsersQuery, UserDetailDto, UserDto, UserDtoExtended};
+use domain::ports::UserRepositoryPort;
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use serde_json::{json, Value};
-use tracing::info;
 use uuid::Uuid;
 use validator::Validate;
 

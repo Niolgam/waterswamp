@@ -13,3 +13,5 @@ sqlx = { workspace = true, features = ["macros", "uuid", "chrono"] }
 regex = { workspace = true }
 lazy_static = { workspace = true }
 serde_json = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }

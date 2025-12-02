@@ -1,20 +1,20 @@
+use crate::{
+    extractors::current_user::CurrentUser,
+    infra::{errors::AppError, state::AppState},
+};
 use anyhow::Context;
 use axum::{extract::State, Json};
 use chrono::{Duration, Utc};
+use core_services::security::verify_password;
+use domain::models::TokenType;
+use domain::ports::UserRepositoryPort;
+use persistence::repositories::{mfa_repository::MfaRepository, user_repository::UserRepository};
 use rand::Rng;
 use sha2::{Digest, Sha256};
 use totp_rs::{Algorithm as TotpAlgorithm, Secret, TOTP};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 use validator::Validate;
-
-use crate::{
-    extractors::current_user::CurrentUser,
-    infra::{errors::AppError, state::AppState},
-};
-use core_services::security::verify_password;
-use domain::models::TokenType;
-use persistence::repositories::{mfa_repository::MfaRepository, user_repository::UserRepository};
 
 use super::contracts::*;
 
