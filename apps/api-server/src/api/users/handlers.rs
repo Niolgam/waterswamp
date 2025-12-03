@@ -31,7 +31,7 @@ pub async fn get_profile(
     info!(user_id = ?user_session.id, username = %user_session.username, "Fetching user profile");
 
     // 1. Instanciar o repositório usando o pool do state
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth);
 
     // 2. Usar o repositório
     let user = user_repo
@@ -65,7 +65,7 @@ pub async fn update_profile(
     }
 
     let user_id = user_session.id;
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth);
 
     // Buscar dados atuais
     let current_user_data = user_repo
@@ -142,7 +142,7 @@ pub async fn change_password(
     }
 
     let user_id = user_session.id;
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
     let auth_repo = AuthRepository::new(&state.db_pool_auth);
 
     let stored_hash = user_repo

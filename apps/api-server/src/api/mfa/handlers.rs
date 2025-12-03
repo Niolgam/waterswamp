@@ -108,7 +108,7 @@ pub async fn setup(
     current_user: CurrentUser,
 ) -> Result<Json<MfaSetupResponse>, AppError> {
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     if mfa_repo.is_mfa_enabled(current_user.id).await? {
         return Err(AppError::BadRequest(
@@ -162,7 +162,7 @@ pub async fn verify_setup(
     payload.validate().map_err(AppError::Validation)?;
 
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     let setup_id = Uuid::parse_str(&payload.setup_token)
         .map_err(|_| AppError::BadRequest("Token de setup inválido".to_string()))?;
@@ -244,7 +244,7 @@ pub async fn verify(
 
     let user_id = claims.sub;
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     let (mfa_enabled, mfa_secret, backup_codes) = mfa_repo
         .get_mfa_info(user_id)
@@ -331,7 +331,7 @@ pub async fn disable(
     payload.validate().map_err(AppError::Validation)?;
 
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     let user_with_hash: (String, Option<String>) =
         sqlx::query_as("SELECT password_hash, mfa_secret FROM users WHERE id = $1")
@@ -397,7 +397,7 @@ pub async fn regenerate_backup_codes(
     payload.validate().map_err(AppError::Validation)?;
 
     let mfa_repo = MfaRepository::new(&state.db_pool_auth);
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     if !mfa_repo.is_mfa_enabled(current_user.id).await? {
         return Err(AppError::BadRequest("MFA não está ativado".to_string()));

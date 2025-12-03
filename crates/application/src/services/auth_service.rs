@@ -94,7 +94,6 @@ mod tests {
     use mockall::predicate::*;
     use uuid::Uuid;
 
-    // 1. Mock do UserRepositoryPort com Lifetime corrigido
     mock! {
         pub UserRepo {}
         #[async_trait::async_trait]
@@ -126,12 +125,11 @@ mod tests {
 
             async fn delete(&self, id: Uuid) -> Result<bool, domain::errors::RepositoryError>;
 
-            // CORREÇÃO: Lifetime explícito para o argumento Option<&String>
-            async fn list<'a>(
+            async fn list(
                 &self,
                 limit: i64,
                 offset: i64,
-                search: Option<&'a String>
+                search: Option<&String>
             ) -> Result<(Vec<UserDto>, i64), domain::errors::RepositoryError>;
         }
     }

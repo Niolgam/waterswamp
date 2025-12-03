@@ -94,8 +94,8 @@ pub async fn resend_verification(
 ) -> Result<Json<serde_json::Value>, AppError> {
     payload.validate().map_err(AppError::Validation)?;
 
-    let user_repo = UserRepository::new(&state.db_pool_auth);
     let verification_repo = EmailVerificationRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     // 1. Encontrar usuário
     let user = match user_repo.find_by_email(&payload.email).await? {

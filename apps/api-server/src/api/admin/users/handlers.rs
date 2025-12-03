@@ -39,7 +39,7 @@ pub async fn list_users(
     State(state): State<AppState>,
     Query(params): Query<ListUsersQuery>,
 ) -> Result<Json<Value>, AppError> {
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth);
 
     let limit = params.limit.unwrap_or(10);
     let offset = params.offset.unwrap_or(0);
@@ -85,7 +85,7 @@ pub async fn create_user(
         return Err(AppError::Validation(e));
     }
 
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth);
 
     // CORREÇÃO: payload.username é um Username, passamos referência &Username
     if user_repo.exists_by_username(&payload.username).await? {
@@ -138,7 +138,7 @@ pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserDetailDto>, AppError> {
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth);
     let user = user_repo
         .find_extended_by_id(user_id)
         .await?
@@ -157,8 +157,8 @@ pub async fn update_user(
         return Err(AppError::Validation(e));
     }
 
-    let user_repo = UserRepository::new(&state.db_pool_auth);
     let auth_repo = AuthRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     if user_repo.find_by_id(user_id).await?.is_none() {
         return Err(AppError::NotFound("User not found".to_string()));
@@ -237,8 +237,8 @@ pub async fn delete_user(
         ));
     }
 
-    let user_repo = UserRepository::new(&state.db_pool_auth);
     let auth_repo = AuthRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     auth_repo.revoke_all_user_tokens(user_id).await?;
 

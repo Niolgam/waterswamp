@@ -32,7 +32,7 @@ pub async fn add_policy(
     // Verifica se o Subject (sub) existe no banco de dados antes de criar a policy
     if let Ok(user_id) = uuid::Uuid::parse_str(&payload.sub) {
         // Caso 1: É um UUID
-        let user_repo = UserRepository::new(&state.db_pool_auth);
+        let user_repo = UserRepository::new(state.db_pool_auth.clone());
         if user_repo.find_by_id(user_id).await?.is_none() {
             return Err(AppError::NotFound("User not found (UUID)".to_string()));
         }
@@ -41,7 +41,7 @@ pub async fn add_policy(
         // Tenta converter String -> Username (Value Object)
 
         if let Ok(username) = domain::value_objects::Username::try_from(payload.sub.as_str()) {
-            let user_repo = UserRepository::new(&state.db_pool_auth);
+            let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
             // Agora passamos &username (que é do tipo correto), não &payload.sub
             if user_repo.find_by_username(&username).await?.is_none() {

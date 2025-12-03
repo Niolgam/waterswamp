@@ -172,7 +172,7 @@ pub async fn register(
 
     validate_password_strength(&payload.password).map_err(AppError::BadRequest)?;
 
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     if user_repo.exists_by_username(&payload.username).await? {
         return Err(AppError::Conflict("Username já está em uso".to_string()));
@@ -388,7 +388,7 @@ pub async fn forgot_password(
         AppError::Validation(e)
     })?;
 
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth);
 
     // 2. Buscar usuário pelo email
     let user = user_repo.find_by_email(&payload.email).await?;
@@ -456,7 +456,7 @@ pub async fn reset_password(
         .context("Erro ao gerar hash da senha")?;
 
     // 5. Atualizar senha no banco
-    let user_repo = UserRepository::new(&state.db_pool_auth);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
     user_repo
         .update_password(user_id, &password_hash)
         .await
