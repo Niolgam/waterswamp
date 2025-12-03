@@ -4,6 +4,7 @@ members = [
     "crates/domain",
     "crates/persistence",
     "crates/core-services",
+    "crates/application",
 ]
 resolver = "2" # Habilita o novo resolver de features
 

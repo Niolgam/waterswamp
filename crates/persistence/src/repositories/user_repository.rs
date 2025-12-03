@@ -1,36 +1,47 @@
 use async_trait::async_trait;
-use domain::errors::RepositoryError; // <--- Erro do domínio
+use domain::errors::RepositoryError;
 use domain::models::{UserDto, UserDtoExtended};
-use domain::ports::UserRepositoryPort; // <--- Trait
+use domain::ports::UserRepositoryPort;
 use domain::value_objects::{Email, Username};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-pub struct UserRepository<'a> {
-    pool: &'a PgPool,
+// REMOVIDO: Lifetime <'a>
+// ADICIONADO: Derive Clone (opcional, mas útil)
+#[derive(Clone)]
+pub struct UserRepository {
+    pool: PgPool, // REMOVIDO: & (referência). Agora é Owned.
 }
 
-impl<'a> UserRepository<'a> {
-    pub fn new(pool: &'a PgPool) -> Self {
+impl UserRepository {
+    // ALTERADO: Recebe PgPool (owned) em vez de &PgPool
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
-    // Helper privado para mapear erros do SQLx
     fn map_err(e: sqlx::Error) -> RepositoryError {
-        // Aqui você pode refinar: detectar erro de constraint unique e retornar RepositoryError::Duplicate
+        // Detecção básica de duplicação (Postgres code 23505)
+        if let Some(db_err) = e.as_database_error() {
+            if let Some(code) = db_err.code() {
+                if code == "23505" {
+                    return RepositoryError::Duplicate(db_err.message().to_string());
+                }
+            }
+        }
         RepositoryError::Database(e.to_string())
     }
 }
 
-// Implementação do Contrato
+// REMOVIDO: Lifetime <'a> do impl e do Trait
 #[async_trait]
-impl<'a> UserRepositoryPort for UserRepository<'a> {
+impl UserRepositoryPort for UserRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserDto>, RepositoryError> {
         sqlx::query_as::<_, UserDto>(
             "SELECT id, username, email, created_at, updated_at FROM users WHERE id = $1",
         )
         .bind(id)
-        .fetch_optional(self.pool)
+        // ALTERADO: &self.pool (referência para o owned) em vez de self.pool (que já era ref)
+        .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
     }
@@ -50,7 +61,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
             "#,
         )
         .bind(id)
-        .fetch_optional(self.pool)
+        .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
     }
@@ -58,7 +69,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
     async fn get_password_hash(&self, id: Uuid) -> Result<Option<String>, RepositoryError> {
         sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
             .bind(id)
-            .fetch_optional(self.pool)
+            .fetch_optional(&self.pool)
             .await
             .map_err(Self::map_err)
     }
@@ -68,7 +79,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
             "UPDATE users SET email_verified = false, email_verified_at = NULL WHERE id = $1",
         )
         .bind(id)
-        .execute(self.pool)
+        .execute(&self.pool)
         .await
         .map_err(Self::map_err)?;
         Ok(())
@@ -82,7 +93,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
             "SELECT id, username, email, created_at, updated_at FROM users WHERE username = $1",
         )
         .bind(username.as_str())
-        .fetch_optional(self.pool)
+        .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
     }
@@ -92,7 +103,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
             "SELECT id, username, email, created_at, updated_at FROM users WHERE LOWER(email) = LOWER($1)",
         )
         .bind(email.as_str())
-        .fetch_optional(self.pool)
+        .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
     }
@@ -100,7 +111,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
     async fn exists_by_email(&self, email: &Email) -> Result<bool, RepositoryError> {
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1))")
             .bind(email.as_str())
-            .fetch_one(self.pool)
+            .fetch_one(&self.pool)
             .await
             .map_err(Self::map_err)
     }
@@ -108,7 +119,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
     async fn exists_by_username(&self, username: &Username) -> Result<bool, RepositoryError> {
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
             .bind(username.as_str())
-            .fetch_one(self.pool)
+            .fetch_one(&self.pool)
             .await
             .map_err(Self::map_err)
     }
@@ -123,7 +134,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
         )
         .bind(email.as_str())
         .bind(exclude_id)
-        .fetch_one(self.pool)
+        .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
     }
@@ -136,7 +147,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND id != $2)")
             .bind(username.as_str())
             .bind(exclude_id)
-            .fetch_one(self.pool)
+            .fetch_one(&self.pool)
             .await
             .map_err(Self::map_err)
     }
@@ -157,7 +168,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
         .bind(username.as_str())
         .bind(email.as_str())
         .bind(password_hash)
-        .fetch_one(self.pool)
+        .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
     }
@@ -170,7 +181,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
         sqlx::query("UPDATE users SET username = $1, updated_at = NOW() WHERE id = $2")
             .bind(new_username.as_str())
             .bind(id)
-            .execute(self.pool)
+            .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
         Ok(())
@@ -180,7 +191,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
         sqlx::query("UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2")
             .bind(new_email.as_str())
             .bind(id)
-            .execute(self.pool)
+            .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
         Ok(())
@@ -194,7 +205,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
         sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
             .bind(new_password_hash)
             .bind(id)
-            .execute(self.pool)
+            .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
         Ok(())
@@ -204,7 +215,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
         sqlx::query("UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2")
             .bind(new_role)
             .bind(id)
-            .execute(self.pool)
+            .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
         Ok(())
@@ -213,7 +224,7 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let result = sqlx::query("DELETE FROM users WHERE id = $1")
             .bind(id)
-            .execute(self.pool)
+            .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
         Ok(result.rows_affected() > 0)
@@ -262,9 +273,9 @@ impl<'a> UserRepositoryPort for UserRepository<'a> {
 
         query = query.bind(limit).bind(offset);
 
-        let users = query.fetch_all(self.pool).await.map_err(Self::map_err)?;
+        let users = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
         let total = count_query
-            .fetch_one(self.pool)
+            .fetch_one(&self.pool)
             .await
             .map_err(Self::map_err)?;
 

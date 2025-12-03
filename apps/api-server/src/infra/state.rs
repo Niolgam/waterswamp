@@ -1,3 +1,5 @@
+use crate::handlers::audit_services::AuditService;
+use application::services::auth_service::AuthService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use email_service::EmailSender;
@@ -5,8 +7,6 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
-use crate::handlers::audit_services::AuditService;
 
 pub type SharedEnforcer = Arc<RwLock<Enforcer>>;
 pub type PolicyCache = Arc<RwLock<HashMap<String, bool>>>;
@@ -20,4 +20,5 @@ pub struct AppState {
     pub jwt_service: JwtService,
     pub email_service: Arc<dyn EmailSender + Send + Sync>,
     pub audit_service: AuditService,
+    pub auth_service: Arc<AuthService>,
 }

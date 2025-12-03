@@ -89,7 +89,7 @@ pub struct RegisterPayload {
 }
 
 /// DTO de usuário (sem informações sensíveis)
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
 pub struct UserDto {
     pub id: Uuid,
     pub username: Username, // Mudou de String para Username

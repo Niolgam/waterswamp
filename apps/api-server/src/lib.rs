@@ -1,6 +1,10 @@
+use crate::handlers::audit_services::AuditService;
 use anyhow::{Context, Result};
+use application::services::auth_service::AuthService;
 use core_services::jwt::JwtService;
+use domain::ports::{EmailServicePort, UserRepositoryPort};
 use email_service::{EmailConfig, EmailSender, EmailService};
+use persistence::repositories::user_repository::UserRepository;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -8,8 +12,6 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tracing::info;
-
-use crate::handlers::audit_services::AuditService;
 
 pub mod handlers;
 pub mod infra;
@@ -63,6 +65,17 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
 
     let policy_cache = Arc::new(RwLock::new(HashMap::new()));
 
+    let user_repo_port: Arc<dyn UserRepositoryPort> =
+        Arc::new(UserRepository::new(pool_auth.clone()));
+
+    let email_service_port: Arc<dyn EmailServicePort> = Arc::new(email_service.clone());
+
+    let auth_service = Arc::new(AuthService::new(
+        user_repo_port,
+        email_service_port,
+        Arc::new(jwt_service.clone()),
+    ));
+
     let app_state = state::AppState {
         enforcer: enforcer,
         policy_cache,
@@ -71,6 +84,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         jwt_service,
         email_service: Arc::new(email_service),
         audit_service,
+        auth_service,
     };
 
     info!("📡 Construindo rotas...");
