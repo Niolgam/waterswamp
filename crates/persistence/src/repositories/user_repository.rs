@@ -234,7 +234,7 @@ impl UserRepositoryPort for UserRepository {
         &self,
         limit: i64,
         offset: i64,
-        search: Option<&String>,
+        search: Option<String>,
     ) -> Result<(Vec<UserDto>, i64), RepositoryError> {
         let mut query_str =
             "SELECT id, username, email, created_at, updated_at FROM users".to_string();

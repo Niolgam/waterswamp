@@ -64,7 +64,7 @@ pub trait UserRepositoryPort: Send + Sync {
         &self,
         limit: i64,
         offset: i64,
-        search: Option<&String>,
+        search: Option<String>,
     ) -> Result<(Vec<UserDto>, i64), RepositoryError>;
 }
 

@@ -1,9 +1,9 @@
-use async_trait::async_trait;
-use std::sync::Arc;
-use tera::Context as TeraContext;
-use tokio::sync::Mutex;
-
 use crate::EmailSender;
+use async_trait::async_trait;
+use domain::ports::EmailServicePort;
+use domain::value_objects::{Email, Username};
+use std::sync::{Arc, Mutex};
+use tera::Context;
 
 /// Mock email for testing purposes
 #[derive(Clone, Debug)]
@@ -11,12 +11,10 @@ pub struct MockEmail {
     pub to: String,
     pub subject: String,
     pub template: String,
-    pub context: TeraContext,
+    pub context: Context,
 }
 
 /// Mock email service for testing
-///
-/// Stores all sent emails in memory for verification in tests
 #[derive(Clone, Default)]
 pub struct MockEmailService {
     pub messages: Arc<Mutex<Vec<MockEmail>>>,
@@ -27,61 +25,56 @@ impl MockEmailService {
         Self::default()
     }
 
-    /// Get all sent emails
-    ///
-    /// Useful for assertions in tests
     pub async fn get_messages(&self) -> Vec<MockEmail> {
-        self.messages.lock().await.clone()
+        self.messages.lock().unwrap().clone()
     }
 
-    /// Clear all sent emails
-    ///
-    /// Should be called between tests to reset state
     pub async fn clear(&self) {
-        self.messages.lock().await.clear();
-    }
-
-    /// Get count of sent emails
-    ///
-    /// Quick way to verify number of emails sent
-    pub async fn count(&self) -> usize {
-        self.messages.lock().await.len()
-    }
-
-    /// Find emails by recipient
-    ///
-    /// Returns all emails sent to the specified address
-    pub async fn find_by_recipient(&self, to: &str) -> Vec<MockEmail> {
-        self.messages
-            .lock()
-            .await
-            .iter()
-            .filter(|email| email.to == to)
-            .cloned()
-            .collect()
-    }
-
-    /// Find emails by template
-    ///
-    /// Returns all emails using the specified template
-    pub async fn find_by_template(&self, template: &str) -> Vec<MockEmail> {
-        self.messages
-            .lock()
-            .await
-            .iter()
-            .filter(|email| email.template == template)
-            .cloned()
-            .collect()
-    }
-
-    /// Get the last sent email
-    ///
-    /// Returns None if no emails have been sent
-    pub async fn last_email(&self) -> Option<MockEmail> {
-        self.messages.lock().await.last().cloned()
+        self.messages.lock().unwrap().clear();
     }
 }
 
+// --- IMPLEMENTAÇÃO DA PORTA DO DOMÍNIO ---
+#[async_trait]
+impl EmailServicePort for MockEmailService {
+    async fn send_verification_email(
+        &self,
+        to: &Email,
+        username: &Username,
+        token: &str,
+    ) -> Result<(), String> {
+        // Delega para o método legado
+        EmailSender::send_verification_email(
+            self,
+            to.as_str().to_string(),
+            username.as_str(),
+            token,
+        );
+        Ok(())
+    }
+
+    async fn send_welcome_email(&self, to: &Email, username: &Username) -> Result<(), String> {
+        EmailSender::send_welcome_email(self, to.as_str().to_string(), username.as_str());
+        Ok(())
+    }
+
+    async fn send_password_reset_email(
+        &self,
+        to: &Email,
+        username: &Username,
+        token: &str,
+    ) -> Result<(), String> {
+        EmailSender::send_password_reset_email(
+            self,
+            to.as_str().to_string(),
+            username.as_str(),
+            token,
+        );
+        Ok(())
+    }
+}
+
+// --- IMPLEMENTAÇÃO DO TRAIT LEGADO (USANDO TOKIO::SPAWN) ---
 #[async_trait]
 impl EmailSender for MockEmailService {
     async fn send_email(
@@ -89,9 +82,9 @@ impl EmailSender for MockEmailService {
         to_email: String,
         subject: String,
         template: &str,
-        context: TeraContext,
+        context: Context,
     ) -> anyhow::Result<()> {
-        let mut guard = self.messages.lock().await;
+        let mut guard = self.messages.lock().unwrap();
         guard.push(MockEmail {
             to: to_email,
             subject,
@@ -101,69 +94,72 @@ impl EmailSender for MockEmailService {
         Ok(())
     }
 
-    fn send_welcome_email(&self, to_email: String, username: &str) {
-        let mut context = TeraContext::new();
-        context.insert("username", username);
+    fn send_welcome_email(&self, to_email: String, _username: &str) {
         let service = self.clone();
-        let subject = "Bem-vindo ao Waterswamp!".to_string();
-        let template = "welcome.html".to_string();
+        // Volta a usar tokio::spawn (comportamento original)
         tokio::spawn(async move {
             let _ = service
-                .send_email(to_email, subject, &template, context)
+                .send_email(
+                    to_email,
+                    "Bem-vindo ao Waterswamp!".to_string(),
+                    "welcome.html",
+                    Context::new(),
+                )
                 .await;
         });
     }
 
-    fn send_password_reset_email(&self, to_email: String, username: &str, token: &str) {
-        let mut context = TeraContext::new();
-        context.insert("username", username);
-        let reset_link = format!("http://mock.test/reset?token={}", token);
-        context.insert("reset_link", &reset_link);
+    fn send_password_reset_email(&self, to_email: String, _username: &str, token: &str) {
         let service = self.clone();
-        let subject = "Redefina sua senha do Waterswamp".to_string();
-        let template = "reset_password.html".to_string();
+        let token = token.to_string();
         tokio::spawn(async move {
+            let mut ctx = Context::new();
+            ctx.insert(
+                "reset_link",
+                &format!("http://mock.test/reset?token={}", token),
+            );
             let _ = service
-                .send_email(to_email, subject, &template, context)
+                .send_email(
+                    to_email,
+                    "Redefina sua senha do Waterswamp".to_string(),
+                    "reset_password.html",
+                    ctx,
+                )
                 .await;
         });
     }
 
-    fn send_verification_email(&self, to_email: String, username: &str, token: &str) {
-        let mut context = TeraContext::new();
-        context.insert("username", username);
-        let verification_link = format!("http://mock.test/verify-email?token={}", token);
-        context.insert("verification_link", &verification_link);
+    fn send_verification_email(&self, to_email: String, _username: &str, token: &str) {
         let service = self.clone();
-        let subject = "Verifique seu email - Waterswamp".to_string();
-        let template = "email_verification.html".to_string();
+        let token = token.to_string();
         tokio::spawn(async move {
+            let mut ctx = Context::new();
+            ctx.insert(
+                "verification_link",
+                &format!("http://mock.test/verify-email?token={}", token),
+            );
             let _ = service
-                .send_email(to_email, subject, &template, context)
+                .send_email(
+                    to_email,
+                    "Verifique seu email - Waterswamp".to_string(),
+                    "email_verification.html",
+                    ctx,
+                )
                 .await;
         });
     }
 
-    fn send_mfa_enabled_email(&self, to_email: String, username: &str) {
-        let mut context = TeraContext::new();
-        context.insert("username", username);
-        context.insert("enabled_at", "2025-01-01 00:00:00 UTC");
+    fn send_mfa_enabled_email(&self, to_email: String, _username: &str) {
         let service = self.clone();
-        let subject = "MFA Ativado - Waterswamp".to_string();
-        let template = "mfa_enabled.html".to_string();
         tokio::spawn(async move {
             let _ = service
-                .send_email(to_email, subject, &template, context)
+                .send_email(
+                    to_email,
+                    "MFA Ativado - Waterswamp".to_string(),
+                    "mfa_enabled.html",
+                    Context::new(),
+                )
                 .await;
         });
-    }
-
-    // Implement test helper methods
-    async fn get_sent_emails(&self) -> Vec<MockEmail> {
-        self.messages.lock().await.clone()
-    }
-
-    async fn clear_sent_emails(&self) {
-        self.messages.lock().await.clear();
     }
 }

@@ -55,6 +55,7 @@ async-trait = { workspace = true }
 
 totp-rs = { workspace = true }
 rand = { workspace = true }
+futures = { workspace = true }
 
 [dev-dependencies]
 

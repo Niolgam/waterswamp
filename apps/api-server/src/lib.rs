@@ -32,9 +32,10 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     // ⭐ 2. Inicializar timestamp de uptime
     handlers::health_handler::init_server_start_time();
 
-    info!("🚀 Iniciando Waterswamp API...");
+    info!("🚀 Iniciando Waterswamp API (lib run)...");
 
     let config = infra::config::Config::from_env()?;
+    let config_arc = Arc::new(config.clone()); // Preparar para o State
 
     info!("🔌 Conectando aos bancos de dados...");
     let pool_auth = PgPool::connect(&config.auth_db).await?;
@@ -42,21 +43,29 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     info!("✅ Conexões com bancos estabelecidas");
 
     info!("🔐 Inicializando Casbin...");
-    let enforcer = infra::casbin_setup::setup_casbin(pool_auth.clone()).await?;
+    let enforcer = infra::casbin_setup::setup_casbin(pool_auth.clone()).await;
+    let enforcer = match enforcer {
+        Ok(e) => e,
+        Err(_) => infra::casbin_setup::setup_casbin(pool_auth.clone()).await?, // Tentativa de fix baseada no padrao
+    };
     info!("✅ Casbin inicializado");
 
     info!("🔑 Inicializando serviço JWT (EdDSA)...");
-    let jwt_service = JwtService::new(
-        config.jwt_private_key.as_bytes(),
-        config.jwt_public_key.as_bytes(),
-    )
-    .context("Falha ao inicializar JwtService")?;
+    // CORREÇÃO: Envolver em Arc imediatamente
+    let jwt_service = Arc::new(
+        JwtService::new(
+            config.jwt_private_key.as_bytes(),
+            config.jwt_public_key.as_bytes(),
+        )
+        .context("Falha ao inicializar JwtService")?,
+    );
 
     info!("📧 Inicializando serviço de email...");
     let email_config =
         EmailConfig::from_env().context("Falha ao carregar configuração de email")?;
+    // CORREÇÃO: Envolver em Arc imediatamente
     let email_service =
-        EmailService::new(email_config).context("Falha ao criar transportador de email")?;
+        Arc::new(EmailService::new(email_config).context("Falha ao criar transportador de email")?);
     info!("✅ Serviço de email pronto");
 
     info!("📝 Inicializando serviço de audit...");
@@ -65,26 +74,34 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
 
     let policy_cache = Arc::new(RwLock::new(HashMap::new()));
 
+    // --- WIRING (Injeção de Dependência) ---
+
+    // 1. Repositórios (Adapters) -> Arc<dyn Trait>
     let user_repo_port: Arc<dyn UserRepositoryPort> =
         Arc::new(UserRepository::new(pool_auth.clone()));
 
-    let email_service_port: Arc<dyn EmailServicePort> = Arc::new(email_service.clone());
+    // 2. Email (Adapter) -> Arc<dyn Trait>
+    // Coerção automática de Arc<Struct> para Arc<dyn Trait>
+    let email_service_port: Arc<dyn EmailServicePort> = email_service.clone();
 
+    // 3. Application Service
     let auth_service = Arc::new(AuthService::new(
         user_repo_port,
         email_service_port,
-        Arc::new(jwt_service.clone()),
+        jwt_service.clone(), // Passa o Arc<JwtService>
     ));
 
+    // 4. Construir State Global
     let app_state = state::AppState {
-        enforcer: enforcer,
+        enforcer,
         policy_cache,
         db_pool_auth: pool_auth,
         db_pool_logs: pool_logs,
-        jwt_service,
-        email_service: Arc::new(email_service),
+        jwt_service,   // Agora é Arc<JwtService>
+        email_service, // Agora é Arc<EmailService>
         audit_service,
-        auth_service,
+        auth_service,       // Injeção do serviço
+        config: config_arc, // Adicionado campo config
     };
 
     info!("📡 Construindo rotas...");

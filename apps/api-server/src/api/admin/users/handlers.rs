@@ -45,7 +45,7 @@ pub async fn list_users(
     let offset = params.offset.unwrap_or(0);
 
     // Handle "q" alias or empty search
-    let search = params.search.as_ref().filter(|s| !s.trim().is_empty());
+    let search = params.search.filter(|s| !s.trim().is_empty());
 
     let (users_dto, total) = user_repo.list(limit, offset, search).await?;
 

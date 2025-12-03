@@ -160,7 +160,7 @@ async fn test_register_success_sends_welcome_email() {
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let received_emails = app.email_service.messages.lock().await;
+    let received_emails = app.email_service.messages.lock();
 
     // Verificar se 2 emails foram recebidos (verification + welcome)
     assert_eq!(
