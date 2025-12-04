@@ -37,6 +37,7 @@ governor = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 sha2 = { workspace = true }
 regex = { workspace = true }
+base64 = { workspace = true }
 
 utoipa = { workspace = true, features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { workspace = true, features = ["axum"] }

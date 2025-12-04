@@ -44,6 +44,24 @@ pub struct MfaVerifyResponse {
     pub backup_code_used: bool,
 }
 
+// CORREÇÃO: Adicionar a implementação do construtor new()
+impl MfaVerifyResponse {
+    pub fn new(
+        access_token: String,
+        refresh_token: String,
+        expires_in: i64,
+        backup_code_used: bool,
+    ) -> Self {
+        Self {
+            access_token,
+            refresh_token,
+            token_type: "Bearer".to_string(),
+            expires_in,
+            backup_code_used,
+        }
+    }
+}
+
 // --- Management ---
 
 #[derive(Debug, Deserialize, Validate)]

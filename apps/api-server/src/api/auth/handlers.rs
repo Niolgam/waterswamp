@@ -9,6 +9,7 @@ use axum::{extract::State, http::StatusCode, Json};
 use chrono::{Duration, Utc};
 use core_services::security::{hash_password, validate_password_strength, verify_password};
 use domain::models::TokenType;
+use domain::ports::AuthRepositoryPort;
 use domain::ports::UserRepositoryPort;
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use sha2::{Digest, Sha256};
@@ -360,10 +361,10 @@ pub async fn logout(
     })?;
 
     let refresh_token_hash = hash_token(&payload.refresh_token);
-    let auth_repo = AuthRepository::new(&state.db_pool_auth);
+    let auth_repo = AuthRepository::new(state.db_pool_auth);
 
     // 2. Revogar token
-    if !auth_repo.revoke_refresh_token(&refresh_token_hash).await? {
+    if !auth_repo.revoke_token(&refresh_token_hash).await? {
         return Err(AppError::NotFound(
             "Token não encontrado ou já revogado".to_string(),
         ));
@@ -463,7 +464,7 @@ pub async fn reset_password(
         .context("Falha ao atualizar senha")?;
 
     // 6. Revogar todos os refresh tokens do usuário
-    let auth_repo = AuthRepository::new(&state.db_pool_auth);
+    let auth_repo = AuthRepository::new(state.db_pool_auth);
     auth_repo
         .revoke_all_user_tokens(user_id)
         .await

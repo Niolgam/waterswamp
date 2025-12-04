@@ -72,6 +72,11 @@ impl EmailServicePort for MockEmailService {
         );
         Ok(())
     }
+
+    async fn send_mfa_enabled_email(&self, to: &Email, username: &Username) -> Result<(), String> {
+        EmailSender::send_mfa_enabled_email(self, to.as_str().to_string(), username.as_str());
+        Ok(())
+    }
 }
 
 // --- IMPLEMENTAÇÃO DO TRAIT LEGADO (USANDO TOKIO::SPAWN) ---
@@ -94,30 +99,44 @@ impl EmailSender for MockEmailService {
         Ok(())
     }
 
-    fn send_welcome_email(&self, to_email: String, _username: &str) {
+    // [FIX] Override default implementation to actually return messages
+    async fn get_sent_emails(&self) -> Vec<MockEmail> {
+        self.messages.lock().unwrap().clone()
+    }
+
+    // [FIX] Override default implementation to actually clear messages
+    async fn clear_sent_emails(&self) {
+        self.messages.lock().unwrap().clear();
+    }
+
+    fn send_welcome_email(&self, to_email: String, username: &str) {
         let service = self.clone();
-        // Volta a usar tokio::spawn (comportamento original)
+        let username = username.to_string(); // Capture username
         tokio::spawn(async move {
+            let mut ctx = Context::new();
+            ctx.insert("username", &username); // Insert into context
             let _ = service
                 .send_email(
                     to_email,
                     "Bem-vindo ao Waterswamp!".to_string(),
                     "welcome.html",
-                    Context::new(),
+                    ctx,
                 )
                 .await;
         });
     }
 
-    fn send_password_reset_email(&self, to_email: String, _username: &str, token: &str) {
+    fn send_password_reset_email(&self, to_email: String, username: &str, token: &str) {
         let service = self.clone();
         let token = token.to_string();
+        let username = username.to_string(); // Capture username
         tokio::spawn(async move {
             let mut ctx = Context::new();
             ctx.insert(
                 "reset_link",
                 &format!("http://mock.test/reset?token={}", token),
             );
+            ctx.insert("username", &username); // Insert into context
             let _ = service
                 .send_email(
                     to_email,
@@ -129,15 +148,17 @@ impl EmailSender for MockEmailService {
         });
     }
 
-    fn send_verification_email(&self, to_email: String, _username: &str, token: &str) {
+    fn send_verification_email(&self, to_email: String, username: &str, token: &str) {
         let service = self.clone();
         let token = token.to_string();
+        let username = username.to_string(); // Capture username
         tokio::spawn(async move {
             let mut ctx = Context::new();
             ctx.insert(
                 "verification_link",
                 &format!("http://mock.test/verify-email?token={}", token),
             );
+            ctx.insert("username", &username); // Insert into context
             let _ = service
                 .send_email(
                     to_email,
@@ -149,15 +170,18 @@ impl EmailSender for MockEmailService {
         });
     }
 
-    fn send_mfa_enabled_email(&self, to_email: String, _username: &str) {
+    fn send_mfa_enabled_email(&self, to_email: String, username: &str) {
         let service = self.clone();
+        let username = username.to_string();
         tokio::spawn(async move {
+            let mut ctx = Context::new();
+            ctx.insert("username", &username);
             let _ = service
                 .send_email(
                     to_email,
                     "MFA Ativado - Waterswamp".to_string(),
                     "mfa_enabled.html",
-                    Context::new(),
+                    ctx,
                 )
                 .await;
         });

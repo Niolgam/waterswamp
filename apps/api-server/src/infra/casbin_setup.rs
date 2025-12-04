@@ -232,7 +232,14 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .add_grouping_policy(str_vec![ROLE_ADMIN, ROLE_USER])
         .await?;
 
-    enforcer.save_policy().await?;
+    if let Err(e) = enforcer.save_policy().await {
+        let error_msg = e.to_string();
+        if error_msg.contains("23505") || error_msg.contains("unique constraint") {
+            info!("Grupos já existem no banco, ignorando erro.");
+        } else {
+            return Err(e).context("Falha ao salvar grupos");
+        }
+    }
 
     info!("Grupos do Casbin associados aos UUIDs dos usuários.");
 

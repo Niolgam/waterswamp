@@ -104,7 +104,6 @@ pub trait EmailSender: Send + Sync {
 
     /// Envia notificação de MFA ativado (fire-and-forget)
     fn send_mfa_enabled_email(&self, to_email: String, username: &str);
-
     // Métodos auxiliares para testes (com implementação padrão vazia para produção)
     async fn get_sent_emails(&self) -> Vec<MockEmail> {
         Vec::new()
@@ -270,6 +269,34 @@ impl EmailServicePort for EmailService {
         });
         Ok(())
     }
+
+    async fn send_mfa_enabled_email(&self, to: &Email, username: &Username) -> Result<(), String> {
+        let mut context = TeraContext::new();
+        context.insert("username", username.as_str());
+
+        let enabled_at = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string();
+        context.insert("enabled_at", &enabled_at);
+
+        let service = self.clone();
+        let to_string = to.as_str().to_string();
+
+        tokio::spawn(async move {
+            if let Err(e) = service
+                .send_raw(
+                    to_string,
+                    "MFA Ativado - Waterswamp".into(),
+                    "mfa_enabled.html",
+                    context,
+                )
+                .await
+            {
+                tracing::error!("Falha no envio de email MFA: {:?}", e);
+            }
+        });
+        Ok(())
+    }
 }
 
 // Mantemos a implementação do Trait Legado (EmailSender) para não quebrar handlers antigos
@@ -305,7 +332,8 @@ impl EmailSender for EmailService {
         }
     }
     fn send_mfa_enabled_email(&self, to: String, user: &str) {
-        // Implementação similar...
-        // Para brevidade, omitido, mas siga o padrão acima.
+        if let (Ok(e), Ok(u)) = (Email::try_from(to), Username::try_from(user)) {
+            let _ = EmailServicePort::send_mfa_enabled_email(self, &e, &u);
+        }
     }
 }

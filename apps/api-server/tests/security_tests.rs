@@ -329,7 +329,7 @@ async fn test_refresh_token_theft_detection_revokes_family() {
 async fn test_register_success() {
     let app = common::spawn_app().await;
 
-    // Register a new user via the endpoint
+    // CORREÇÃO: Usar register_test_user e passar &app.api (TestServer)
     let (username, _email, password) = common::register_test_user(&app.api)
         .await
         .expect("Failed to register user");
@@ -358,7 +358,7 @@ async fn test_register_success() {
 async fn test_register_duplicate_username() {
     let app = common::spawn_app().await;
 
-    // Register first user
+    // CORREÇÃO: Usar register_test_user e passar &app.api
     let (username, _email, _password) = common::register_test_user(&app.api)
         .await
         .expect("Failed to register first user");

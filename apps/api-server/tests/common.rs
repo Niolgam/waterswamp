@@ -1,8 +1,15 @@
+use application::services::auth_service::AuthService;
+use application::services::mfa_service::MfaService;
+use application::services::user_service::UserService;
 use axum_test::TestServer;
 use core_services::jwt::JwtService;
 use domain::models::{Claims, TokenType};
+use domain::ports::MfaRepositoryPort;
+use domain::ports::{AuthRepositoryPort, EmailServicePort, UserRepositoryPort};
 use email_service::{EmailSender, MockEmailService};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use persistence::repositories::mfa_repository::MfaRepository;
+use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,16 +23,6 @@ use waterswamp::infra::config::Config;
 use waterswamp::routes::build;
 use waterswamp::state::AppState;
 
-// Imports necessários para a injeção de dependência
-use application::services::auth_service::AuthService;
-use domain::ports::{EmailServicePort, UserRepositoryPort};
-use persistence::repositories::user_repository::UserRepository;
-
-// ============================================================================
-// TestApp
-// ============================================================================
-
-#[allow(dead_code)]
 pub struct TestApp {
     pub api: TestServer,
     pub db_auth: PgPool,
@@ -36,8 +33,13 @@ pub struct TestApp {
 }
 
 pub async fn spawn_app() -> TestApp {
-    dotenvy::dotenv().ok();
-    std::env::set_var("DISABLE_RATE_LIMIT", "true");
+    INIT.call_once(|| {
+        dotenvy::dotenv().ok();
+        std::env::set_var("DISABLE_RATE_LIMIT", "true");
+        // Force debug logs para ver o erro do SQLx ou TOTP
+        std::env::set_var("RUST_LOG", "debug,waterswamp=debug,sqlx=warn");
+        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+    });
 
     let config = Config::from_env().expect("Falha ao carregar config de teste");
 
@@ -48,7 +50,7 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Falha ao conectar ao logs_db");
 
-    // Rodar migrations para garantir banco limpo/atualizado
+    // Rodar migrations
     sqlx::migrate!("../../crates/persistence/migrations_auth")
         .run(&pool_auth)
         .await
@@ -72,18 +74,36 @@ pub async fn spawn_app() -> TestApp {
     let email_service = Arc::new(MockEmailService::new());
     let audit_service = AuditService::new(pool_logs.clone());
 
-    // --- WIRING PARA TESTES ---
-    // 1. Repositório (Adapter)
-    let user_repo = Arc::new(UserRepository::new(pool_auth.clone()));
-    let user_repo_port: Arc<dyn UserRepositoryPort> = user_repo.clone();
+    // --- WIRING PARA TESTES (Nova Arquitetura) ---
+    // 1. Repositórios (Adapters)
+    let user_repo_port: Arc<dyn UserRepositoryPort> =
+        Arc::new(UserRepository::new(pool_auth.clone()));
+    let auth_repo_port: Arc<dyn AuthRepositoryPort> =
+        Arc::new(AuthRepository::new(pool_auth.clone()));
+    let mfa_repo_port: Arc<dyn MfaRepositoryPort> = Arc::new(MfaRepository::new(pool_auth.clone()));
 
     // 2. Email (Adapter Mockado)
     let email_service_port: Arc<dyn EmailServicePort> = email_service.clone();
 
     // 3. Service (App)
     let auth_service = Arc::new(AuthService::new(
-        user_repo_port,
-        email_service_port,
+        user_repo_port.clone(),
+        auth_repo_port.clone(), // Injetado
+        email_service_port.clone(),
+        jwt_service.clone(),
+    ));
+
+    let user_service = Arc::new(UserService::new(
+        user_repo_port.clone(),
+        auth_repo_port.clone(),
+        email_service_port.clone(),
+    ));
+
+    let mfa_service = Arc::new(MfaService::new(
+        mfa_repo_port.clone(),
+        user_repo_port.clone(),
+        auth_repo_port.clone(),
+        email_service_port.clone(),
         jwt_service.clone(),
     ));
 
@@ -92,23 +112,24 @@ pub async fn spawn_app() -> TestApp {
         policy_cache: Arc::new(RwLock::new(HashMap::new())),
         db_pool_auth: pool_auth.clone(),
         db_pool_logs: pool_logs.clone(),
-        jwt_service: jwt_service.clone(), // Note: Agora é Arc no State? Verifique seu state.rs
+        jwt_service: jwt_service.clone(),
         email_service: email_service.clone(),
         audit_service,
-        auth_service, // <--- Injeção aqui!
+        auth_service,
+        user_service,
+        mfa_service,
+        config: Arc::new(config),
     };
 
     let app = build(app_state);
     let api = TestServer::new(app).unwrap();
 
-    // Setup inicial de dados (seeding)
-    // ... (Assumindo que migrations criam users ou que rodamos seed separado)
-    // Para simplificar, vamos ignorar erros de "não encontrado" se o seed não rodou
+    // Seeding dummy data (ignora erro se nao existir para evitar falhas em migrations limpas)
     let alice_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'alice'")
         .fetch_optional(&pool_auth)
         .await
         .unwrap_or(None)
-        .unwrap_or_default(); // Fallback seguro
+        .unwrap_or_default();
 
     let bob_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'bob'")
         .fetch_optional(&pool_auth)
@@ -126,7 +147,7 @@ pub async fn spawn_app() -> TestApp {
     }
 }
 
-/// Helper para criar AppState de teste (reutiliza lógica do spawn_app)
+/// Helper para criar AppState de teste (usado em testes unitários de handlers)
 pub async fn create_test_app_state() -> AppState {
     dotenvy::dotenv().ok();
     std::env::set_var("DISABLE_RATE_LIMIT", "true");
@@ -152,14 +173,31 @@ pub async fn create_test_app_state() -> AppState {
     let email_service = Arc::new(MockEmailService::new());
     let audit_service = AuditService::new(pool_logs.clone());
 
-    // --- WIRING ---
-    let user_repo = Arc::new(UserRepository::new(pool_auth.clone()));
-    let user_repo_port: Arc<dyn UserRepositoryPort> = user_repo.clone();
+    let user_repo_port: Arc<dyn UserRepositoryPort> =
+        Arc::new(UserRepository::new(pool_auth.clone()));
+    let auth_repo_port: Arc<dyn AuthRepositoryPort> =
+        Arc::new(AuthRepository::new(pool_auth.clone()));
+    let mfa_repo_port: Arc<dyn MfaRepositoryPort> = Arc::new(MfaRepository::new(pool_auth.clone()));
     let email_service_port: Arc<dyn EmailServicePort> = email_service.clone();
 
     let auth_service = Arc::new(AuthService::new(
-        user_repo_port,
-        email_service_port,
+        user_repo_port.clone(),
+        auth_repo_port.clone(), // Injetado
+        email_service_port.clone(),
+        jwt_service.clone(),
+    ));
+
+    let user_service = Arc::new(UserService::new(
+        user_repo_port.clone(),
+        auth_repo_port.clone(),
+        email_service_port.clone(),
+    ));
+
+    let mfa_service = Arc::new(MfaService::new(
+        mfa_repo_port.clone(),
+        user_repo_port.clone(),
+        auth_repo_port.clone(),
+        email_service_port.clone(),
         jwt_service.clone(),
     ));
 
@@ -168,10 +206,13 @@ pub async fn create_test_app_state() -> AppState {
         policy_cache: Arc::new(RwLock::new(HashMap::new())),
         db_pool_auth: pool_auth,
         db_pool_logs: pool_logs,
-        jwt_service, // Assumindo Arc<JwtService> no State
+        jwt_service,
         email_service,
         audit_service,
-        auth_service, // <--- Injeção
+        auth_service,
+        user_service,
+        mfa_service,
+        config: Arc::new(config),
     }
 }
 
@@ -230,29 +271,36 @@ pub async fn create_test_user(
     pool: &PgPool,
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
     use core_services::security::hash_password;
+
     let counter = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();
+
     let username = format!("test_user_{}", counter);
     let email = format!("test_{}@test.com", counter);
     let password = "SecureP@ssw0rd!123".to_string();
-    let hash = tokio::task::spawn_blocking({
-        let p = password.clone();
-        move || hash_password(&p)
-    })
-    .await??;
 
-    sqlx::query("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3)")
-        .bind(&username)
-        .bind(&email)
-        .bind(&hash)
-        .execute(pool)
-        .await?;
+    let password_clone = password.clone();
+    let password_hash =
+        tokio::task::spawn_blocking(move || hash_password(&password_clone)).await??;
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (username, email, password_hash)
+        VALUES ($1, $2, $3)
+        "#,
+    )
+    .bind(&username)
+    .bind(&email)
+    .bind(&password_hash)
+    .execute(pool)
+    .await?;
 
     Ok((username, email, password))
 }
 
+// ESTA FUNÇÃO ESTAVA FALTANDO E É A CAUSA DO ERRO NO SECURITY_TESTS
 pub async fn register_test_user(
     server: &axum_test::TestServer,
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
@@ -260,6 +308,7 @@ pub async fn register_test_user(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();
+
     let username = format!("test_user_{}", counter);
     let email = format!("test_{}@test.com", counter);
     let password = "SecureP@ssw0rd!123".to_string();
@@ -267,13 +316,21 @@ pub async fn register_test_user(
     let response = server
         .post("/register")
         .json(&serde_json::json!({
-            "username": username, "email": email, "password": password
+            "username": username,
+            "email": email,
+            "password": password
         }))
         .await;
 
     if response.status_code() != 201 {
-        return Err(format!("Falha ao registrar: {}", response.text()).into());
+        return Err(format!(
+            "Falha ao registrar usuário: status={}, body={}",
+            response.status_code(),
+            response.text()
+        )
+        .into());
     }
+
     Ok((username, email, password))
 }
 
@@ -281,18 +338,29 @@ pub async fn create_unique_test_user(
     pool: &PgPool,
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
     use core_services::security::hash_password;
+    use uuid::Uuid;
+
     let unique_id = Uuid::new_v4();
     let username = format!("test_user_{}", unique_id);
     let email = format!("test_{}@test.com", unique_id);
     let password = "SecureP@ssw0rd!123".to_string();
-    let hash = tokio::task::spawn_blocking({
-        let p = password.clone();
-        move || hash_password(&p)
-    })
-    .await??;
 
-    sqlx::query("INSERT INTO users (username, email, password_hash, email_verified) VALUES ($1, $2, $3, TRUE) ON CONFLICT (username) DO NOTHING")
-        .bind(&username).bind(&email).bind(&hash).execute(pool).await?;
+    let password_clone = password.clone();
+    let password_hash =
+        tokio::task::spawn_blocking(move || hash_password(&password_clone)).await??;
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (username, email, password_hash, email_verified)
+        VALUES ($1, $2, $3, TRUE)
+        ON CONFLICT (username) DO NOTHING
+        "#,
+    )
+    .bind(&username)
+    .bind(&email)
+    .bind(&password_hash)
+    .execute(pool)
+    .await?;
 
     Ok((username, email, password))
 }
@@ -308,16 +376,19 @@ pub fn generate_custom_token(
 ) -> String {
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let encoding_key = EncodingKey::from_ed_pem(private_pem).unwrap();
+
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
+
     let claims = Claims {
         sub: user_id,
         exp: now + expires_in_seconds,
         iat: now,
         token_type,
     };
+
     let header = Header::new(Algorithm::EdDSA);
     encode(&header, &claims, &encoding_key).unwrap()
 }

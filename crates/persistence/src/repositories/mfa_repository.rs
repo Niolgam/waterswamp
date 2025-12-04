@@ -1,244 +1,197 @@
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use domain::errors::RepositoryError;
+use domain::ports::MfaRepositoryPort;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Repository for MFA/TOTP operations.
-pub struct MfaRepository<'a> {
-    pool: &'a PgPool,
+#[derive(Clone)]
+pub struct MfaRepository {
+    pool: PgPool,
 }
 
-impl<'a> MfaRepository<'a> {
-    pub fn new(pool: &'a PgPool) -> Self {
+impl MfaRepository {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
-    /// Saves a temporary MFA setup token with the secret.
-    pub async fn save_setup_token(
+    fn map_err(e: sqlx::Error) -> RepositoryError {
+        RepositoryError::Database(e.to_string())
+    }
+}
+
+#[async_trait]
+impl MfaRepositoryPort for MfaRepository {
+    async fn save_setup_token(
         &self,
         user_id: Uuid,
         secret: &str,
-        expires_in_minutes: i64,
-    ) -> Result<Uuid, sqlx::Error> {
-        let setup_id: Uuid = sqlx::query_scalar(
+        token_hash: &str,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
             r#"
-            INSERT INTO mfa_setup_tokens (user_id, secret, expires_at)
-            VALUES ($1, $2, NOW() + ($3 || ' minutes')::INTERVAL)
-            RETURNING id
+            INSERT INTO mfa_setup_tokens (user_id, secret, token_hash, expires_at)
+            VALUES ($1, $2, $3, $4)
             "#,
         )
         .bind(user_id)
         .bind(secret)
-        .bind(expires_in_minutes.to_string())
-        .fetch_one(self.pool)
-        .await?;
+        .bind(token_hash)
+        .bind(expires_at)
+        .execute(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
 
-        Ok(setup_id)
+        Ok(())
     }
 
-    /// Finds a valid setup token and returns (user_id, secret).
-    pub async fn find_valid_setup_token(
+    async fn find_setup_token(
         &self,
-        setup_id: Uuid,
-    ) -> Result<Option<(Uuid, String)>, sqlx::Error> {
+        token_hash: &str,
+    ) -> Result<Option<(Uuid, String)>, RepositoryError> {
         let result: Option<(Uuid, String)> = sqlx::query_as(
             r#"
             SELECT user_id, secret
             FROM mfa_setup_tokens
-            WHERE id = $1
-              AND verified = FALSE
-              AND expires_at > NOW()
+            WHERE token_hash = $1 AND expires_at > NOW()
             "#,
         )
-        .bind(setup_id)
-        .fetch_optional(self.pool)
-        .await?;
+        .bind(token_hash)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
 
         Ok(result)
     }
 
-    /// Marks setup token as verified and deletes it.
-    pub async fn complete_setup(&self, setup_id: Uuid) -> Result<(), sqlx::Error> {
-        sqlx::query("DELETE FROM mfa_setup_tokens WHERE id = $1")
-            .bind(setup_id)
-            .execute(self.pool)
-            .await?;
-
+    async fn delete_setup_token(&self, token_hash: &str) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM mfa_setup_tokens WHERE token_hash = $1")
+            .bind(token_hash)
+            .execute(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
         Ok(())
     }
 
-    /// Enables MFA for a user with the secret and backup codes.
-    pub async fn enable_mfa(
-        &self,
-        user_id: Uuid,
-        secret: &str,
-        backup_codes_hashed: &[String],
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            UPDATE users
-            SET mfa_enabled = TRUE,
-                mfa_secret = $2,
-                mfa_backup_codes = $3,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-        )
-        .bind(user_id)
-        .bind(secret)
-        .bind(backup_codes_hashed)
-        .execute(self.pool)
-        .await?;
+    async fn enable_mfa(&self, user_id: Uuid, secret: &str) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(Self::map_err)?;
 
+        // 1. Salvar segredo no usuário e ativar flag
+        sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $1 WHERE id = $2")
+            .bind(secret)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::map_err)?;
+
+        // 2. Limpar tokens de setup pendentes deste usuário
+        sqlx::query("DELETE FROM mfa_setup_tokens WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::map_err)?;
+
+        tx.commit().await.map_err(Self::map_err)?;
         Ok(())
     }
 
-    /// Disables MFA for a user.
-    pub async fn disable_mfa(&self, user_id: Uuid) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            UPDATE users
-            SET mfa_enabled = FALSE,
-                mfa_secret = NULL,
-                mfa_backup_codes = NULL,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-        )
-        .bind(user_id)
-        .execute(self.pool)
-        .await?;
+    async fn disable_mfa(&self, user_id: Uuid) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(Self::map_err)?;
 
+        // Desativar no usuário
+        sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::map_err)?;
+
+        // Limpar códigos de backup
+        sqlx::query("DELETE FROM mfa_backup_codes WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::map_err)?;
+
+        tx.commit().await.map_err(Self::map_err)?;
         Ok(())
     }
 
-    /// Gets MFA status and secret for a user.
-    pub async fn get_mfa_info(
+    async fn save_backup_codes(
         &self,
         user_id: Uuid,
-    ) -> Result<Option<(bool, Option<String>, Option<Vec<String>>)>, sqlx::Error> {
-        let result: Option<(bool, Option<String>, Option<Vec<String>>)> = sqlx::query_as(
-            r#"
-            SELECT mfa_enabled, mfa_secret, mfa_backup_codes
-            FROM users
-            WHERE id = $1
-            "#,
+        codes: &[String],
+    ) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(Self::map_err)?;
+
+        // Limpar antigos
+        sqlx::query("DELETE FROM mfa_backup_codes WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::map_err)?;
+
+        // Inserir novos
+        for code in codes {
+            // Em produção, backup codes devem ser hasheados!
+            // Assumindo que 'code' aqui já vem hasheado ou estamos usando plain por enquanto.
+            // Para segurança máxima: hash aqui ou no service. Vamos assumir que o Service hasheia.
+            sqlx::query("INSERT INTO mfa_backup_codes (user_id, code_hash) VALUES ($1, $2)")
+                .bind(user_id)
+                .bind(code)
+                .execute(&mut *tx)
+                .await
+                .map_err(Self::map_err)?;
+        }
+
+        tx.commit().await.map_err(Self::map_err)?;
+        Ok(())
+    }
+
+    async fn get_backup_codes(&self, user_id: Uuid) -> Result<Vec<String>, RepositoryError> {
+        let codes: Vec<(String,)> = sqlx::query_as(
+            "SELECT code_hash FROM mfa_backup_codes WHERE user_id = $1 AND used = FALSE",
         )
         .bind(user_id)
-        .fetch_optional(self.pool)
-        .await?;
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
 
-        Ok(result)
+        Ok(codes.into_iter().map(|(c,)| c).collect())
     }
 
-    /// Checks if MFA is enabled for a user.
-    pub async fn is_mfa_enabled(&self, user_id: Uuid) -> Result<bool, sqlx::Error> {
-        sqlx::query_scalar("SELECT mfa_enabled FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(self.pool)
-            .await
-    }
-
-    /// Gets the MFA secret for TOTP verification.
-    pub async fn get_mfa_secret(&self, user_id: Uuid) -> Result<Option<String>, sqlx::Error> {
-        sqlx::query_scalar("SELECT mfa_secret FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(self.pool)
-            .await
-    }
-
-    /// Gets backup codes for a user.
-    pub async fn get_backup_codes(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<Vec<String>>, sqlx::Error> {
-        sqlx::query_scalar("SELECT mfa_backup_codes FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(self.pool)
-            .await
-    }
-
-    /// Removes a used backup code from the array.
-    pub async fn remove_backup_code(
+    async fn verify_and_consume_backup_code(
         &self,
         user_id: Uuid,
         code_hash: &str,
-    ) -> Result<bool, sqlx::Error> {
+    ) -> Result<bool, RepositoryError> {
+        // Verifica se existe um código não usado com esse hash
         let result = sqlx::query(
-            r#"
-            UPDATE users
-            SET mfa_backup_codes = array_remove(mfa_backup_codes, $2),
-                updated_at = NOW()
-            WHERE id = $1 AND $2 = ANY(mfa_backup_codes)
-            "#,
+            "UPDATE mfa_backup_codes SET used = TRUE, used_at = NOW() WHERE user_id = $1 AND code_hash = $2 AND used = FALSE"
         )
         .bind(user_id)
         .bind(code_hash)
-        .execute(self.pool)
-        .await?;
+        .execute(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
 
         Ok(result.rows_affected() > 0)
     }
 
-    /// Records backup code usage for audit.
-    pub async fn record_backup_code_usage(
-        &self,
-        user_id: Uuid,
-        code_hash: &str,
-        ip_address: Option<&str>,
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            INSERT INTO mfa_backup_code_usage (user_id, code_hash, ip_address)
-            VALUES ($1, $2, $3::INET)
-            "#,
-        )
-        .bind(user_id)
-        .bind(code_hash)
-        .bind(ip_address)
-        .execute(self.pool)
-        .await?;
-
-        Ok(())
+    async fn get_mfa_secret(&self, user_id: Uuid) -> Result<Option<String>, RepositoryError> {
+        sqlx::query_scalar("SELECT mfa_secret FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Self::map_err)
     }
 
-    /// Updates backup codes (for regeneration).
-    pub async fn update_backup_codes(
-        &self,
-        user_id: Uuid,
-        backup_codes_hashed: &[String],
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            UPDATE users
-            SET mfa_backup_codes = $2,
-                updated_at = NOW()
-            WHERE id = $1
-            "#,
-        )
-        .bind(user_id)
-        .bind(backup_codes_hashed)
-        .execute(self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    /// Counts remaining backup codes.
-    pub async fn count_backup_codes(&self, user_id: Uuid) -> Result<usize, sqlx::Error> {
-        let codes: Option<Vec<String>> =
-            sqlx::query_scalar("SELECT mfa_backup_codes FROM users WHERE id = $1")
-                .bind(user_id)
-                .fetch_one(self.pool)
-                .await?;
-
-        Ok(codes.map(|c| c.len()).unwrap_or(0))
-    }
-
-    /// Cleans up expired setup tokens (for maintenance jobs).
-    pub async fn cleanup_expired_setup_tokens(&self) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query("DELETE FROM mfa_setup_tokens WHERE expires_at < NOW()")
-            .execute(self.pool)
-            .await?;
-
-        Ok(result.rows_affected())
+    async fn is_mfa_enabled(&self, user_id: Uuid) -> Result<bool, RepositoryError> {
+        sqlx::query_scalar("SELECT mfa_enabled FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Self::map_err)
+            .map(|opt| opt.unwrap_or(false))
     }
 }

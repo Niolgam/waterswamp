@@ -7,6 +7,7 @@ use axum::{
 use casbin::{Adapter, CoreApi, MgmtApi};
 use core_services::security::hash_password;
 use domain::models::{ListUsersQuery, UserDetailDto, UserDto, UserDtoExtended};
+use domain::ports::AuthRepositoryPort;
 use domain::ports::UserRepositoryPort;
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use serde_json::{json, Value};
@@ -157,7 +158,7 @@ pub async fn update_user(
         return Err(AppError::Validation(e));
     }
 
-    let auth_repo = AuthRepository::new(&state.db_pool_auth);
+    let auth_repo = AuthRepository::new(state.db_pool_auth.clone());
     let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     if user_repo.find_by_id(user_id).await?.is_none() {
@@ -237,7 +238,7 @@ pub async fn delete_user(
         ));
     }
 
-    let auth_repo = AuthRepository::new(&state.db_pool_auth);
+    let auth_repo = AuthRepository::new(state.db_pool_auth.clone());
     let user_repo = UserRepository::new(state.db_pool_auth.clone());
 
     auth_repo.revoke_all_user_tokens(user_id).await?;

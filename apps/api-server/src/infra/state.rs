@@ -1,6 +1,8 @@
 use crate::handlers::audit_services::AuditService;
 use crate::infra::config::Config;
 use application::services::auth_service::AuthService;
+use application::services::mfa_service::MfaService;
+use application::services::user_service::UserService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use email_service::EmailSender;
@@ -21,5 +23,7 @@ pub struct AppState {
     pub email_service: Arc<dyn EmailSender + Send + Sync>,
     pub audit_service: AuditService,
     pub auth_service: Arc<AuthService>,
+    pub user_service: Arc<UserService>,
+    pub mfa_service: Arc<MfaService>,
     pub config: Arc<Config>,
 }

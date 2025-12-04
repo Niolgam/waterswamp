@@ -5,12 +5,10 @@ use uuid::Uuid;
 
 mod common;
 
-// Helper to generate TOTP code from secret
-fn generate_totp_code(secret_base32: &str) -> String {
+fn generate_totp_code(secret_base32: &str, username: &str) -> String {
     let secret_bytes = Secret::Encoded(secret_base32.to_string())
         .to_bytes()
         .unwrap();
-    // FIXED: totp-rs 5.7.0 requires issuer and account_name
     let totp = TOTP::new(
         TotpAlgorithm::SHA1,
         6,
@@ -18,7 +16,7 @@ fn generate_totp_code(secret_base32: &str) -> String {
         30,
         secret_bytes,
         Some("Waterswamp".to_string()),
-        "test_user".to_string(),
+        username.to_string(), // Usa o username correto
     )
     .unwrap();
     totp.generate_current().unwrap()
@@ -132,7 +130,7 @@ async fn test_mfa_verify_setup_success() {
     let setup_token = setup_body["setup_token"].as_str().unwrap();
 
     // 2. Generate a valid TOTP code
-    let totp_code = generate_totp_code(secret);
+    let totp_code = generate_totp_code(secret, "alice");
 
     // 3. Verify setup
     let verify_response = app
@@ -295,7 +293,7 @@ async fn test_mfa_verify_with_totp() {
     let mfa_token = login_body["mfa_token"].as_str().unwrap();
 
     // 3. Generate valid TOTP code
-    let totp_code = generate_totp_code(TEST_SECRET);
+    let totp_code = generate_totp_code(TEST_SECRET, "bob");
 
     // 4. Verify MFA
     let mfa_response = app
@@ -456,7 +454,7 @@ async fn test_mfa_disable() {
     .await
     .unwrap();
 
-    let totp_code = generate_totp_code(TEST_SECRET);
+    let totp_code = generate_totp_code(TEST_SECRET, "alice");
 
     // Disable MFA
     let disable_response = app
@@ -506,7 +504,7 @@ async fn test_mfa_disable_wrong_password() {
     .await
     .unwrap();
 
-    let totp_code = generate_totp_code(TEST_SECRET);
+    let totp_code = generate_totp_code(TEST_SECRET, "alice");
 
     // Try to disable with wrong password
     let disable_response = app
@@ -549,7 +547,7 @@ async fn test_mfa_regenerate_backup_codes() {
     .await
     .unwrap();
 
-    let totp_code = generate_totp_code(TEST_SECRET);
+    let totp_code = generate_totp_code(TEST_SECRET, "alice");
 
     // Regenerate backup codes
     let regen_response = app

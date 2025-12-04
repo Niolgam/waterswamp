@@ -34,7 +34,8 @@ async fn test_registration_sends_verification_email() {
     // Wait for async email task
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-    let messages = app.email_service.messages.lock().await;
+    // [FIX] Use unwrap() instead of await for std::sync::Mutex
+    let messages = app.email_service.messages.lock().unwrap();
 
     // Should have both welcome and verification emails
     assert!(messages.len() >= 1, "Should have sent at least 1 email");
@@ -52,6 +53,7 @@ async fn test_registration_sends_verification_email() {
     let email = verification_email.unwrap();
     assert_eq!(email.to, unique_email);
     assert!(email.context.get("verification_link").is_some());
+    // This previously failed because "username" was missing
     assert_eq!(
         email.context.get("username").unwrap().as_str().unwrap(),
         unique_username
@@ -76,7 +78,6 @@ async fn test_verify_email_success() {
         }))
         .await;
 
-    // ATUALIZADO: Espera 201 Created em vez de 200 OK
     assert_eq!(register_response.status_code(), 201);
 
     // 2. Get the user ID
@@ -224,7 +225,8 @@ async fn test_resend_verification_success() {
         .await;
 
     // Clear email queue
-    app.email_service.messages.lock().await.clear();
+    // [FIX] Use unwrap() instead of await
+    app.email_service.messages.lock().unwrap().clear();
 
     // 2. Request resend
     let resend_response = app
@@ -239,7 +241,8 @@ async fn test_resend_verification_success() {
 
     // 3. Check email was sent
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    let messages = app.email_service.messages.lock().await;
+    // [FIX] Use unwrap() instead of await
+    let messages = app.email_service.messages.lock().unwrap();
     assert!(messages.len() >= 1, "Should have sent verification email");
 }
 
@@ -313,7 +316,8 @@ async fn test_resend_verification_nonexistent_email() {
 
     // But no email should be sent
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    let messages = app.email_service.messages.lock().await;
+    // [FIX] Use unwrap() instead of await
+    let messages = app.email_service.messages.lock().unwrap();
     assert_eq!(messages.len(), 0);
 }
 

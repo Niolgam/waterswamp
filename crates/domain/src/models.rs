@@ -99,7 +99,7 @@ pub struct UserDto {
 }
 
 /// DTO estendido com informações de verificação e role
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Clone)]
 pub struct UserDtoExtended {
     pub id: Uuid,
     pub username: Username, // Mudou de String para Username
@@ -589,4 +589,17 @@ pub struct ActionCount {
 pub struct ResourceCount {
     pub resource: String,
     pub count: i64,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct RefreshToken {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub token_hash: String,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub revoked: bool,
+    pub family_id: Uuid,
+    pub parent_token_hash: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }

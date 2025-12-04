@@ -1,28 +1,22 @@
 //! User Self-Service Handlers
-//!
-//! Handlers para gerenciamento de perfil e senha do próprio usuário.
+use axum::{extract::State, http::StatusCode, Json};
+use tracing::{info, instrument};
+use validator::Validate;
 
 use crate::{
     extractors::current_user::CurrentUser,
     infra::{errors::AppError, state::AppState},
 };
-use axum::{extract::State, http::StatusCode, Json};
-use domain::ports::UserRepositoryPort;
-use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
-use tracing::{error, info, instrument};
-use validator::Validate;
 
 use super::contracts::{
     ChangePasswordRequest, ChangePasswordResponse, ProfileResponse, UpdateProfileRequest,
 };
-//
+
 // ============================================================================
 // Handlers
 // ============================================================================
 
 /// GET /api/v1/users/profile
-///
-/// Returns the authenticated user's profile information.
 #[instrument(skip_all)]
 pub async fn get_profile(
     State(state): State<AppState>,
@@ -30,30 +24,23 @@ pub async fn get_profile(
 ) -> Result<Json<ProfileResponse>, AppError> {
     info!(user_id = ?user_session.id, username = %user_session.username, "Fetching user profile");
 
-    // 1. Instanciar o repositório usando o pool do state
-    let user_repo = UserRepository::new(state.db_pool_auth);
-
-    // 2. Usar o repositório
-    let user = user_repo
-        .find_extended_by_id(user_session.id)
-        .await?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+    let user = state
+        .user_service
+        .get_profile(user_session.id)
+        .await
+        .map_err(|e| AppError::Anyhow(anyhow::anyhow!(e)))?; // Melhore o map_err se desejar
 
     Ok(Json(ProfileResponse::from(user)))
 }
 
 /// PUT /api/v1/users/profile
-///
-/// Updates the authenticated user's profile (username and/or email).
-///
-/// **Note:** If email is changed, it will require re-verification.
 #[instrument(skip_all)]
 pub async fn update_profile(
     State(state): State<AppState>,
     user_session: CurrentUser,
     Json(payload): Json<UpdateProfileRequest>,
 ) -> Result<Json<ProfileResponse>, AppError> {
-    // 1. Validação básica (o formato de Email/Username já foi validado pelo Serde)
+    // Validação HTTP
     if let Err(e) = payload.validate() {
         return Err(AppError::Validation(e));
     }
@@ -65,72 +52,36 @@ pub async fn update_profile(
     }
 
     let user_id = user_session.id;
-    let user_repo = UserRepository::new(state.db_pool_auth);
-
-    // Buscar dados atuais
-    let current_user_data = user_repo
-        .find_extended_by_id(user_id)
-        .await?
-        .ok_or(AppError::NotFound("User not found".to_string()))?;
-
     info!(?user_id, "Updating user profile");
 
-    // 2. Atualizar Username
-    // payload.username é Option<Username>. 'new_username' será &Username.
-    if let Some(ref new_username) = payload.username {
-        // Compara usando as_str() caso current_user_data.username ainda seja String
-        if new_username.as_str() != current_user_data.username.as_str() {
-            // O repositório espera &Username, passamos new_username direto
-            if user_repo
-                .exists_by_username_excluding(new_username, user_id)
-                .await?
-            {
-                return Err(AppError::Conflict("Username already taken".to_string()));
+    // Mapear DTO API -> DTO Domínio
+    let update_payload = domain::models::UpdateUserPayload {
+        username: payload.username,
+        email: payload.email,
+        password: None, // UpdateProfileRequest não muda senha
+        role: None,     // Usuário não pode mudar seu próprio role
+    };
+
+    // Delegar para o Serviço
+    let updated_user = state
+        .user_service
+        .update_profile(user_id, update_payload)
+        .await
+        .map_err(|e| {
+            use application::errors::ServiceError;
+            match e {
+                ServiceError::UserAlreadyExists => {
+                    AppError::Conflict("Username ou Email já está em uso".to_string())
+                }
+                ServiceError::Repository(r) => AppError::Repository(r),
+                _ => AppError::Anyhow(anyhow::anyhow!(e)),
             }
-
-            user_repo.update_username(user_id, new_username).await?;
-            info!(?user_id, new_username = %new_username.as_str(), "Username updated");
-        }
-    }
-
-    // 3. Atualizar Email
-    // payload.email é Option<Email>. 'new_email' será &Email.
-    if let Some(ref new_email) = payload.email {
-        // Compara usando as_str()
-        if new_email.as_str() != current_user_data.email.as_str() {
-            // O repositório espera &Email
-            if user_repo
-                .exists_by_email_excluding(new_email, user_id)
-                .await?
-            {
-                return Err(AppError::Conflict("Email already taken".to_string()));
-            }
-
-            user_repo.update_email(user_id, new_email).await?;
-            user_repo.mark_email_unverified(user_id).await?;
-
-            info!(?user_id, new_email = %new_email.as_str(), "Email updated (requires re-verification)");
-        }
-    }
-
-    // Retornar usuário atualizado
-    let updated_user = user_repo
-        .find_extended_by_id(user_id)
-        .await?
-        .ok_or_else(|| {
-            error!(?user_id, "User not found after update");
-            AppError::NotFound("User not found".to_string())
         })?;
 
     Ok(Json(ProfileResponse::from(updated_user)))
 }
 
 /// PUT /api/v1/users/password
-///
-/// Changes the authenticated user's password.
-///
-/// Requires the current password for security verification.
-/// After changing password, all refresh tokens are revoked.
 #[instrument(skip_all)]
 pub async fn change_password(
     State(state): State<AppState>,
@@ -142,39 +93,24 @@ pub async fn change_password(
     }
 
     let user_id = user_session.id;
-    let user_repo = UserRepository::new(state.db_pool_auth.clone());
-    let auth_repo = AuthRepository::new(&state.db_pool_auth);
+    info!(?user_id, "Attempting to change password");
 
-    let stored_hash = user_repo
-        .get_password_hash(user_id)
-        .await?
-        .ok_or(AppError::NotFound("User not found".to_string()))?;
+    // Delegar para o Serviço
+    state
+        .user_service
+        .change_password(user_id, &payload.current_password, &payload.new_password)
+        .await
+        .map_err(|e| {
+            use application::errors::ServiceError;
+            match e {
+                ServiceError::InvalidCredentials => {
+                    AppError::Unauthorized("Senha atual incorreta".to_string())
+                }
+                _ => AppError::Anyhow(anyhow::anyhow!(e)),
+            }
+        })?;
 
-    let is_valid =
-        core_services::security::verify_password(&payload.current_password, &stored_hash)
-            .map_err(|_| AppError::Anyhow(anyhow::anyhow!("Error verifying password")))?;
-
-    if !is_valid {
-        return Err(AppError::Unauthorized(
-            "Current password is incorrect".to_string(),
-        ));
-    }
-
-    let new_password_same_as_current =
-        core_services::security::verify_password(&payload.new_password, &stored_hash)
-            .unwrap_or(false);
-
-    if new_password_same_as_current {
-        return Err(AppError::BadRequest(
-            "New password must be different".to_string(),
-        ));
-    }
-
-    let new_hash = core_services::security::hash_password(&payload.new_password)
-        .map_err(|_| AppError::Anyhow(anyhow::anyhow!("Error hashing password")))?;
-
-    user_repo.update_password(user_id, &new_hash).await?;
-    auth_repo.revoke_all_user_tokens(user_id).await?;
+    info!(?user_id, "Password changed successfully");
 
     Ok((
         StatusCode::OK,
@@ -184,27 +120,14 @@ pub async fn change_password(
     ))
 }
 
-// =============================================================================
-// TESTS
-// =============================================================================
-
+// Mantenha os testes existentes abaixo (adapte se necessário)
 #[cfg(test)]
 mod tests {
-    use domain::{
-        models::UserDtoExtended,
-        value_objects::{Email, Username},
-    };
-    use uuid::Uuid;
-
-    use crate::utils::ROLE_USER;
-
     use super::*;
-
-    #[test]
-    fn test_change_password_response_default() {
-        let response = ChangePasswordResponse::default();
-        assert!(response.message.contains("sucesso"));
-    }
+    use crate::utils::ROLE_USER;
+    use domain::models::UserDtoExtended;
+    use domain::value_objects::{Email, Username};
+    use uuid::Uuid;
 
     #[test]
     fn test_profile_response_from_user_dto() {

@@ -1,4 +1,5 @@
 use crate::errors::RepositoryError;
+use crate::models::RefreshToken;
 use crate::models::{UserDto, UserDtoExtended};
 use crate::value_objects::{Email, Username};
 use async_trait::async_trait;
@@ -83,4 +84,84 @@ pub trait EmailServicePort: Send + Sync {
         username: &Username,
         token: &str,
     ) -> Result<(), String>;
+    async fn send_mfa_enabled_email(&self, to: &Email, username: &Username) -> Result<(), String>;
+}
+
+#[async_trait]
+pub trait AuthRepositoryPort: Send + Sync {
+    /// Salva um novo refresh token (usado no login)
+    async fn save_refresh_token(
+        &self,
+        user_id: Uuid,
+        token_hash: &str,
+        family_id: Uuid,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), RepositoryError>;
+
+    /// Busca um refresh token pelo hash (incluindo revogados/expirados para verificação)
+    async fn find_token_by_hash(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<RefreshToken>, RepositoryError>;
+
+    /// Rotaciona um token: revoga o antigo e salva o novo numa transação
+    async fn rotate_refresh_token(
+        &self,
+        old_token_id: Uuid,
+        new_token_hash: &str,
+        new_expires_at: chrono::DateTime<chrono::Utc>,
+        family_id: Uuid,
+        parent_hash: &str,
+        user_id: Uuid,
+    ) -> Result<(), RepositoryError>;
+
+    /// Revoga uma família inteira de tokens (usado em caso de roubo detetado)
+    async fn revoke_token_family(&self, family_id: Uuid) -> Result<(), RepositoryError>;
+
+    /// Revoga um token específico
+    async fn revoke_token(&self, token_hash: &str) -> Result<bool, RepositoryError>;
+
+    /// Revoga todos os tokens de um usuário (logout global / reset de senha)
+    async fn revoke_all_user_tokens(&self, user_id: Uuid) -> Result<(), RepositoryError>;
+}
+
+#[async_trait]
+pub trait MfaRepositoryPort: Send + Sync {
+    async fn save_setup_token(
+        &self,
+        user_id: Uuid,
+        secret: &str,
+        token_hash: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), RepositoryError>;
+
+    async fn find_setup_token(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<(Uuid, String)>, RepositoryError>; // Retorna (user_id, secret)
+
+    async fn delete_setup_token(&self, token_hash: &str) -> Result<(), RepositoryError>;
+
+    // Gestão de MFA Ativo (Segredo confirmado)
+    async fn enable_mfa(&self, user_id: Uuid, secret: &str) -> Result<(), RepositoryError>;
+    async fn disable_mfa(&self, user_id: Uuid) -> Result<(), RepositoryError>;
+
+    // Backup Codes
+    async fn save_backup_codes(
+        &self,
+        user_id: Uuid,
+        codes: &[String],
+    ) -> Result<(), RepositoryError>;
+    async fn get_backup_codes(&self, user_id: Uuid) -> Result<Vec<String>, RepositoryError>;
+
+    /// Verifica e consome um código de backup. Retorna true se válido.
+    async fn verify_and_consume_backup_code(
+        &self,
+        user_id: Uuid,
+        code: &str,
+    ) -> Result<bool, RepositoryError>;
+
+    // Leitura
+    async fn get_mfa_secret(&self, user_id: Uuid) -> Result<Option<String>, RepositoryError>;
+    async fn is_mfa_enabled(&self, user_id: Uuid) -> Result<bool, RepositoryError>;
 }

@@ -1,10 +1,17 @@
 use crate::handlers::audit_services::AuditService;
+use crate::infra::config::Config;
+use crate::infra::telemetry::LoggingConfig;
+use crate::state::AppState;
 use anyhow::{Context, Result};
 use application::services::auth_service::AuthService;
+use application::services::mfa_service::MfaService;
+use application::services::user_service::UserService;
 use core_services::jwt::JwtService;
-use domain::ports::{EmailServicePort, UserRepositoryPort};
+use domain::ports::MfaRepositoryPort;
+use domain::ports::{AuthRepositoryPort, EmailServicePort, UserRepositoryPort};
 use email_service::{EmailConfig, EmailSender, EmailService};
-use persistence::repositories::user_repository::UserRepository;
+use persistence::repositories::mfa_repository::MfaRepository;
+use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -25,96 +32,137 @@ pub mod extractors;
 pub mod utils;
 
 pub async fn run(addr: SocketAddr) -> Result<()> {
-    // ⭐ 1. Inicializar logging ANTES de tudo
-    let log_config = infra::telemetry::LoggingConfig::default();
+    let log_config = LoggingConfig::default();
     infra::telemetry::init_logging(log_config)?;
 
-    // ⭐ 2. Inicializar timestamp de uptime
+    // 2. Inicializar Uptime
     handlers::health_handler::init_server_start_time();
 
-    info!("🚀 Iniciando Waterswamp API (lib run)...");
+    info!("🚀 Iniciando Waterswamp API...");
 
-    let config = infra::config::Config::from_env()?;
-    let config_arc = Arc::new(config.clone()); // Preparar para o State
+    // 3. Carregar Configurações
+    // O truque: Isso funciona porque o main.rs já rodou dotenvy::dotenv()!
+    let config = Config::from_env().context("Falha ao carregar configurações do ambiente")?;
+    let config_arc = Arc::new(config.clone());
 
     info!("🔌 Conectando aos bancos de dados...");
-    let pool_auth = PgPool::connect(&config.auth_db).await?;
-    let pool_logs = PgPool::connect(&config.logs_db).await?;
-    info!("✅ Conexões com bancos estabelecidas");
+    let pool_auth = sqlx::PgPool::connect(&config.auth_db)
+        .await
+        .context("Falha ao conectar no banco de Auth")?;
+    let pool_logs = sqlx::PgPool::connect(&config.logs_db)
+        .await
+        .context("Falha ao conectar no banco de Logs")?;
 
     info!("🔐 Inicializando Casbin...");
-    let enforcer = infra::casbin_setup::setup_casbin(pool_auth.clone()).await;
-    let enforcer = match enforcer {
+    // Mantive sua lógica de retry/fallback
+    let enforcer = match infra::casbin_setup::setup_casbin(pool_auth.clone()).await {
         Ok(e) => e,
-        Err(_) => infra::casbin_setup::setup_casbin(pool_auth.clone()).await?, // Tentativa de fix baseada no padrao
+        Err(_) => infra::casbin_setup::setup_casbin(pool_auth.clone()).await?,
     };
-    info!("✅ Casbin inicializado");
 
-    info!("🔑 Inicializando serviço JWT (EdDSA)...");
-    // CORREÇÃO: Envolver em Arc imediatamente
+    info!("🔑 Inicializando serviço JWT...");
     let jwt_service = Arc::new(
         JwtService::new(
             config.jwt_private_key.as_bytes(),
             config.jwt_public_key.as_bytes(),
         )
-        .context("Falha ao inicializar JwtService")?,
+        .context("Falha ao inicializar chaves JWT")?,
     );
 
     info!("📧 Inicializando serviço de email...");
-    let email_config =
-        EmailConfig::from_env().context("Falha ao carregar configuração de email")?;
-    // CORREÇÃO: Envolver em Arc imediatamente
+    // Assumindo que EmailConfig também tem um from_env ou vem do config principal
+    let email_config = EmailConfig::from_env()?;
     let email_service =
-        Arc::new(EmailService::new(email_config).context("Falha ao criar transportador de email")?);
-    info!("✅ Serviço de email pronto");
+        Arc::new(EmailService::new(email_config).context("Falha ao criar serviço de email")?);
 
     info!("📝 Inicializando serviço de audit...");
     let audit_service = AuditService::new(pool_logs.clone());
-    info!("✅ Serviço de audit pronto");
-
-    let policy_cache = Arc::new(RwLock::new(HashMap::new()));
 
     // --- WIRING (Injeção de Dependência) ---
+    // Dica: Use Arc::clone(&var) é mais idiomático que var.clone() para Arcs,
+    // deixa claro que é só uma referência e não deep copy.
 
-    // 1. Repositórios (Adapters) -> Arc<dyn Trait>
-    let user_repo_port: Arc<dyn UserRepositoryPort> =
-        Arc::new(UserRepository::new(pool_auth.clone()));
+    let user_repo = Arc::new(UserRepository::new(pool_auth.clone()));
+    let auth_repo = Arc::new(AuthRepository::new(pool_auth.clone()));
+    let mfa_repo_port: Arc<dyn MfaRepositoryPort> = Arc::new(MfaRepository::new(pool_auth.clone()));
 
-    // 2. Email (Adapter) -> Arc<dyn Trait>
-    // Coerção automática de Arc<Struct> para Arc<dyn Trait>
-    let email_service_port: Arc<dyn EmailServicePort> = email_service.clone();
-
-    // 3. Application Service
     let auth_service = Arc::new(AuthService::new(
-        user_repo_port,
-        email_service_port,
-        jwt_service.clone(), // Passa o Arc<JwtService>
+        user_repo.clone(),
+        auth_repo.clone(),
+        email_service.clone(), // Passa a referência do Arc
+        jwt_service.clone(),   // Passa a referência do Arc
     ));
 
-    // 4. Construir State Global
-    let app_state = state::AppState {
+    let user_service = Arc::new(UserService::new(
+        user_repo.clone(),
+        auth_repo.clone(),
+        email_service.clone(),
+    ));
+
+    let mfa_service = Arc::new(MfaService::new(
+        mfa_repo_port.clone(),
+        user_repo.clone(),
+        auth_repo.clone(),
+        email_service.clone(),
+        jwt_service.clone(), // Arc<JwtService>
+    ));
+    // Cache simples em memória
+    let policy_cache = Arc::new(RwLock::new(HashMap::new()));
+
+    // Construção do Estado Global (State)
+    let app_state = AppState {
         enforcer,
         policy_cache,
         db_pool_auth: pool_auth,
         db_pool_logs: pool_logs,
-        jwt_service,   // Agora é Arc<JwtService>
-        email_service, // Agora é Arc<EmailService>
+        jwt_service,
+        email_service,
         audit_service,
-        auth_service,       // Injeção do serviço
-        config: config_arc, // Adicionado campo config
+        auth_service,
+        user_service,
+        mfa_service,
+        config: config_arc,
     };
 
-    info!("📡 Construindo rotas...");
+    info!("📡 Construindo rotas e middleware...");
     let app = routes::build(app_state);
 
-    let listener = TcpListener::bind(addr).await?;
-    info!("🚀 Servidor ouvindo em {}", addr);
-    info!("✨ Waterswamp API pronta para receber requisições!");
+    // O "addr" veio passado pelo main.rs
+    let listener = TcpListener::bind(addr)
+        .await
+        .context(format!("Falha ao fazer bind na porta {}", addr.port()))?;
 
+    info!("✨ Waterswamp API ouvindo em {}", addr);
+
+    // Inicia o servidor Axum
     axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(shutdown::shutdown_signal())
+        .with_graceful_shutdown(shutdown_signal())
         .await?;
 
     info!("👋 Servidor encerrado graciosamente");
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("falha ao instalar handler do Ctrl+C");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("falha ao instalar handler do sinal de terminação")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }

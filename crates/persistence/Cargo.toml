@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+domain = { path = "../domain" }
+
 sqlx = { workspace = true }
 uuid = { workspace = true }
-domain = { path = "../domain" }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
-
+chrono = { workspace = true }

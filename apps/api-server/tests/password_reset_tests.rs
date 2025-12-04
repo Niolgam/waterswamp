@@ -55,7 +55,8 @@ async fn test_forgot_password_flow_and_email_mocking() {
     // Verifica se o MockEmailService "enviou" o email
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let messages = app.email_service.messages.lock().await;
+    // [FIX] Removed .await, added .unwrap()
+    let messages = app.email_service.messages.lock().unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].to, "bob@temp.example.com");
     assert_eq!(messages[0].subject, "Redefina sua senha do Waterswamp");
@@ -72,7 +73,8 @@ async fn test_forgot_password_flow_and_email_mocking() {
 
     // Limpa a caixa de entrada
     drop(messages); // Libera o lock
-    app.email_service.messages.lock().await.clear();
+                    // [FIX] Removed .await, added .unwrap()
+    app.email_service.messages.lock().unwrap().clear();
 
     // 2. Cenário: Email Não Existe
     let payload_nao_existe = ForgotPasswordPayload {
@@ -89,7 +91,8 @@ async fn test_forgot_password_flow_and_email_mocking() {
     assert!(res_nao_existe.text().contains("Se o email existir"));
 
     // Assert: Nenhum email novo foi enviado
-    let messages_final = app.email_service.messages.lock().await;
+    // [FIX] Removed .await, added .unwrap()
+    let messages_final = app.email_service.messages.lock().unwrap();
     assert_eq!(messages_final.len(), 0);
 }
 

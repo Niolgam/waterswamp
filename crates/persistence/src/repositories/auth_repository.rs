@@ -1,63 +1,116 @@
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use domain::errors::RepositoryError;
+use domain::models::RefreshToken;
+use domain::ports::AuthRepositoryPort;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Repositório para operações relacionadas a autenticação e tokens.
-pub struct AuthRepository<'a> {
-    pool: &'a PgPool,
+#[derive(Clone)]
+pub struct AuthRepository {
+    pool: PgPool,
 }
 
-impl<'a> AuthRepository<'a> {
-    /// Cria uma nova instância do repositório.
-    pub fn new(pool: &'a PgPool) -> Self {
+impl AuthRepository {
+    pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
-    /// Salva um novo refresh token no banco de dados.
-    /// A expiração é definida para 30 dias a partir de agora pelo banco.
-    pub async fn save_refresh_token(
+    fn map_err(e: sqlx::Error) -> RepositoryError {
+        RepositoryError::Database(e.to_string())
+    }
+}
+
+#[async_trait]
+impl AuthRepositoryPort for AuthRepository {
+    async fn save_refresh_token(
         &self,
         user_id: Uuid,
         token_hash: &str,
-    ) -> Result<(), sqlx::Error> {
+        family_id: Uuid,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
-            INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-            VALUES ($1, $2, NOW() + INTERVAL '30 days')
+            INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id)
+            VALUES ($1, $2, $3, $4)
             "#,
         )
         .bind(user_id)
         .bind(token_hash)
-        .execute(self.pool)
-        .await?;
+        .bind(expires_at)
+        .bind(family_id)
+        .execute(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
 
         Ok(())
     }
 
-    /// Busca um refresh token válido (não revogado e não expirado) pelo hash.
-    /// Retorna o ID do usuário se encontrado.
-    pub async fn find_valid_refresh_token(
+    async fn find_token_by_hash(
         &self,
         token_hash: &str,
-    ) -> Result<Option<Uuid>, sqlx::Error> {
-        let result: Option<(Uuid,)> = sqlx::query_as(
+    ) -> Result<Option<RefreshToken>, RepositoryError> {
+        sqlx::query_as::<_, RefreshToken>(
             r#"
-            SELECT user_id
-            FROM refresh_tokens
-            WHERE token_hash = $1
-              AND revoked = FALSE
-              AND expires_at > NOW()
+            SELECT * FROM refresh_tokens WHERE token_hash = $1
             "#,
         )
         .bind(token_hash)
-        .fetch_optional(self.pool)
-        .await?;
-
-        Ok(result.map(|(user_id,)| user_id))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
     }
 
-    /// Revoga um refresh token específico pelo seu hash.
-    /// Retorna true se o token foi encontrado e revogado, false caso contrário.
-    pub async fn revoke_refresh_token(&self, token_hash: &str) -> Result<bool, sqlx::Error> {
+    // Método atômico para rotação: Revoga o antigo E insere o novo
+    async fn rotate_refresh_token(
+        &self,
+        old_token_id: Uuid,
+        new_token_hash: &str,
+        new_expires_at: DateTime<Utc>,
+        family_id: Uuid,
+        parent_hash: &str,
+        user_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(Self::map_err)?;
+
+        // 1. Revogar antigo
+        sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1")
+            .bind(old_token_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(Self::map_err)?;
+
+        // 2. Inserir novo
+        sqlx::query(
+            r#"
+            INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id, parent_token_hash)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+        )
+        .bind(user_id)
+        .bind(new_token_hash)
+        .bind(new_expires_at)
+        .bind(family_id)
+        .bind(parent_hash)
+        .execute(&mut *tx)
+        .await
+        .map_err(Self::map_err)?;
+
+        tx.commit().await.map_err(Self::map_err)?;
+        Ok(())
+    }
+
+    async fn revoke_token_family(&self, family_id: Uuid) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE family_id = $1")
+            .bind(family_id)
+            .execute(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+        Ok(())
+    }
+
+    async fn revoke_token(&self, token_hash: &str) -> Result<bool, RepositoryError> {
         let result = sqlx::query(
             r#"
             UPDATE refresh_tokens
@@ -66,14 +119,14 @@ impl<'a> AuthRepository<'a> {
             "#,
         )
         .bind(token_hash)
-        .execute(self.pool)
-        .await?;
+        .execute(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
 
         Ok(result.rows_affected() > 0)
     }
 
-    /// Revoga todos os refresh tokens de um usuário específico.
-    pub async fn revoke_all_user_tokens(&self, user_id: Uuid) -> Result<(), sqlx::Error> {
+    async fn revoke_all_user_tokens(&self, user_id: Uuid) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
             UPDATE refresh_tokens
@@ -82,8 +135,9 @@ impl<'a> AuthRepository<'a> {
             "#,
         )
         .bind(user_id)
-        .execute(self.pool)
-        .await?;
+        .execute(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
 
         Ok(())
     }

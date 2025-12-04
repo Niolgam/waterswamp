@@ -8,13 +8,15 @@ domain = { path = "../domain" }
 core_services = { path = "../core-services" }
 
 # Utilities
-async-trait = "0.1"
-thiserror = "1.0"
-tracing = "0.1"
-uuid = { version = "1.0", features = ["v4", "serde"] }
-anyhow = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+totp-rs = { workspace = true }
 
 [dev-dependencies]
-mockall = "0.11"
-tokio = { version = "1.0", features = ["macros"] }
+mockall = { workspace = true }
+tokio = { workspace = true }
