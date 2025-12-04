@@ -1,5 +1,5 @@
-use crate::handlers::audit_services::AuditService;
 use crate::infra::config::Config;
+use application::services::audit_services::AuditService;
 use application::services::auth_service::AuthService;
 use application::services::mfa_service::MfaService;
 use application::services::user_service::UserService;

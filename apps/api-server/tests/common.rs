@@ -1,23 +1,15 @@
-use application::services::auth_service::AuthService;
-use application::services::mfa_service::MfaService;
-use application::services::user_service::UserService;
 use axum_test::TestServer;
 use core_services::jwt::JwtService;
 use domain::models::{Claims, TokenType};
-use domain::ports::MfaRepositoryPort;
-use domain::ports::{AuthRepositoryPort, EmailServicePort, UserRepositoryPort};
+use domain::ports::EmailServicePort;
 use email_service::{EmailSender, MockEmailService};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-use persistence::repositories::mfa_repository::MfaRepository;
-use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use sqlx::PgPool;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Once;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::RwLock;
 use uuid::Uuid;
-use waterswamp::handlers::audit_services::AuditService;
+use waterswamp::build_application_state;
 use waterswamp::infra::casbin_setup::setup_casbin;
 use waterswamp::infra::config::Config;
 use waterswamp::routes::build;
@@ -33,108 +25,71 @@ pub struct TestApp {
 }
 
 pub async fn spawn_app() -> TestApp {
-    INIT.call_once(|| {
-        dotenvy::dotenv().ok();
-        std::env::set_var("DISABLE_RATE_LIMIT", "true");
-        // Force debug logs para ver o erro do SQLx ou TOTP
-        std::env::set_var("RUST_LOG", "debug,waterswamp=debug,sqlx=warn");
-        let _ = tracing_subscriber::fmt().with_test_writer().try_init();
-    });
+    dotenvy::dotenv().ok();
+    std::env::set_var("DISABLE_RATE_LIMIT", "true");
 
     let config = Config::from_env().expect("Falha ao carregar config de teste");
 
     let pool_auth = PgPool::connect(&config.auth_db)
         .await
-        .expect("Falha ao conectar ao auth_db");
+        .expect("Falha auth_db");
     let pool_logs = PgPool::connect(&config.logs_db)
         .await
-        .expect("Falha ao conectar ao logs_db");
+        .expect("Falha logs_db");
 
-    // Rodar migrations
     sqlx::migrate!("../../crates/persistence/migrations_auth")
         .run(&pool_auth)
         .await
-        .expect("Falha ao rodar migrations no auth_db");
-
+        .expect("Migration auth");
     sqlx::migrate!("../../crates/persistence/migrations_logs")
         .run(&pool_logs)
         .await
-        .expect("Falha ao rodar migrations no logs_db");
+        .expect("Migration logs");
 
-    let enforcer = setup_casbin(pool_auth.clone())
-        .await
-        .expect("Falha ao inicializar Casbin");
+    // Setup Casbin com retry para concorrência
+    let enforcer = match setup_casbin(pool_auth.clone()).await {
+        Ok(e) => e,
+        Err(_) => setup_casbin(pool_auth.clone())
+            .await
+            .expect("Casbin falhou no retry"),
+    };
 
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let public_pem = include_bytes!("../tests/keys/public_test.pem");
 
-    // Serviços Core
-    let jwt_service =
-        Arc::new(JwtService::new(private_pem, public_pem).expect("Falha ao criar JwtService"));
+    let jwt_service = Arc::new(JwtService::new(private_pem, public_pem).expect("JwtService"));
+
+    // MOCK: Aqui injetamos o Mock em vez do serviço real
     let email_service = Arc::new(MockEmailService::new());
-    let audit_service = AuditService::new(pool_logs.clone());
 
-    // --- WIRING PARA TESTES (Nova Arquitetura) ---
-    // 1. Repositórios (Adapters)
-    let user_repo_port: Arc<dyn UserRepositoryPort> =
-        Arc::new(UserRepository::new(pool_auth.clone()));
-    let auth_repo_port: Arc<dyn AuthRepositoryPort> =
-        Arc::new(AuthRepository::new(pool_auth.clone()));
-    let mfa_repo_port: Arc<dyn MfaRepositoryPort> = Arc::new(MfaRepository::new(pool_auth.clone()));
-
-    // 2. Email (Adapter Mockado)
+    // Prepara os traits para injeção
+    let email_service_legacy: Arc<dyn EmailSender + Send + Sync> = email_service.clone();
     let email_service_port: Arc<dyn EmailServicePort> = email_service.clone();
 
-    // 3. Service (App)
-    let auth_service = Arc::new(AuthService::new(
-        user_repo_port.clone(),
-        auth_repo_port.clone(), // Injetado
-        email_service_port.clone(),
-        jwt_service.clone(),
-    ));
-
-    let user_service = Arc::new(UserService::new(
-        user_repo_port.clone(),
-        auth_repo_port.clone(),
-        email_service_port.clone(),
-    ));
-
-    let mfa_service = Arc::new(MfaService::new(
-        mfa_repo_port.clone(),
-        user_repo_port.clone(),
-        auth_repo_port.clone(),
-        email_service_port.clone(),
-        jwt_service.clone(),
-    ));
-
-    let app_state = AppState {
+    // --- WIRING COM FACTORY ---
+    let app_state = build_application_state(
+        Arc::new(config),
+        pool_auth.clone(),
+        pool_logs.clone(),
         enforcer,
-        policy_cache: Arc::new(RwLock::new(HashMap::new())),
-        db_pool_auth: pool_auth.clone(),
-        db_pool_logs: pool_logs.clone(),
-        jwt_service: jwt_service.clone(),
-        email_service: email_service.clone(),
-        audit_service,
-        auth_service,
-        user_service,
-        mfa_service,
-        config: Arc::new(config),
-    };
+        jwt_service,
+        email_service_legacy,
+        email_service_port,
+    );
 
     let app = build(app_state);
     let api = TestServer::new(app).unwrap();
 
-    // Seeding dummy data (ignora erro se nao existir para evitar falhas em migrations limpas)
+    // Seed opcional (ignora erros se já existir)
     let alice_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'alice'")
         .fetch_optional(&pool_auth)
         .await
-        .unwrap_or(None)
+        .unwrap_or_default()
         .unwrap_or_default();
-
     let bob_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'bob'")
         .fetch_optional(&pool_auth)
         .await
-        .unwrap_or(None)
+        .unwrap_or_default()
         .unwrap_or_default();
 
     TestApp {
@@ -147,90 +102,47 @@ pub async fn spawn_app() -> TestApp {
     }
 }
 
-/// Helper para criar AppState de teste (usado em testes unitários de handlers)
+/// Helper para criar AppState de teste isolado (sem subir servidor HTTP completo)
 pub async fn create_test_app_state() -> AppState {
     dotenvy::dotenv().ok();
     std::env::set_var("DISABLE_RATE_LIMIT", "true");
 
-    let config = Config::from_env().expect("Falha ao carregar config de teste");
+    let config = Config::from_env().expect("Falha ao carregar config");
+    let pool_auth = PgPool::connect(&config.auth_db).await.expect("Auth DB");
+    let pool_logs = PgPool::connect(&config.logs_db).await.expect("Logs DB");
 
-    let pool_auth = PgPool::connect(&config.auth_db)
-        .await
-        .expect("Falha ao conectar ao auth_db");
-    let pool_logs = PgPool::connect(&config.logs_db)
-        .await
-        .expect("Falha ao conectar ao logs_db");
-
-    let enforcer = setup_casbin(pool_auth.clone())
-        .await
-        .expect("Falha ao inicializar Casbin");
+    let enforcer = setup_casbin(pool_auth.clone()).await.expect("Casbin");
 
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let public_pem = include_bytes!("../tests/keys/public_test.pem");
+    let jwt_service = Arc::new(JwtService::new(private_pem, public_pem).expect("JWT"));
 
-    let jwt_service =
-        Arc::new(JwtService::new(private_pem, public_pem).expect("Falha ao criar JwtService"));
     let email_service = Arc::new(MockEmailService::new());
-    let audit_service = AuditService::new(pool_logs.clone());
 
-    let user_repo_port: Arc<dyn UserRepositoryPort> =
-        Arc::new(UserRepository::new(pool_auth.clone()));
-    let auth_repo_port: Arc<dyn AuthRepositoryPort> =
-        Arc::new(AuthRepository::new(pool_auth.clone()));
-    let mfa_repo_port: Arc<dyn MfaRepositoryPort> = Arc::new(MfaRepository::new(pool_auth.clone()));
-    let email_service_port: Arc<dyn EmailServicePort> = email_service.clone();
-
-    let auth_service = Arc::new(AuthService::new(
-        user_repo_port.clone(),
-        auth_repo_port.clone(), // Injetado
-        email_service_port.clone(),
-        jwt_service.clone(),
-    ));
-
-    let user_service = Arc::new(UserService::new(
-        user_repo_port.clone(),
-        auth_repo_port.clone(),
-        email_service_port.clone(),
-    ));
-
-    let mfa_service = Arc::new(MfaService::new(
-        mfa_repo_port.clone(),
-        user_repo_port.clone(),
-        auth_repo_port.clone(),
-        email_service_port.clone(),
-        jwt_service.clone(),
-    ));
-
-    AppState {
+    build_application_state(
+        Arc::new(config),
+        pool_auth,
+        pool_logs,
         enforcer,
-        policy_cache: Arc::new(RwLock::new(HashMap::new())),
-        db_pool_auth: pool_auth,
-        db_pool_logs: pool_logs,
         jwt_service,
-        email_service,
-        audit_service,
-        auth_service,
-        user_service,
-        mfa_service,
-        config: Arc::new(config),
-    }
+        email_service.clone(), // Legacy
+        email_service.clone(), // Port
+    )
 }
 
+// ... (Resto do arquivo: create_api_auth_test_server, generate_test_token, etc.) ...
 pub async fn create_api_auth_test_server(state: AppState) -> TestServer {
     use axum::Router;
     use waterswamp::api;
-
     let app = Router::new()
         .nest("/auth", api::auth::router())
         .with_state(state);
-
     TestServer::new(app).unwrap()
 }
 
 pub fn generate_test_token(user_id: Uuid) -> String {
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let encoding_key = EncodingKey::from_ed_pem(private_pem).unwrap();
-
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -241,13 +153,11 @@ pub fn generate_test_token(user_id: Uuid) -> String {
         iat: now,
         token_type: TokenType::Access,
     };
-
     let header = Header::new(Algorithm::EdDSA);
     encode(&header, &claims, &encoding_key).unwrap()
 }
 
 static INIT: Once = Once::new();
-
 pub fn init_test_env() {
     INIT.call_once(|| {
         dotenvy::dotenv().ok();
@@ -267,40 +177,35 @@ pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+// Helpers para criar usuário no banco (bypass API)
 pub async fn create_test_user(
     pool: &PgPool,
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
     use core_services::security::hash_password;
-
     let counter = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();
-
     let username = format!("test_user_{}", counter);
     let email = format!("test_{}@test.com", counter);
     let password = "SecureP@ssw0rd!123".to_string();
+    let hash = tokio::task::spawn_blocking({
+        let p = password.clone();
+        move || hash_password(&p)
+    })
+    .await??;
 
-    let password_clone = password.clone();
-    let password_hash =
-        tokio::task::spawn_blocking(move || hash_password(&password_clone)).await??;
-
-    sqlx::query(
-        r#"
-        INSERT INTO users (username, email, password_hash)
-        VALUES ($1, $2, $3)
-        "#,
-    )
-    .bind(&username)
-    .bind(&email)
-    .bind(&password_hash)
-    .execute(pool)
-    .await?;
+    sqlx::query("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3)")
+        .bind(&username)
+        .bind(&email)
+        .bind(&hash)
+        .execute(pool)
+        .await?;
 
     Ok((username, email, password))
 }
 
-// ESTA FUNÇÃO ESTAVA FALTANDO E É A CAUSA DO ERRO NO SECURITY_TESTS
+// Helper para registrar via API
 pub async fn register_test_user(
     server: &axum_test::TestServer,
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
@@ -308,7 +213,6 @@ pub async fn register_test_user(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();
-
     let username = format!("test_user_{}", counter);
     let email = format!("test_{}@test.com", counter);
     let password = "SecureP@ssw0rd!123".to_string();
@@ -316,52 +220,13 @@ pub async fn register_test_user(
     let response = server
         .post("/register")
         .json(&serde_json::json!({
-            "username": username,
-            "email": email,
-            "password": password
+            "username": username, "email": email, "password": password
         }))
         .await;
 
     if response.status_code() != 201 {
-        return Err(format!(
-            "Falha ao registrar usuário: status={}, body={}",
-            response.status_code(),
-            response.text()
-        )
-        .into());
+        return Err(format!("Falha ao registrar: {}", response.text()).into());
     }
-
-    Ok((username, email, password))
-}
-
-pub async fn create_unique_test_user(
-    pool: &PgPool,
-) -> Result<(String, String, String), Box<dyn std::error::Error>> {
-    use core_services::security::hash_password;
-    use uuid::Uuid;
-
-    let unique_id = Uuid::new_v4();
-    let username = format!("test_user_{}", unique_id);
-    let email = format!("test_{}@test.com", unique_id);
-    let password = "SecureP@ssw0rd!123".to_string();
-
-    let password_clone = password.clone();
-    let password_hash =
-        tokio::task::spawn_blocking(move || hash_password(&password_clone)).await??;
-
-    sqlx::query(
-        r#"
-        INSERT INTO users (username, email, password_hash, email_verified)
-        VALUES ($1, $2, $3, TRUE)
-        ON CONFLICT (username) DO NOTHING
-        "#,
-    )
-    .bind(&username)
-    .bind(&email)
-    .bind(&password_hash)
-    .execute(pool)
-    .await?;
-
     Ok((username, email, password))
 }
 
@@ -376,19 +241,16 @@ pub fn generate_custom_token(
 ) -> String {
     let private_pem = include_bytes!("../tests/keys/private_test.pem");
     let encoding_key = EncodingKey::from_ed_pem(private_pem).unwrap();
-
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
-
     let claims = Claims {
         sub: user_id,
         exp: now + expires_in_seconds,
         iat: now,
         token_type,
     };
-
     let header = Header::new(Algorithm::EdDSA);
     encode(&header, &claims, &encoding_key).unwrap()
 }

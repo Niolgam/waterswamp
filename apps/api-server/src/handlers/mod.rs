@@ -1,4 +1,3 @@
-pub mod audit_services;
 pub mod handlers_documented;
 pub mod health_handler;
 pub mod protected_handler;
