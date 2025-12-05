@@ -86,6 +86,7 @@ pub struct ResetPasswordPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: Uuid,
+    pub username: String,  // Username incluído para evitar N+1 query no middleware
     pub exp: i64,
     pub iat: i64,
     pub token_type: TokenType,

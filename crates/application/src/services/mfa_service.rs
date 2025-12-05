@@ -224,10 +224,18 @@ impl MfaService {
             return Err(ServiceError::InvalidCredentials);
         }
 
-        // 4. Generate Tokens
+        // 4. Buscar username do usuário
+        let user = self
+            .user_repo
+            .find_by_id(user_id)
+            .await
+            .map_err(ServiceError::Repository)?
+            .ok_or(ServiceError::Internal(anyhow::anyhow!("Usuário não encontrado")))?;
+
+        // 5. Generate Tokens
         let access_token = self
             .jwt_service
-            .generate_token(user_id, TokenType::Access, 3600)
+            .generate_token(user_id, user.username.as_str(), TokenType::Access, 3600)
             .map_err(|e| ServiceError::Internal(e))?;
 
         let refresh_token = Uuid::new_v4().to_string();

@@ -84,13 +84,14 @@ impl AuthService {
             .await?;
 
         // Gerar Tokens
-        let (access_token, refresh_token) = self.generate_and_save_tokens(user.id).await?;
+        let (access_token, refresh_token) = self.generate_and_save_tokens(user.id, user.username.as_str()).await?;
 
         // Gerar token de verificação de email (JWT válido por 24h)
         let verification_token = self
             .jwt_service
             .generate_token(
                 user.id,
+                user.username.as_str(),
                 TokenType::EmailVerification,
                 EMAIL_VERIFICATION_EXPIRY,
             )
@@ -185,7 +186,7 @@ impl AuthService {
         }
 
         // 5. Gerar tokens (Login normal)
-        let (access_token, refresh_token) = self.generate_and_save_tokens(user.id).await?;
+        let (access_token, refresh_token) = self.generate_and_save_tokens(user.id, user.username.as_str()).await?;
 
         Ok(AuthResult {
             user,
@@ -232,10 +233,17 @@ impl AuthService {
         let new_refresh_token_hash = hash_token(&new_refresh_token_raw);
         let new_expires_at = Utc::now() + Duration::days(REFRESH_TOKEN_EXPIRY_DAYS);
 
+        // Buscar username do usuário
+        let user = self
+            .user_repo
+            .find_by_id(token.user_id)
+            .await?
+            .ok_or(ServiceError::Internal(anyhow::anyhow!("Usuário não encontrado")))?;
+
         // Access Token
         let access_token = self
             .jwt_service
-            .generate_token(token.user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY)
+            .generate_token(token.user_id, user.username.as_str(), TokenType::Access, ACCESS_TOKEN_EXPIRY)
             .map_err(|e| ServiceError::Internal(e))?;
 
         // Operação atômica no repo
@@ -274,7 +282,7 @@ impl AuthService {
         if let Some(user) = user {
             let token = self
                 .jwt_service
-                .generate_token(user.id, TokenType::PasswordReset, RESET_TOKEN_EXPIRY)
+                .generate_token(user.id, user.username.as_str(), TokenType::PasswordReset, RESET_TOKEN_EXPIRY)
                 .map_err(|e| ServiceError::Internal(e))?;
 
             // Enviar email com log de erro
@@ -325,10 +333,11 @@ impl AuthService {
     async fn generate_and_save_tokens(
         &self,
         user_id: uuid::Uuid,
+        username: &str,
     ) -> Result<(String, String), ServiceError> {
         let access_token = self
             .jwt_service
-            .generate_token(user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY)
+            .generate_token(user_id, username, TokenType::Access, ACCESS_TOKEN_EXPIRY)
             .map_err(|e| ServiceError::Internal(e))?;
 
         let refresh_token_raw = uuid::Uuid::new_v4().to_string();
@@ -348,7 +357,7 @@ impl AuthService {
 mod tests {
     use super::*;
     use chrono::{DateTime, Utc};
-    use domain::models::{RefreshToken, UserDto, UserDtoExtended};
+    use domain::models::{RefreshToken, UserDto, UserDtoExtended, UserLoginInfo};
     use domain::value_objects::{Email, Username};
     use mockall::mock;
     use mockall::predicate::*;
@@ -363,6 +372,7 @@ mod tests {
             async fn find_extended_by_id(&self, id: Uuid) -> Result<Option<UserDtoExtended>, domain::errors::RepositoryError>;
             async fn find_by_username(&self, username: &Username) -> Result<Option<UserDto>, domain::errors::RepositoryError>;
             async fn find_by_email(&self, email: &Email) -> Result<Option<UserDto>, domain::errors::RepositoryError>;
+            async fn find_for_login(&self, identifier: &str) -> Result<Option<UserLoginInfo>, domain::errors::RepositoryError>;
             async fn exists_by_email(&self, email: &Email) -> Result<bool, domain::errors::RepositoryError>;
             async fn exists_by_username(&self, username: &Username) -> Result<bool, domain::errors::RepositoryError>;
             async fn exists_by_email_excluding(&self, email: &Email, exclude_id: Uuid) -> Result<bool, domain::errors::RepositoryError>;

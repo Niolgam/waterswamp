@@ -24,17 +24,8 @@ pub async fn mw_authenticate(
         .map_err(|_| AppError::Unauthorized("Token inválido ou expirado".to_string()))?;
 
     let user_id = claims.sub;
-
-    // Fetch username from database
-    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
-        .bind(user_id)
-        .fetch_optional(&state.db_pool_auth)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "Erro ao buscar username");
-            AppError::Anyhow(anyhow::anyhow!("Erro interno"))
-        })?
-        .ok_or_else(|| AppError::Unauthorized("Usuário não encontrado".to_string()))?;
+    // Username já está disponível no JWT - não precisa query no banco! (N+1 fix)
+    let username = claims.username.clone();
 
     let current_user = CurrentUser {
         id: user_id,

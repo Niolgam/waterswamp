@@ -30,6 +30,7 @@ impl JwtService {
     pub fn generate_token(
         &self,
         user_id: Uuid,
+        username: &str,
         token_type: TokenType,
         expires_in_seconds: i64,
     ) -> Result<String> {
@@ -38,6 +39,7 @@ impl JwtService {
 
         let claims = Claims {
             sub: user_id,
+            username: username.to_string(),
             exp: expiration.timestamp(),
             iat: now.timestamp(),
             token_type,

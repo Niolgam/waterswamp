@@ -77,11 +77,15 @@ impl UserService {
 
                 self.user_repo.mark_email_unverified(user_id).await?;
 
+                // Determinar username (pode ter sido atualizado)
+                let username_for_email = payload.username.as_ref().unwrap_or(&current_user.username);
+
                 // Gerar token de verificação de email (JWT válido por 24h)
                 let verification_token = self
                     .jwt_service
                     .generate_token(
                         user_id,
+                        username_for_email.as_str(),
                         TokenType::EmailVerification,
                         EMAIL_VERIFICATION_EXPIRY,
                     )
@@ -92,7 +96,7 @@ impl UserService {
                     .email_service
                     .send_verification_email(
                         new_email,
-                        payload.username.as_ref().unwrap_or(&current_user.username),
+                        username_for_email,
                         &verification_token,
                     )
                     .await
@@ -153,7 +157,7 @@ mod tests {
     use super::*;
     use chrono::{DateTime, Utc};
     use domain::errors::RepositoryError;
-    use domain::models::{RefreshToken, UserDto, UserDtoExtended};
+    use domain::models::{RefreshToken, UserDto, UserDtoExtended, UserLoginInfo};
     use domain::value_objects::{Email, Username};
     use mockall::mock;
     use mockall::predicate::*;
@@ -170,6 +174,7 @@ mod tests {
             async fn find_extended_by_id(&self, id: Uuid) -> Result<Option<UserDtoExtended>, RepositoryError>;
             async fn find_by_username(&self, username: &Username) -> Result<Option<UserDto>, RepositoryError>;
             async fn find_by_email(&self, email: &Email) -> Result<Option<UserDto>, RepositoryError>;
+            async fn find_for_login(&self, identifier: &str) -> Result<Option<UserLoginInfo>, RepositoryError>;
 
             async fn exists_by_email(&self, email: &Email) -> Result<bool, RepositoryError>;
             async fn exists_by_username(&self, username: &Username) -> Result<bool, RepositoryError>;

@@ -39,6 +39,15 @@ pub struct UserDtoExtended {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// DTO específico para login (contém informações de autenticação)
+#[derive(Debug, FromRow)]
+pub struct UserLoginInfo {
+    pub id: Uuid,
+    pub username: String,
+    pub password_hash: String,
+    pub mfa_enabled: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserDetailDto {
     #[serde(flatten)]

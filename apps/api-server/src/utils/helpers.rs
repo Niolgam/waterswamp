@@ -163,10 +163,11 @@ pub fn hash_backup_code(code: &str) -> String {
 pub async fn generate_tokens_helper(
     state: &AppState,
     user_id: Uuid,
+    username: &str,
 ) -> Result<(String, String), AppError> {
     let access_token = state
         .jwt_service
-        .generate_token(user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
+        .generate_token(user_id, username, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
         .map_err(|e| {
             tracing::error!("Erro ao gerar access token: {:?}", e);
             AppError::Anyhow(e)

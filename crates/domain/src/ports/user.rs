@@ -1,5 +1,5 @@
 use crate::errors::RepositoryError;
-use crate::models::{UserDto, UserDtoExtended};
+use crate::models::{UserDto, UserDtoExtended, UserLoginInfo};
 use crate::value_objects::{Email, Username};
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -17,6 +17,10 @@ pub trait UserRepositoryPort: Send + Sync {
         username: &Username,
     ) -> Result<Option<UserDto>, RepositoryError>;
     async fn find_by_email(&self, email: &Email) -> Result<Option<UserDto>, RepositoryError>;
+
+    /// Buscar informações de login por username ou email
+    /// (usado apenas para autenticação - retorna password_hash e mfa_enabled)
+    async fn find_for_login(&self, identifier: &str) -> Result<Option<UserLoginInfo>, RepositoryError>;
 
     // Verificações
     async fn exists_by_email(&self, email: &Email) -> Result<bool, RepositoryError>;

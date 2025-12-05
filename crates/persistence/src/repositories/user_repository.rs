@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::errors::RepositoryError;
-use domain::models::{UserDto, UserDtoExtended};
+use domain::models::{UserDto, UserDtoExtended, UserLoginInfo};
 use domain::ports::UserRepositoryPort;
 use domain::value_objects::{Email, Username};
 use sqlx::PgPool;
@@ -103,6 +103,16 @@ impl UserRepositoryPort for UserRepository {
             "SELECT id, username, email, created_at, updated_at FROM users WHERE LOWER(email) = LOWER($1)",
         )
         .bind(email.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_for_login(&self, identifier: &str) -> Result<Option<UserLoginInfo>, RepositoryError> {
+        sqlx::query_as::<_, UserLoginInfo>(
+            "SELECT id, username, password_hash, mfa_enabled FROM users WHERE username = $1 OR LOWER(email) = LOWER($1)",
+        )
+        .bind(identifier)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)

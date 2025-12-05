@@ -46,11 +46,11 @@ fn hash_token(token: &str) -> String {
 }
 
 /// Gera par de tokens (access + refresh) para um usuário
-async fn generate_tokens(state: &AppState, user_id: Uuid) -> Result<(String, String), AppError> {
+async fn generate_tokens(state: &AppState, user_id: Uuid, username: &str) -> Result<(String, String), AppError> {
     // 1. Gerar Access Token (JWT)
     let access_token = state
         .jwt_service
-        .generate_token(user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
+        .generate_token(user_id, username, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
         .map_err(|e| {
             error!("Erro ao gerar access token: {:?}", e);
             AppError::Anyhow(e)
@@ -105,18 +105,17 @@ pub async fn login(
         AppError::Validation(e)
     })?;
 
-    // 2. Buscar usuário por username ou email
-    let user: (Uuid, String, bool) = sqlx::query_as(
-        "SELECT id, password_hash, mfa_enabled FROM users WHERE username = $1 OR LOWER(email) = LOWER($1)",
-    )
-    .bind(&payload.username)
-    .fetch_optional(&state.db_pool_auth)
-    .await?
-    .ok_or(AppError::InvalidPassword)?;
+    // 2. Buscar usuário por username ou email (via repositório)
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+    let user_info = user_repo
+        .find_for_login(&payload.username)
+        .await?
+        .ok_or(AppError::InvalidPassword)?;
 
-    let user_id = user.0;
-    let password_hash = user.1;
-    let mfa_enabled = user.2;
+    let user_id = user_info.id;
+    let username = user_info.username;
+    let password_hash = user_info.password_hash;
+    let mfa_enabled = user_info.mfa_enabled;
 
     // 3. Verificar senha com Argon2id
     let password_valid =
@@ -145,7 +144,7 @@ pub async fn login(
     }
 
     // 5. Gerar tokens (sem MFA)
-    let (access_token, refresh_token) = generate_tokens(&state, user_id).await?;
+    let (access_token, refresh_token) = generate_tokens(&state, user_id, &username).await?;
 
     info!(user_id = %user_id, "Login realizado com sucesso");
 
@@ -193,7 +192,7 @@ pub async fn register(
         .create(&payload.username, &payload.email, &password_hash)
         .await?;
 
-    let (access_token, refresh_token) = generate_tokens(&state, user.id).await?;
+    let (access_token, refresh_token) = generate_tokens(&state, user.id, user.username.as_str()).await?;
 
     let verification_token = create_verification_token(&state, user.id)
         .await
@@ -249,12 +248,13 @@ pub async fn refresh_token(
         .await
         .context("Falha ao iniciar transação")?;
 
-    // 3. Buscar token antigo
+    // 3. Buscar token antigo (com username do usuário)
     let old_token = sqlx::query_as::<_, RefreshTokenInfo>(
         r#"
-        SELECT id, user_id, revoked, expires_at, family_id
-        FROM refresh_tokens
-        WHERE token_hash = $1
+        SELECT rt.id, rt.user_id, u.username, rt.revoked, rt.expires_at, rt.family_id
+        FROM refresh_tokens rt
+        INNER JOIN users u ON u.id = rt.user_id
+        WHERE rt.token_hash = $1
         "#,
     )
     .bind(&old_token_hash)
@@ -262,7 +262,7 @@ pub async fn refresh_token(
     .await
     .context("Falha ao buscar refresh token")?;
 
-    let (user_id, family_id) = match old_token {
+    let (user_id, username, family_id) = match old_token {
         None => {
             return Err(AppError::Unauthorized("Refresh token inválido".to_string()));
         }
@@ -302,14 +302,14 @@ pub async fn refresh_token(
                 .await
                 .context("Falha ao revogar token antigo")?;
 
-            (token.user_id, token.family_id)
+            (token.user_id, token.username.clone(), token.family_id)
         }
     };
 
-    // 7. Gerar novo Access Token
+    // 7. Gerar novo Access Token (com username)
     let access_token = state
         .jwt_service
-        .generate_token(user_id, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
+        .generate_token(user_id, &username, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
         .map_err(|e| {
             error!("Erro ao gerar access token: {:?}", e);
             AppError::Anyhow(e)
@@ -397,11 +397,12 @@ pub async fn forgot_password(
     let user = user_repo.find_by_email(&payload.email).await?;
 
     if let Some(user) = user {
-        // 3. Gerar token de reset (JWT)
+        // 3. Gerar token de reset (JWT com username)
         let token = state
             .jwt_service
             .generate_token(
                 user.id,
+                user.username.as_str(),
                 TokenType::PasswordReset,
                 PASSWORD_RESET_EXPIRY_SECONDS,
             )
@@ -486,6 +487,7 @@ pub async fn reset_password(
 struct RefreshTokenInfo {
     id: Uuid,
     user_id: Uuid,
+    username: String,
     revoked: bool,
     expires_at: chrono::DateTime<chrono::Utc>,
     family_id: Uuid,
