@@ -79,6 +79,38 @@ lazy_static::lazy_static! {
         "Total de erros HTTP",
         &["error_type"]  // "validation", "unauthorized", "forbidden", "internal"
     ).unwrap();
+
+    /// Histograma de tempo de hash de senha (em segundos)
+    /// Importante para detectar ataques de força bruta e monitorar performance
+    pub static ref PASSWORD_HASH_DURATION: HistogramVec = register_histogram_vec!(
+        "password_hash_duration_seconds",
+        "Tempo de hash de senha usando Argon2",
+        &["operation"],  // "hash" ou "verify"
+        vec![0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 1.0]
+    ).unwrap();
+
+    /// Contador de detecções de roubo de tokens (token theft detection)
+    /// Incrementado quando tokens reutilizados ou famílias invalidadas são detectadas
+    pub static ref TOKEN_THEFT_DETECTED: IntCounterVec = register_int_counter_vec!(
+        "token_theft_detected_total",
+        "Total de detecções de possível roubo de tokens",
+        &["detection_type"]  // "reuse", "family_invalidation"
+    ).unwrap();
+
+    /// Histograma de tempo de verificação de permissões do Casbin (em segundos)
+    pub static ref CASBIN_ENFORCEMENT_DURATION: HistogramVec = register_histogram_vec!(
+        "casbin_enforcement_duration_seconds",
+        "Tempo de verificação de permissões no Casbin",
+        &["result"],  // "allowed" ou "denied"
+        vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1]
+    ).unwrap();
+
+    /// Contador de operações MFA
+    pub static ref MFA_OPERATIONS_TOTAL: IntCounterVec = register_int_counter_vec!(
+        "mfa_operations_total",
+        "Total de operações MFA",
+        &["operation", "result"]  // operation: "enable", "disable", "verify"; result: "success", "failure"
+    ).unwrap();
 }
 
 // =============================================================================
@@ -172,6 +204,36 @@ pub fn update_policy_count(count: i64) {
 /// Registra erro HTTP por tipo
 pub fn record_http_error(error_type: &str) {
     HTTP_ERRORS_TOTAL.with_label_values(&[error_type]).inc();
+}
+
+/// Registra tempo de operação de hash de senha
+pub fn record_password_operation_duration(operation: &str, duration_secs: f64) {
+    PASSWORD_HASH_DURATION
+        .with_label_values(&[operation])
+        .observe(duration_secs);
+}
+
+/// Registra detecção de possível roubo de token
+pub fn record_token_theft_detection(detection_type: &str) {
+    TOKEN_THEFT_DETECTED
+        .with_label_values(&[detection_type])
+        .inc();
+}
+
+/// Registra tempo de enforcement do Casbin
+pub fn record_casbin_enforcement_duration(allowed: bool, duration_secs: f64) {
+    let result = if allowed { "allowed" } else { "denied" };
+    CASBIN_ENFORCEMENT_DURATION
+        .with_label_values(&[result])
+        .observe(duration_secs);
+}
+
+/// Registra operação MFA
+pub fn record_mfa_operation(operation: &str, success: bool) {
+    let result = if success { "success" } else { "failure" };
+    MFA_OPERATIONS_TOTAL
+        .with_label_values(&[operation, result])
+        .inc();
 }
 
 // =============================================================================

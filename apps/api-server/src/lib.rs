@@ -57,11 +57,21 @@ pub fn build_application_state(
 
     let mfa_repo_port: Arc<dyn MfaRepositoryPort> = Arc::new(MfaRepository::new(pool_auth.clone()));
 
+    // Criar configuração de expiração de tokens a partir do Config
+    let token_config = application::services::auth_service::TokenExpiryConfig {
+        access_token_expiry_seconds: config.access_token_expiry_seconds,
+        refresh_token_expiry_seconds: config.refresh_token_expiry_seconds,
+        mfa_challenge_expiry_seconds: config.mfa_challenge_expiry_seconds,
+        password_reset_expiry_seconds: config.password_reset_expiry_seconds,
+        email_verification_expiry_seconds: config.email_verification_expiry_seconds,
+    };
+
     let auth_service = Arc::new(AuthService::new(
         user_repo_port.clone(),
         auth_repo_port.clone(),
         email_service_port.clone(),
         jwt_service.clone(),
+        token_config,
     ));
 
     let user_service = Arc::new(UserService::new(

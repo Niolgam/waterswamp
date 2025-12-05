@@ -28,13 +28,29 @@ pub struct TokenRefreshResult {
     pub refresh_token: String,
 }
 
-// Helpers
-const ACCESS_TOKEN_EXPIRY: i64 = 3600; // 1h
-const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 7;
-const MFA_CHALLENGE_EXPIRY: i64 = 300; // 5min
-const RESET_TOKEN_EXPIRY: i64 = 900; // 15min
-const EMAIL_VERIFICATION_EXPIRY: i64 = 86400; // 24h
+// Configuração de expiração de tokens
+#[derive(Clone, Debug)]
+pub struct TokenExpiryConfig {
+    pub access_token_expiry_seconds: i64,
+    pub refresh_token_expiry_seconds: i64,
+    pub mfa_challenge_expiry_seconds: i64,
+    pub password_reset_expiry_seconds: i64,
+    pub email_verification_expiry_seconds: i64,
+}
 
+impl Default for TokenExpiryConfig {
+    fn default() -> Self {
+        Self {
+            access_token_expiry_seconds: 3600,        // 1h
+            refresh_token_expiry_seconds: 604800,     // 7 dias
+            mfa_challenge_expiry_seconds: 300,        // 5min
+            password_reset_expiry_seconds: 900,       // 15min
+            email_verification_expiry_seconds: 86400, // 24h
+        }
+    }
+}
+
+// Helpers
 fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
@@ -43,23 +59,26 @@ fn hash_token(token: &str) -> String {
 
 pub struct AuthService {
     user_repo: Arc<dyn UserRepositoryPort>,
-    auth_repo: Arc<dyn AuthRepositoryPort>, // Novo
+    auth_repo: Arc<dyn AuthRepositoryPort>,
     email_service: Arc<dyn EmailServicePort>,
     jwt_service: Arc<JwtService>,
+    token_config: TokenExpiryConfig,
 }
 
 impl AuthService {
     pub fn new(
         user_repo: Arc<dyn UserRepositoryPort>,
-        auth_repo: Arc<dyn AuthRepositoryPort>, // Novo
+        auth_repo: Arc<dyn AuthRepositoryPort>,
         email_service: Arc<dyn EmailServicePort>,
         jwt_service: Arc<JwtService>,
+        token_config: TokenExpiryConfig,
     ) -> Self {
         Self {
             user_repo,
             auth_repo,
             email_service,
             jwt_service,
+            token_config,
         }
     }
 
@@ -93,7 +112,7 @@ impl AuthService {
                 user.id,
                 user.username.as_str(),
                 TokenType::EmailVerification,
-                EMAIL_VERIFICATION_EXPIRY,
+                self.token_config.email_verification_expiry_seconds,
             )
             .map_err(|e| ServiceError::Internal(e))?;
 
@@ -173,7 +192,7 @@ impl AuthService {
             // Gerar token MFA
             let mfa_token = self
                 .jwt_service
-                .generate_mfa_token(user.id, MFA_CHALLENGE_EXPIRY)
+                .generate_mfa_token(user.id, self.token_config.mfa_challenge_expiry_seconds)
                 .map_err(|e| ServiceError::Internal(e))?;
 
             return Ok(AuthResult {
@@ -231,7 +250,7 @@ impl AuthService {
         // 4. Rotação: Gerar novo e invalidar antigo
         let new_refresh_token_raw = uuid::Uuid::new_v4().to_string();
         let new_refresh_token_hash = hash_token(&new_refresh_token_raw);
-        let new_expires_at = Utc::now() + Duration::days(REFRESH_TOKEN_EXPIRY_DAYS);
+        let new_expires_at = Utc::now() + Duration::seconds(self.token_config.refresh_token_expiry_seconds);
 
         // Buscar username do usuário
         let user = self
@@ -243,7 +262,7 @@ impl AuthService {
         // Access Token
         let access_token = self
             .jwt_service
-            .generate_token(token.user_id, user.username.as_str(), TokenType::Access, ACCESS_TOKEN_EXPIRY)
+            .generate_token(token.user_id, user.username.as_str(), TokenType::Access, self.token_config.access_token_expiry_seconds)
             .map_err(|e| ServiceError::Internal(e))?;
 
         // Operação atômica no repo
@@ -282,7 +301,7 @@ impl AuthService {
         if let Some(user) = user {
             let token = self
                 .jwt_service
-                .generate_token(user.id, user.username.as_str(), TokenType::PasswordReset, RESET_TOKEN_EXPIRY)
+                .generate_token(user.id, user.username.as_str(), TokenType::PasswordReset, self.token_config.password_reset_expiry_seconds)
                 .map_err(|e| ServiceError::Internal(e))?;
 
             // Enviar email com log de erro
@@ -337,13 +356,13 @@ impl AuthService {
     ) -> Result<(String, String), ServiceError> {
         let access_token = self
             .jwt_service
-            .generate_token(user_id, username, TokenType::Access, ACCESS_TOKEN_EXPIRY)
+            .generate_token(user_id, username, TokenType::Access, self.token_config.access_token_expiry_seconds)
             .map_err(|e| ServiceError::Internal(e))?;
 
         let refresh_token_raw = uuid::Uuid::new_v4().to_string();
         let refresh_hash = hash_token(&refresh_token_raw);
         let family_id = uuid::Uuid::new_v4();
-        let expires_at = Utc::now() + Duration::days(REFRESH_TOKEN_EXPIRY_DAYS);
+        let expires_at = Utc::now() + Duration::seconds(self.token_config.refresh_token_expiry_seconds);
 
         self.auth_repo
             .save_refresh_token(user_id, &refresh_hash, family_id, expires_at)
@@ -467,9 +486,10 @@ mod tests {
 
         let service = AuthService::new(
             Arc::new(mock_user_repo),
-            Arc::new(mock_auth_repo), // Injeção
+            Arc::new(mock_auth_repo),
             Arc::new(mock_email),
             jwt_service,
+            TokenExpiryConfig::default(),
         );
 
         let payload = RegisterPayload {

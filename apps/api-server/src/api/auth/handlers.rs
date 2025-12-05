@@ -26,15 +26,6 @@ use super::contracts::{
 };
 
 // =============================================================================
-// CONSTANTS
-// =============================================================================
-
-const ACCESS_TOKEN_EXPIRY_SECONDS: i64 = 3600; // 1 hora
-const REFRESH_TOKEN_EXPIRY_SECONDS: i64 = 604800; // 7 dias
-const PASSWORD_RESET_EXPIRY_SECONDS: i64 = 900; // 15 minutos
-const MFA_CHALLENGE_EXPIRY_SECONDS: i64 = 300; // 5 minutos
-
-// =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 
@@ -50,7 +41,7 @@ async fn generate_tokens(state: &AppState, user_id: Uuid, username: &str) -> Res
     // 1. Gerar Access Token (JWT)
     let access_token = state
         .jwt_service
-        .generate_token(user_id, username, TokenType::Access, ACCESS_TOKEN_EXPIRY_SECONDS)
+        .generate_token(user_id, username, TokenType::Access, state.config.access_token_expiry_seconds)
         .map_err(|e| {
             error!("Erro ao gerar access token: {:?}", e);
             AppError::Anyhow(e)
@@ -60,7 +51,7 @@ async fn generate_tokens(state: &AppState, user_id: Uuid, username: &str) -> Res
     let refresh_token_raw = Uuid::new_v4().to_string();
     let refresh_token_hash = hash_token(&refresh_token_raw);
     let family_id = Uuid::new_v4();
-    let expires_at = Utc::now() + Duration::seconds(REFRESH_TOKEN_EXPIRY_SECONDS);
+    let expires_at = Utc::now() + Duration::seconds(state.config.refresh_token_expiry_seconds);
 
     // 3. Salvar Refresh Token no banco
     sqlx::query(
@@ -84,7 +75,7 @@ async fn generate_tokens(state: &AppState, user_id: Uuid, username: &str) -> Res
 fn generate_mfa_challenge_token(state: &AppState, user_id: Uuid) -> anyhow::Result<String> {
     state
         .jwt_service
-        .generate_mfa_token(user_id, MFA_CHALLENGE_EXPIRY_SECONDS)
+        .generate_mfa_token(user_id, state.config.mfa_challenge_expiry_seconds)
 }
 
 // =============================================================================
@@ -404,7 +395,7 @@ pub async fn forgot_password(
                 user.id,
                 user.username.as_str(),
                 TokenType::PasswordReset,
-                PASSWORD_RESET_EXPIRY_SECONDS,
+                state.config.password_reset_expiry_seconds,
             )
             .map_err(|e| {
                 error!("Erro ao gerar reset token: {:?}", e);
@@ -519,11 +510,5 @@ mod tests {
         assert_ne!(hash, hash3);
     }
 
-    #[test]
-    fn test_constants() {
-        assert_eq!(ACCESS_TOKEN_EXPIRY_SECONDS, 3600);
-        assert_eq!(REFRESH_TOKEN_EXPIRY_SECONDS, 604800);
-        assert_eq!(PASSWORD_RESET_EXPIRY_SECONDS, 900);
-        assert_eq!(MFA_CHALLENGE_EXPIRY_SECONDS, 300);
-    }
+    // Note: Token expiry constants moved to Config struct
 }

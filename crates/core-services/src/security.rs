@@ -88,11 +88,76 @@ pub fn security_headers() -> Vec<SetResponseHeaderLayer<HeaderValue>> {
     ]
 }
 
+/// Lista das senhas mais comuns (Top 100)
+/// Fonte: https://github.com/danielmiessler/SecLists
+const COMMON_PASSWORDS: &[&str] = &[
+    "password", "123456", "123456789", "12345678", "12345", "1234567", "password1",
+    "qwerty", "abc123", "111111", "123123", "admin", "letmein", "welcome", "monkey",
+    "1234567890", "qwerty123", "dragon", "master", "1234", "login", "princess",
+    "solo", "qwertyuiop", "starwars", "666666", "Football", "bailey", "superman",
+    "michael", "shadow", "sunshine", "121212", "charlie", "aa123456", "donald",
+    "!@#$%^&*", "654321", "987654321", "football", "password123", "secret",
+    "baseball", "trustno1", "jordan", "ashley", "passw0rd", "hunter", "buster",
+    "batman", "tiger", "mustang", "iloveyou", "thomas", "1q2w3e4r", "jennifer",
+    "cookie", "killer", "computer", "soccer", "michelle", "summer", "corvette",
+    "pepper", "diamond", "jessica", "harley", "fuck", "andrea", "whatever",
+    "internet", "money", "test", "pussy", "cheese", "freedom", "love", "1111",
+    "2000", "nicole", "hockey", "ranger", "maggie", "coffee", "Chelsea", "biteme",
+    "access", "yankees", "987654", "dallas", "austin", "thunder", "taylor",
+    "matrix", "william", "Robert", "hello", "cheese", "daniel", "golfer",
+    "ginger", "banana", "killer", "pepper", "silver"
+];
+
+/// Valida a força da senha usando zxcvbn e verifica contra lista de senhas comuns.
+///
+/// # Validações
+///
+/// 1. **Comprimento**: mínimo 8 caracteres
+/// 2. **Senhas comuns**: verifica se não está na lista das 100 senhas mais usadas
+/// 3. **Score zxcvbn**: mínimo 3/4 (Strong) usando algoritmo NIST
+///
+/// # Erros
+///
+/// Retorna `Err(String)` com mensagem de erro específica se:
+/// - Senha muito curta (< 8 caracteres)
+/// - Senha está na lista de senhas comuns
+/// - Score de força < 3 (muito fraca)
+///
+/// # Exemplos
+///
+/// ```
+/// use core_services::security::validate_password_strength;
+///
+/// // Senha forte - OK
+/// assert!(validate_password_strength("MyS3cur3P@ssw0rd!").is_ok());
+///
+/// // Senha comum - Erro
+/// assert!(validate_password_strength("password123").is_err());
+///
+/// // Senha fraca - Erro
+/// assert!(validate_password_strength("123456").is_err());
+/// ```
 pub fn validate_password_strength(password: &str) -> Result<(), String> {
+    // 1. Validar comprimento mínimo
+    if password.len() < 8 {
+        return Err("Senha muito curta. Use no mínimo 8 caracteres.".to_string());
+    }
+
+    // 2. Verificar se está na lista de senhas comuns (case-insensitive)
+    let password_lower = password.to_lowercase();
+    if COMMON_PASSWORDS.iter().any(|&common| password_lower == common.to_lowercase()) {
+        return Err("Senha muito comum. Escolha uma senha mais segura e única.".to_string());
+    }
+
+    // 3. Validar força usando zxcvbn (algoritmo NIST)
     let estimate = zxcvbn(password, &[]);
     if estimate.score() < Score::Three {
-        return Err("Senha muito fraca. Use uma senha mais complexa.".to_string());
+        return Err(format!(
+            "Senha muito fraca (score: {:?}/4). Use uma combinação de letras maiúsculas, minúsculas, números e símbolos.",
+            estimate.score() as u8
+        ));
     }
+
     Ok(())
 }
 
@@ -351,6 +416,55 @@ mod tests {
         assert!(validate_password_strength("C0mpl3x&P@ss#2025").is_ok());
         assert!(validate_password_strength("Tr0ng$ecuR3!Data#42").is_ok());
         assert!(validate_password_strength("F!8q@K39zP#sM7vL").is_ok());
+    }
+
+    #[test]
+    fn test_common_passwords_rejected() {
+        // Senhas comuns devem ser rejeitadas (case-insensitive)
+        assert!(validate_password_strength("password").is_err());
+        assert!(validate_password_strength("PASSWORD").is_err());
+        assert!(validate_password_strength("Password123").is_err());
+        assert!(validate_password_strength("123456").is_err());
+        assert!(validate_password_strength("qwerty").is_err());
+        assert!(validate_password_strength("admin").is_err());
+        assert!(validate_password_strength("letmein").is_err());
+        assert!(validate_password_strength("welcome").is_err());
+        assert!(validate_password_strength("monkey").is_err());
+        assert!(validate_password_strength("dragon").is_err());
+        assert!(validate_password_strength("iloveyou").is_err());
+        assert!(validate_password_strength("trustno1").is_err());
+    }
+
+    #[test]
+    fn test_password_too_short() {
+        // Senhas com menos de 8 caracteres devem ser rejeitadas
+        assert!(validate_password_strength("Ab1!").is_err());
+        assert!(validate_password_strength("1234567").is_err());
+        assert!(validate_password_strength("aB3!x").is_err());
+
+        let result = validate_password_strength("short");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("muito curta"));
+    }
+
+    #[test]
+    fn test_password_validation_error_messages() {
+        // Testa mensagens de erro específicas
+
+        // Senha curta
+        let result = validate_password_strength("abc");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("muito curta"));
+
+        // Senha comum
+        let result = validate_password_strength("password");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("muito comum"));
+
+        // Senha fraca (mas não comum)
+        let result = validate_password_strength("aaaaaaaa");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("muito fraca"));
     }
 
     #[test]
