@@ -215,6 +215,12 @@ mod tests {
 
     // --- HELPERS ---
 
+    fn create_test_jwt_service() -> Arc<JwtService> {
+        let private_pem = b"-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIL/Ue/jT2+VqQ3+X2+VqQ3+X2+VqQ3+X2+VqQ3+X2+Vq\n-----END PRIVATE KEY-----";
+        let public_pem = b"-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA/9R7+NPb5WpDf5fb5WpDf5fb5WpDf5fb5WpDf5fb5Wo=\n-----END PUBLIC KEY-----";
+        Arc::new(JwtService::new(private_pem, public_pem).unwrap())
+    }
+
     fn create_dummy_user(id: Uuid) -> UserDtoExtended {
         UserDtoExtended {
             id,
@@ -236,6 +242,7 @@ mod tests {
         let mut mock_user_repo = MockUserRepo::new();
         let mock_auth_repo = MockAuthRepo::new();
         let mock_email = MockEmailService::new();
+        let jwt_service = create_test_jwt_service();
 
         let user_id = Uuid::new_v4();
         let user = create_dummy_user(user_id);
@@ -251,6 +258,7 @@ mod tests {
             Arc::new(mock_user_repo),
             Arc::new(mock_auth_repo),
             Arc::new(mock_email),
+            jwt_service,
         );
 
         let result = service.get_profile(user_id).await;
@@ -263,6 +271,7 @@ mod tests {
         let mut mock_user_repo = MockUserRepo::new();
         let mock_auth_repo = MockAuthRepo::new();
         let mock_email = MockEmailService::new();
+        let jwt_service = create_test_jwt_service();
 
         let user_id = Uuid::new_v4();
         let user = create_dummy_user(user_id);
@@ -294,6 +303,7 @@ mod tests {
             Arc::new(mock_user_repo),
             Arc::new(mock_auth_repo),
             Arc::new(mock_email),
+            jwt_service,
         );
 
         let payload = UpdateUserPayload {
@@ -312,6 +322,7 @@ mod tests {
         let mut mock_user_repo = MockUserRepo::new();
         let mock_auth_repo = MockAuthRepo::new();
         let mut mock_email = MockEmailService::new();
+        let jwt_service = create_test_jwt_service();
 
         let user_id = Uuid::new_v4();
         let user = create_dummy_user(user_id);
@@ -354,6 +365,7 @@ mod tests {
             Arc::new(mock_user_repo),
             Arc::new(mock_auth_repo),
             Arc::new(mock_email),
+            jwt_service,
         );
 
         let payload = UpdateUserPayload {
@@ -372,6 +384,7 @@ mod tests {
         let mut mock_user_repo = MockUserRepo::new();
         let mut mock_auth_repo = MockAuthRepo::new();
         let mock_email = MockEmailService::new();
+        let jwt_service = create_test_jwt_service();
 
         let user_id = Uuid::new_v4();
         let old_pass = "OldPass123!";
@@ -404,6 +417,7 @@ mod tests {
             Arc::new(mock_user_repo),
             Arc::new(mock_auth_repo),
             Arc::new(mock_email),
+            jwt_service,
         );
 
         let result = service.change_password(user_id, old_pass, new_pass).await;
@@ -415,6 +429,7 @@ mod tests {
         let mut mock_user_repo = MockUserRepo::new();
         let mut mock_auth_repo = MockAuthRepo::new();
         let mock_email = MockEmailService::new();
+        let jwt_service = create_test_jwt_service();
 
         let user_id = Uuid::new_v4();
         let real_pass = "RealPass123!";
@@ -433,6 +448,7 @@ mod tests {
             Arc::new(mock_user_repo),
             Arc::new(mock_auth_repo),
             Arc::new(mock_email),
+            jwt_service,
         );
 
         let result = service
