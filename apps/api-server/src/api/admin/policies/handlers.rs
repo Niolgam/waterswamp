@@ -8,8 +8,7 @@ use super::contracts::{PolicyListResponse, PolicyRequest, PolicyResponse};
 use crate::infra::{errors::AppError, state::AppState};
 
 async fn clear_policy_cache(state: &AppState) {
-    let mut cache = state.policy_cache.write().await;
-    cache.clear();
+    state.policy_cache.invalidate_all();
     tracing::debug!("Policy cache cleared");
 }
 

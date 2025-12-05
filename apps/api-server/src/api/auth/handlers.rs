@@ -199,40 +199,17 @@ pub async fn register(
         .await
         .context("Falha ao criar token de verificação")?;
 
-    // Enviar email de verificação com tratamento de erro
-    tokio::spawn({
-        let email_service = state.email_service.clone();
-        let email = payload.email.as_str().to_string();
-        let username = user.username.as_str().to_string();
-        let token = verification_token.clone();
-        let user_id = user.id;
-        async move {
-            if let Err(e) = email_service.send_verification_email(email, &username, &token).await {
-                warn!(
-                    error = ?e,
-                    user_id = %user_id,
-                    "Falha ao enviar email de verificação"
-                );
-            }
-        }
-    });
+    // Enviar emails (fire-and-forget - já tratado internamente)
+    state.email_service.send_verification_email(
+        payload.email.as_str().to_string(),
+        user.username.as_str(),
+        &verification_token,
+    );
 
-    // Enviar email de boas-vindas com tratamento de erro
-    tokio::spawn({
-        let email_service = state.email_service.clone();
-        let email = payload.email.as_str().to_string();
-        let username = user.username.as_str().to_string();
-        let user_id = user.id;
-        async move {
-            if let Err(e) = email_service.send_welcome_email(email, &username).await {
-                warn!(
-                    error = ?e,
-                    user_id = %user_id,
-                    "Falha ao enviar email de boas-vindas"
-                );
-            }
-        }
-    });
+    state.email_service.send_welcome_email(
+        payload.email.as_str().to_string(),
+        user.username.as_str(),
+    );
 
     info!(user_id = %user.id, "Novo usuário registrado");
 
@@ -433,23 +410,12 @@ pub async fn forgot_password(
                 AppError::Anyhow(e)
             })?;
 
-        // 4. Enviar email (fire-and-forget com log de erro)
-        tokio::spawn({
-            let email_service = state.email_service.clone();
-            let email = payload.email.as_str().to_string();
-            let username = user.username.as_str().to_string();
-            let token = token.clone();
-            let user_id = user.id;
-            async move {
-                if let Err(e) = email_service.send_password_reset_email(email, &username, &token).await {
-                    warn!(
-                        error = ?e,
-                        user_id = %user_id,
-                        "Falha ao enviar email de reset de senha"
-                    );
-                }
-            }
-        });
+        // 4. Enviar email (fire-and-forget)
+        state.email_service.send_password_reset_email(
+            payload.email.as_str().to_string(),
+            user.username.as_str(),
+            &token,
+        );
 
         info!(user_id = %user.id, "Email de reset de senha enviado");
     } else {
