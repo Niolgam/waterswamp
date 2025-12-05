@@ -73,33 +73,25 @@ pub async fn mw_authorize(
 
     let cache_key = format!("{}:{}:{}", subject, object, action);
 
-    let cached_decision = {
-        let cache = state.policy_cache.read().await;
-        cache.get(&cache_key).copied()
-    };
+    // Tentar obter do cache (moka)
+    let allowed = if let Some(decision) = state.policy_cache.get(&cache_key).await {
+        tracing::debug!("Cache hit para: {}", cache_key);
+        decision
+    } else {
+        tracing::debug!("Cache miss para: {}", cache_key);
 
-    let allowed = match cached_decision {
-        Some(decision) => {
-            tracing::debug!("Cache hit para: {}", cache_key);
-            decision
-        }
-        None => {
-            tracing::debug!("Cache miss para: {}", cache_key);
+        // Consultar Casbin
+        let decision = {
+            let enforcer_guard = state.enforcer.read().await;
+            enforcer_guard
+                .enforce(vec![subject.clone(), object.clone(), action.clone()])
+                .map_err(|e| anyhow::anyhow!("Erro no Casbin Enforcer: {}", e))?
+        };
 
-            let decision = {
-                let enforcer_guard = state.enforcer.read().await;
-                enforcer_guard
-                    .enforce(vec![subject.clone(), object.clone(), action.clone()])
-                    .map_err(|e| anyhow::anyhow!("Erro no Casbin Enforcer: {}", e))?
-            };
+        // Inserir no cache (moka insere automaticamente com TTL)
+        state.policy_cache.insert(cache_key.clone(), decision).await;
 
-            {
-                let mut cache = state.policy_cache.write().await;
-                cache.insert(cache_key.clone(), decision);
-            }
-
-            decision
-        }
+        decision
     };
 
     if !allowed {
@@ -112,7 +104,7 @@ pub async fn mw_authorize(
         return Err(AppError::Forbidden("Access denied".to_string()));
     }
 
-    tracing::info!(
+    tracing::debug!(
         "Acesso permitido: sub={}, obj={}, act={}",
         subject,
         object,

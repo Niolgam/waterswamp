@@ -1,14 +1,18 @@
 use crate::errors::ServiceError;
+use core_services::jwt::JwtService;
 use core_services::security::{hash_password, verify_password};
-use domain::models::{UpdateUserPayload, UserDtoExtended};
+use domain::models::{TokenType, UpdateUserPayload, UserDtoExtended};
 use domain::ports::{AuthRepositoryPort, EmailServicePort, UserRepositoryPort};
 use std::sync::Arc;
 use uuid::Uuid;
+
+const EMAIL_VERIFICATION_EXPIRY: i64 = 86400; // 24h
 
 pub struct UserService {
     user_repo: Arc<dyn UserRepositoryPort>,
     auth_repo: Arc<dyn AuthRepositoryPort>,
     email_service: Arc<dyn EmailServicePort>,
+    jwt_service: Arc<JwtService>,
 }
 
 impl UserService {
@@ -16,11 +20,13 @@ impl UserService {
         user_repo: Arc<dyn UserRepositoryPort>,
         auth_repo: Arc<dyn AuthRepositoryPort>,
         email_service: Arc<dyn EmailServicePort>,
+        jwt_service: Arc<JwtService>,
     ) -> Self {
         Self {
             user_repo,
             auth_repo,
             email_service,
+            jwt_service,
         }
     }
 
@@ -71,17 +77,32 @@ impl UserService {
 
                 self.user_repo.mark_email_unverified(user_id).await?;
 
-                // TODO: Gerar token real via serviço de JWT ou similar
-                let verification_token = "dummy-token-update-profile";
+                // Gerar token de verificação de email (JWT válido por 24h)
+                let verification_token = self
+                    .jwt_service
+                    .generate_token(
+                        user_id,
+                        TokenType::EmailVerification,
+                        EMAIL_VERIFICATION_EXPIRY,
+                    )
+                    .map_err(|e| ServiceError::Internal(e))?;
 
-                let _ = self
+                // Enviar email com log de erro
+                if let Err(e) = self
                     .email_service
                     .send_verification_email(
                         new_email,
                         payload.username.as_ref().unwrap_or(&current_user.username),
-                        verification_token,
+                        &verification_token,
                     )
-                    .await;
+                    .await
+                {
+                    tracing::warn!(
+                        error = %e,
+                        user_id = %user_id,
+                        "Falha ao enviar email de verificação após atualização"
+                    );
+                }
             }
         }
 

@@ -33,6 +33,7 @@ const ACCESS_TOKEN_EXPIRY: i64 = 3600; // 1h
 const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 7;
 const MFA_CHALLENGE_EXPIRY: i64 = 300; // 5min
 const RESET_TOKEN_EXPIRY: i64 = 900; // 15min
+const EMAIL_VERIFICATION_EXPIRY: i64 = 86400; // 24h
 
 fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
@@ -85,16 +86,40 @@ impl AuthService {
         // Gerar Tokens
         let (access_token, refresh_token) = self.generate_and_save_tokens(user.id).await?;
 
-        // Enviar Emails
-        let verification_token = "dummy-token"; // TODO: Gerar token real
-        let _ = self
+        // Gerar token de verificação de email (JWT válido por 24h)
+        let verification_token = self
+            .jwt_service
+            .generate_token(
+                user.id,
+                TokenType::EmailVerification,
+                EMAIL_VERIFICATION_EXPIRY,
+            )
+            .map_err(|e| ServiceError::Internal(e))?;
+
+        // Enviar Emails (fire-and-forget com log de erros)
+        if let Err(e) = self
             .email_service
-            .send_verification_email(&req.email, &req.username, verification_token)
-            .await;
-        let _ = self
+            .send_verification_email(&req.email, &req.username, &verification_token)
+            .await
+        {
+            tracing::warn!(
+                error = %e,
+                user_id = %user.id,
+                "Falha ao enviar email de verificação"
+            );
+        }
+
+        if let Err(e) = self
             .email_service
             .send_welcome_email(&req.email, &req.username)
-            .await;
+            .await
+        {
+            tracing::warn!(
+                error = %e,
+                user_id = %user.id,
+                "Falha ao enviar email de boas-vindas"
+            );
+        }
 
         Ok(RegisterResult {
             user,
@@ -252,11 +277,18 @@ impl AuthService {
                 .generate_token(user.id, TokenType::PasswordReset, RESET_TOKEN_EXPIRY)
                 .map_err(|e| ServiceError::Internal(e))?;
 
-            // Fire and forget
-            let _ = self
+            // Enviar email com log de erro
+            if let Err(e) = self
                 .email_service
                 .send_password_reset_email(email, &user.username, &token)
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    error = %e,
+                    user_id = %user.id,
+                    "Falha ao enviar email de reset de senha"
+                );
+            }
         }
 
         Ok(())

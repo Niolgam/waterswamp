@@ -4,6 +4,7 @@ use crate::{
 };
 use anyhow::Context;
 use axum::{extract::State, Json};
+use domain::models::TokenType;
 use domain::ports::UserRepositoryPort;
 use persistence::repositories::{
     email_verification_repository::EmailVerificationRepository, user_repository::UserRepository,
@@ -46,23 +47,35 @@ pub async fn create_verification_token(state: &AppState, user_id: Uuid) -> anyho
 // --- Handlers ---
 
 /// POST /verify-email
-/// Verifica o email do usuário usando o token fornecido.
+/// Verifica o email do usuário usando o token fornecido (JWT ou UUID).
 pub async fn verify_email(
     State(state): State<AppState>,
     Json(payload): Json<VerifyEmailRequest>,
 ) -> Result<Json<EmailVerificationResponse>, AppError> {
     payload.validate().map_err(AppError::Validation)?;
 
-    let token_hash = hash_token(&payload.token);
     let verification_repo = EmailVerificationRepository::new(&state.db_pool_auth);
 
-    // 1. Encontrar token válido
-    let user_id = verification_repo
-        .find_valid_token(&token_hash)
-        .await?
-        .ok_or_else(|| {
-            AppError::BadRequest("Token de verificação inválido ou expirado".to_string())
-        })?;
+    // Tentar verificar como JWT primeiro (novo sistema)
+    let user_id = if let Ok(claims) = state
+        .jwt_service
+        .verify_token(&payload.token, TokenType::EmailVerification)
+    {
+        // Token JWT válido
+        tracing::debug!("Token JWT de verificação validado");
+        claims.sub
+    } else {
+        // Fallback para o sistema antigo (UUID no banco)
+        tracing::debug!("Token não é JWT, tentando sistema legado de UUID");
+        let token_hash = hash_token(&payload.token);
+
+        verification_repo
+            .find_valid_token(&token_hash)
+            .await?
+            .ok_or_else(|| {
+                AppError::BadRequest("Token de verificação inválido ou expirado".to_string())
+            })?
+    };
 
     // 2. Verificar se já foi validado
     if verification_repo.is_email_verified(user_id).await? {
@@ -72,8 +85,15 @@ pub async fn verify_email(
         }));
     }
 
-    // 3. Marcar token como usado
-    verification_repo.mark_token_as_used(&token_hash).await?;
+    // 3. Se era token UUID, marcar como usado
+    if state
+        .jwt_service
+        .verify_token(&payload.token, TokenType::EmailVerification)
+        .is_err()
+    {
+        let token_hash = hash_token(&payload.token);
+        verification_repo.mark_token_as_used(&token_hash).await?;
+    }
 
     // 4. Atualizar status do usuário
     verification_repo.verify_user_email(user_id).await?;

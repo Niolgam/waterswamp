@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use application::services::audit_services::AuditService;
 use axum::Router;
+use moka::future::Cache;
 use sqlx::PgPool;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -67,6 +68,7 @@ pub fn build_application_state(
         user_repo_port.clone(),
         auth_repo_port.clone(),
         email_service_port.clone(),
+        jwt_service.clone(),
     ));
 
     let mfa_service = Arc::new(MfaService::new(
@@ -77,7 +79,11 @@ pub fn build_application_state(
         jwt_service.clone(),
     ));
 
-    let policy_cache = Arc::new(RwLock::new(HashMap::new()));
+    // Cache com TTL e tamanho máximo para políticas do Casbin
+    let policy_cache = Cache::builder()
+        .max_capacity(10_000) // Máximo 10k entries
+        .time_to_live(Duration::from_secs(300)) // TTL de 5 minutos
+        .build();
 
     state::AppState {
         enforcer,

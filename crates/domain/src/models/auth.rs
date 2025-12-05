@@ -97,6 +97,7 @@ pub enum TokenType {
     Access,
     Refresh,
     PasswordReset,
+    EmailVerification,
 }
 
 // --- Persistence Entity ---

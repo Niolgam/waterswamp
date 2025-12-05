@@ -6,12 +6,13 @@ use application::services::user_service::UserService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use email_service::EmailSender;
+use moka::future::Cache;
 use sqlx::PgPool;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
 pub type SharedEnforcer = Arc<RwLock<Enforcer>>;
-pub type PolicyCache = Arc<RwLock<HashMap<String, bool>>>;
+pub type PolicyCache = Cache<String, bool>;
 
 #[derive(Clone)]
 pub struct AppState {
