@@ -21,6 +21,7 @@ fn generate_custom_token(user_id: Uuid, token_type: TokenType, expires_in_second
         .as_secs() as i64;
     let claims = Claims {
         sub: user_id,
+        username: "testuser".to_string(),
         exp: now + expires_in_seconds,
         iat: now,
         token_type,

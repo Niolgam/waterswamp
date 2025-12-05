@@ -149,6 +149,7 @@ pub fn generate_test_token(user_id: Uuid) -> String {
         .as_secs() as i64;
     let claims = Claims {
         sub: user_id,
+        username: "testuser".to_string(),
         exp: now + 3600,
         iat: now,
         token_type: TokenType::Access,
@@ -247,6 +248,7 @@ pub fn generate_custom_token(
         .as_secs() as i64;
     let claims = Claims {
         sub: user_id,
+        username: "testuser".to_string(),
         exp: now + expires_in_seconds,
         iat: now,
         token_type,

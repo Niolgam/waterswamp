@@ -779,7 +779,7 @@ async fn test_api_auth_reset_password_success() {
     // Generate valid JWT for reset (using the same service as the app)
     let reset_token = state
         .jwt_service
-        .generate_token(user_id, TokenType::PasswordReset, 900)
+        .generate_token(user_id, &username, TokenType::PasswordReset, 900)
         .expect("Failed to generate token");
 
     // Reset password
