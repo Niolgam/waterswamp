@@ -51,9 +51,7 @@ pub async fn create_unit(
     Json(payload): Json<CreateOrganizationalUnitRequest>,
 ) -> Result<(StatusCode, Json<OrganizationalUnitResponse>), AppError> {
     // Validate payload
-    payload
-        .validate()
-        .map_err(|e| AppError::ValidationError(e.to_string()))?;
+    payload.validate()?;
 
     info!(name = %payload.name, "Creating new organizational unit");
 
@@ -185,9 +183,7 @@ pub async fn update_unit(
     Json(payload): Json<UpdateOrganizationalUnitRequest>,
 ) -> Result<Json<OrganizationalUnitResponse>, AppError> {
     // Validate payload
-    payload
-        .validate()
-        .map_err(|e| AppError::ValidationError(e.to_string()))?;
+    payload.validate()?;
 
     info!(unit_id = %id, "Updating organizational unit");
 
@@ -196,10 +192,10 @@ pub async fn update_unit(
         name: payload.name,
         acronym: payload.acronym,
         category_id: payload.category_id,
-        parent_id: Some(payload.parent_id),
+        parent_id: payload.parent_id,
         description: payload.description,
         is_uorg: payload.is_uorg,
-        campus_id: Some(payload.campus_id),
+        campus_id: payload.campus_id,
     };
 
     // Update unit through service

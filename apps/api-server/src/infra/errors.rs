@@ -105,3 +105,24 @@ impl IntoResponse for AppError {
         (status, body).into_response()
     }
 }
+
+// Implementação do From para ServiceError -> AppError
+impl From<application::errors::ServiceError> for AppError {
+    fn from(err: application::errors::ServiceError) -> Self {
+        match err {
+            application::errors::ServiceError::UserAlreadyExists => {
+                AppError::Conflict("User already exists".to_string())
+            }
+            application::errors::ServiceError::InvalidCredentials => {
+                AppError::Unauthorized("Invalid credentials".to_string())
+            }
+            application::errors::ServiceError::BadRequest(msg) => AppError::BadRequest(msg),
+            application::errors::ServiceError::ValidationError(msg) => AppError::BadRequest(msg),
+            application::errors::ServiceError::NotFound(msg) => AppError::NotFound(msg),
+            application::errors::ServiceError::Repository(repo_err) => {
+                AppError::Repository(repo_err)
+            }
+            application::errors::ServiceError::Internal(err) => AppError::Anyhow(err),
+        }
+    }
+}

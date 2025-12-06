@@ -26,9 +26,7 @@ pub async fn create_category(
     Json(payload): Json<CreateUnitCategoryRequest>,
 ) -> Result<(StatusCode, Json<UnitCategoryResponse>), AppError> {
     // Validate payload
-    payload
-        .validate()
-        .map_err(|e| AppError::ValidationError(e.to_string()))?;
+    payload.validate()?;
 
     info!(name = %payload.name, "Creating new unit category");
 
@@ -78,9 +76,7 @@ pub async fn update_category(
     Json(payload): Json<UpdateUnitCategoryRequest>,
 ) -> Result<Json<UnitCategoryResponse>, AppError> {
     // Validate payload
-    payload
-        .validate()
-        .map_err(|e| AppError::ValidationError(e.to_string()))?;
+    payload.validate()?;
 
     info!(category_id = %id, "Updating unit category");
 
