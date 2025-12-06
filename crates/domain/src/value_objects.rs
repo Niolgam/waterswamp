@@ -97,3 +97,66 @@ impl AsRef<str> for Username {
         &self.0
     }
 }
+
+/// Coordinates value object for geographic locations
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Coordinates {
+    pub latitude: f64,
+    pub longitude: f64,
+}
+
+impl Coordinates {
+    pub fn new(latitude: f64, longitude: f64) -> Result<Self, String> {
+        if !(-90.0..=90.0).contains(&latitude) {
+            return Err(format!(
+                "Invalid latitude: {}. Must be between -90 and 90",
+                latitude
+            ));
+        }
+        if !(-180.0..=180.0).contains(&longitude) {
+            return Err(format!(
+                "Invalid longitude: {}. Must be between -180 and 180",
+                longitude
+            ));
+        }
+        Ok(Self {
+            latitude,
+            longitude,
+        })
+    }
+}
+
+impl fmt::Display for Coordinates {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{},{}", self.latitude, self.longitude)
+    }
+}
+
+// SQLx Type implementation for storing as TEXT in PostgreSQL
+impl sqlx::Type<sqlx::Postgres> for Coordinates {
+    fn type_info() -> sqlx::postgres::PgTypeInfo {
+        <String as sqlx::Type<sqlx::Postgres>>::type_info()
+    }
+}
+
+// SQLx Encode implementation
+impl sqlx::Encode<'_, sqlx::Postgres> for Coordinates {
+    fn encode_by_ref(&self, buf: &mut sqlx::postgres::PgArgumentBuffer) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+        let s = format!("{},{}", self.latitude, self.longitude);
+        <String as sqlx::Encode<sqlx::Postgres>>::encode(s, buf)
+    }
+}
+
+// SQLx Decode implementation
+impl sqlx::Decode<'_, sqlx::Postgres> for Coordinates {
+    fn decode(value: sqlx::postgres::PgValueRef<'_>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let s = <String as sqlx::Decode<sqlx::Postgres>>::decode(value)?;
+        let parts: Vec<&str> = s.split(',').collect();
+        if parts.len() != 2 {
+            return Err("Invalid coordinates format".into());
+        }
+        let latitude = parts[0].parse::<f64>()?;
+        let longitude = parts[1].parse::<f64>()?;
+        Coordinates::new(latitude, longitude).map_err(|e| e.into())
+    }
+}

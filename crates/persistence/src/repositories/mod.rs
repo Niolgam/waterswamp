@@ -1,5 +1,8 @@
 pub mod audit_logs_repository;
 pub mod auth_repository;
+pub mod campus_repository;
+pub mod city_repository;
 pub mod email_verification_repository;
 pub mod mfa_repository;
+pub mod state_repository;
 pub mod user_repository;
