@@ -41,9 +41,7 @@ pub async fn create_campus(
     Json(payload): Json<CreateCampusRequest>,
 ) -> Result<(StatusCode, Json<CampusResponse>), AppError> {
     // Validate payload
-    payload
-        .validate()
-        .map_err(|e| AppError::ValidationError(e.to_string()))?;
+    payload.validate()?;
 
     info!(
         name = %payload.name,
@@ -128,10 +126,11 @@ pub async fn search_by_city(
     Query(params): Query<CityQuery>,
 ) -> Result<Json<CampusListResponse>, AppError> {
     let campus_list = state.campus_service.find_by_city(params.city_id).await?;
+    let total = campus_list.len() as i64;
 
     Ok(Json(CampusListResponse {
         campuses: campus_list.into_iter().map(Into::into).collect(),
-        total: campus_list.len() as i64,
+        total,
     }))
 }
 
@@ -143,9 +142,7 @@ pub async fn update_campus(
     Json(payload): Json<UpdateCampusRequest>,
 ) -> Result<Json<CampusResponse>, AppError> {
     // Validate payload
-    payload
-        .validate()
-        .map_err(|e| AppError::ValidationError(e.to_string()))?;
+    payload.validate()?;
 
     info!(campus_id = %id, "Updating campus");
 

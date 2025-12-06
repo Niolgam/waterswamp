@@ -117,10 +117,11 @@ pub async fn list_root_units(
     State(state): State<AppState>,
 ) -> Result<Json<OrganizationalUnitListResponse>, AppError> {
     let units = state.organizational_unit_service.list_root_units().await?;
+    let total = units.len() as i64;
 
     Ok(Json(OrganizationalUnitListResponse {
         units: units.into_iter().map(Into::into).collect(),
-        total: units.len() as i64,
+        total,
     }))
 }
 
@@ -134,10 +135,11 @@ pub async fn list_by_parent(
         .organizational_unit_service
         .list_by_parent(params.parent_id)
         .await?;
+    let total = units.len() as i64;
 
     Ok(Json(OrganizationalUnitListResponse {
         units: units.into_iter().map(Into::into).collect(),
-        total: units.len() as i64,
+        total,
     }))
 }
 
@@ -151,10 +153,11 @@ pub async fn list_by_category(
         .organizational_unit_service
         .list_by_category(params.category_id)
         .await?;
+    let total = units.len() as i64;
 
     Ok(Json(OrganizationalUnitListResponse {
         units: units.into_iter().map(Into::into).collect(),
-        total: units.len() as i64,
+        total,
     }))
 }
 
@@ -168,10 +171,11 @@ pub async fn list_by_campus(
         .organizational_unit_service
         .list_by_campus(params.campus_id)
         .await?;
+    let total = units.len() as i64;
 
     Ok(Json(OrganizationalUnitListResponse {
         units: units.into_iter().map(Into::into).collect(),
-        total: units.len() as i64,
+        total,
     }))
 }
 
