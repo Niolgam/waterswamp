@@ -12,11 +12,18 @@ use tracing::info;
 
 // Imports de Portas e Serviços
 use application::services::{
-    auth_service::AuthService, mfa_service::MfaService, user_service::UserService,
+    auth_service::AuthService, campus_service::CampusService, mfa_service::MfaService,
+    organizational_unit_service::OrganizationalUnitService,
+    unit_category_service::UnitCategoryService, user_service::UserService,
 };
-use domain::ports::{AuthRepositoryPort, EmailServicePort, MfaRepositoryPort, UserRepositoryPort};
+use domain::ports::{
+    AuthRepositoryPort, CampusRepositoryPort, EmailServicePort, MfaRepositoryPort,
+    OrganizationalUnitRepositoryPort, UnitCategoryRepositoryPort, UserRepositoryPort,
+};
 use persistence::repositories::{
-    auth_repository::AuthRepository, mfa_repository::MfaRepository, user_repository::UserRepository,
+    auth_repository::AuthRepository, campus_repository::CampusRepository,
+    mfa_repository::MfaRepository, organizational_unit_repository::OrganizationalUnitRepository,
+    unit_category_repository::UnitCategoryRepository, user_repository::UserRepository,
 };
 
 // Core & Infra
@@ -89,6 +96,25 @@ pub fn build_application_state(
         jwt_service.clone(),
     ));
 
+    // Create Campus repository and service
+    let campus_repo_port: Arc<dyn CampusRepositoryPort> =
+        Arc::new(CampusRepository::new(pool_auth.clone()));
+    let campus_service = Arc::new(CampusService::new(campus_repo_port.clone()));
+
+    // Create UnitCategory repository and service
+    let unit_category_repo_port: Arc<dyn UnitCategoryRepositoryPort> =
+        Arc::new(UnitCategoryRepository::new(pool_auth.clone()));
+    let unit_category_service =
+        Arc::new(UnitCategoryService::new(unit_category_repo_port.clone()));
+
+    // Create OrganizationalUnit repository and service
+    let org_unit_repo_port: Arc<dyn OrganizationalUnitRepositoryPort> =
+        Arc::new(OrganizationalUnitRepository::new(pool_auth.clone()));
+    let organizational_unit_service = Arc::new(OrganizationalUnitService::new(
+        org_unit_repo_port.clone(),
+        unit_category_repo_port.clone(),
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -106,6 +132,9 @@ pub fn build_application_state(
         auth_service,
         user_service,
         mfa_service,
+        campus_service,
+        unit_category_service,
+        organizational_unit_service,
         config,
     }
 }

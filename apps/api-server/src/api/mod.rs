@@ -5,8 +5,11 @@
 
 pub mod admin;
 pub mod auth;
+pub mod campus;
 pub mod email_verification;
 pub mod mfa;
+pub mod organizational_unit;
+pub mod unit_category;
 pub mod users;
 
 use axum::Router;
@@ -48,6 +51,12 @@ pub fn router(state: AppState) -> Router {
         .merge(auth::router())
         // User self-service routes (requer autenticação - aplicada em routes/)
         .merge(users::router())
+        // Campus routes
+        .nest("/campus", campus::routes())
+        // Unit Category routes
+        .nest("/unit-categories", unit_category::routes())
+        // Organizational Unit routes
+        .nest("/organizational-units", organizational_unit::routes())
         .with_state(state)
 }
 

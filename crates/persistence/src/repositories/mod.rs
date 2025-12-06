@@ -4,5 +4,7 @@ pub mod campus_repository;
 pub mod city_repository;
 pub mod email_verification_repository;
 pub mod mfa_repository;
+pub mod organizational_unit_repository;
 pub mod state_repository;
+pub mod unit_category_repository;
 pub mod user_repository;

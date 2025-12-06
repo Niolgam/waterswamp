@@ -3,7 +3,9 @@ pub mod campus;
 pub mod city;
 pub mod email;
 pub mod mfa;
+pub mod organizational_unit;
 pub mod state;
+pub mod unit_category;
 pub mod user;
 
 pub use auth::*;
@@ -11,5 +13,7 @@ pub use campus::*;
 pub use city::*;
 pub use email::*;
 pub use mfa::*;
+pub use organizational_unit::*;
 pub use state::*;
+pub use unit_category::*;
 pub use user::*;
