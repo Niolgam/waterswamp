@@ -12,11 +12,18 @@ use tracing::info;
 
 // Imports de Portas e Serviços
 use application::services::{
-    auth_service::AuthService, mfa_service::MfaService, user_service::UserService,
+    auth_service::AuthService, location_service::LocationService, mfa_service::MfaService,
+    user_service::UserService,
 };
-use domain::ports::{AuthRepositoryPort, EmailServicePort, MfaRepositoryPort, UserRepositoryPort};
+use domain::ports::{
+    AuthRepositoryPort, CityRepositoryPort, EmailServicePort, MfaRepositoryPort,
+    SiteTypeRepositoryPort, StateRepositoryPort, UserRepositoryPort,
+};
 use persistence::repositories::{
-    auth_repository::AuthRepository, mfa_repository::MfaRepository, user_repository::UserRepository,
+    auth_repository::AuthRepository,
+    location_repository::{CityRepository, SiteTypeRepository, StateRepository},
+    mfa_repository::MfaRepository,
+    user_repository::UserRepository,
 };
 
 // Core & Infra
@@ -79,6 +86,20 @@ pub fn build_application_state(
         jwt_service.clone(),
     ));
 
+    // Location repositories and service
+    let state_repo_port: Arc<dyn StateRepositoryPort> =
+        Arc::new(StateRepository::new(pool_auth.clone()));
+    let city_repo_port: Arc<dyn CityRepositoryPort> =
+        Arc::new(CityRepository::new(pool_auth.clone()));
+    let site_type_repo_port: Arc<dyn SiteTypeRepositoryPort> =
+        Arc::new(SiteTypeRepository::new(pool_auth.clone()));
+
+    let location_service = Arc::new(LocationService::new(
+        state_repo_port,
+        city_repo_port,
+        site_type_repo_port,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -96,6 +117,7 @@ pub fn build_application_state(
         auth_service,
         user_service,
         mfa_service,
+        location_service,
         config,
     }
 }

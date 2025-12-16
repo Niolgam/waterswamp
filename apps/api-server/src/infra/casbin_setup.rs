@@ -159,6 +159,60 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Audit Logs carregadas");
 
+    // --- LOCATION POLICIES ---
+    // States
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/states", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/states", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/states/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/states/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/states/{id}", ACTION_DELETE])
+        .await?;
+
+    // Cities
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/cities", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/cities", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/cities/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/cities/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/cities/{id}", ACTION_DELETE])
+        .await?;
+
+    // Site Types
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/site-types", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/site-types", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/site-types/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/site-types/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/site-types/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Location Management carregadas");
+
     match enforcer.save_policy().await {
         Ok(_) => {
             info!("Políticas do Casbin carregadas e salvas no banco.");
