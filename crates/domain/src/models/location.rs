@@ -138,3 +138,129 @@ pub struct UpdateSiteTypePayload {
     #[validate(length(max = 500))]
     pub description: Option<String>,
 }
+
+// ============================
+// Building Type Models
+// ============================
+
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct BuildingTypeDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedBuildingTypes {
+    pub building_types: Vec<BuildingTypeDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListBuildingTypesQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct CreateBuildingTypePayload {
+    pub name: LocationName,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateBuildingTypePayload {
+    pub name: Option<LocationName>,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
+
+// ============================
+// Space Type Models
+// ============================
+
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct SpaceTypeDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedSpaceTypes {
+    pub space_types: Vec<SpaceTypeDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListSpaceTypesQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct CreateSpaceTypePayload {
+    pub name: LocationName,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateSpaceTypePayload {
+    pub name: Option<LocationName>,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
+
+// ============================
+// Department Category Models
+// ============================
+
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct DepartmentCategoryDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedDepartmentCategories {
+    pub department_categories: Vec<DepartmentCategoryDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListDepartmentCategoriesQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct CreateDepartmentCategoryPayload {
+    pub name: LocationName,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateDepartmentCategoryPayload {
+    pub name: Option<LocationName>,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
