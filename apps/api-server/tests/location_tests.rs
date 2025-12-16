@@ -732,3 +732,429 @@ async fn test_site_type_requires_admin_role() {
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
 }
+
+// ============================
+// BUILDING TYPE TESTS (Phase 2)
+// ============================
+
+#[tokio::test]
+async fn test_create_building_type_success() {
+    let app = common::spawn_app().await;
+
+    let response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Edifício Comercial",
+            "description": "Prédio para uso comercial"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Edifício Comercial");
+    assert_eq!(body["description"], "Prédio para uso comercial");
+}
+
+#[tokio::test]
+async fn test_create_building_type_duplicate_name_returns_conflict() {
+    let app = common::spawn_app().await;
+
+    // Create first building type
+    app.api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Edifício Industrial"}))
+        .await;
+
+    // Try to create duplicate
+    let response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Edifício Industrial"}))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_get_building_type_success() {
+    let app = common::spawn_app().await;
+
+    // Create building type
+    let create_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Edifício Residencial",
+            "description": "Prédio para moradia"
+        }))
+        .await;
+
+    let created: Value = create_response.json();
+    let building_type_id = created["id"].as_str().unwrap();
+
+    // Get building type
+    let response = app
+        .api
+        .get(&format!("/api/admin/locations/building-types/{}", building_type_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Edifício Residencial");
+}
+
+#[tokio::test]
+async fn test_update_building_type_success() {
+    let app = common::spawn_app().await;
+
+    // Create building type
+    let create_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Galpão"}))
+        .await;
+
+    let created: Value = create_response.json();
+    let building_type_id = created["id"].as_str().unwrap();
+
+    // Update building type
+    let response = app
+        .api
+        .put(&format!("/api/admin/locations/building-types/{}", building_type_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Galpão Industrial",
+            "description": "Grande área para armazenamento"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Galpão Industrial");
+    assert_eq!(body["description"], "Grande área para armazenamento");
+}
+
+#[tokio::test]
+async fn test_delete_building_type_success() {
+    let app = common::spawn_app().await;
+
+    // Create building type
+    let create_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Torre"}))
+        .await;
+
+    let created: Value = create_response.json();
+    let building_type_id = created["id"].as_str().unwrap();
+
+    // Delete building type
+    let response = app
+        .api
+        .delete(&format!("/api/admin/locations/building-types/{}", building_type_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+
+    // Verify deletion
+    let get_response = app
+        .api
+        .get(&format!("/api/admin/locations/building-types/{}", building_type_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(get_response.status_code(), StatusCode::NOT_FOUND);
+}
+
+// ============================
+// SPACE TYPE TESTS (Phase 2)
+// ============================
+
+#[tokio::test]
+async fn test_create_space_type_success() {
+    let app = common::spawn_app().await;
+
+    let response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala de Reunião",
+            "description": "Espaço para reuniões corporativas"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Sala de Reunião");
+    assert_eq!(body["description"], "Espaço para reuniões corporativas");
+}
+
+#[tokio::test]
+async fn test_create_space_type_duplicate_name_returns_conflict() {
+    let app = common::spawn_app().await;
+
+    // Create first space type
+    app.api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Escritório"}))
+        .await;
+
+    // Try to create duplicate
+    let response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Escritório"}))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_get_space_type_success() {
+    let app = common::spawn_app().await;
+
+    // Create space type
+    let create_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Almoxarifado",
+            "description": "Local de armazenamento"
+        }))
+        .await;
+
+    let created: Value = create_response.json();
+    let space_type_id = created["id"].as_str().unwrap();
+
+    // Get space type
+    let response = app
+        .api
+        .get(&format!("/api/admin/locations/space-types/{}", space_type_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Almoxarifado");
+}
+
+#[tokio::test]
+async fn test_update_space_type_success() {
+    let app = common::spawn_app().await;
+
+    // Create space type
+    let create_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Cafeteria"}))
+        .await;
+
+    let created: Value = create_response.json();
+    let space_type_id = created["id"].as_str().unwrap();
+
+    // Update space type
+    let response = app
+        .api
+        .put(&format!("/api/admin/locations/space-types/{}", space_type_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Refeitório",
+            "description": "Área para alimentação dos funcionários"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Refeitório");
+    assert_eq!(body["description"], "Área para alimentação dos funcionários");
+}
+
+#[tokio::test]
+async fn test_delete_space_type_success() {
+    let app = common::spawn_app().await;
+
+    // Create space type
+    let create_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Auditório"}))
+        .await;
+
+    let created: Value = create_response.json();
+    let space_type_id = created["id"].as_str().unwrap();
+
+    // Delete space type
+    let response = app
+        .api
+        .delete(&format!("/api/admin/locations/space-types/{}", space_type_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+
+    // Verify deletion
+    let get_response = app
+        .api
+        .get(&format!("/api/admin/locations/space-types/{}", space_type_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(get_response.status_code(), StatusCode::NOT_FOUND);
+}
+
+// ============================
+// DEPARTMENT CATEGORY TESTS (Phase 2)
+// ============================
+
+#[tokio::test]
+async fn test_create_department_category_success() {
+    let app = common::spawn_app().await;
+
+    let response = app
+        .api
+        .post("/api/admin/locations/department-categories")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Operacional",
+            "description": "Departamentos relacionados às operações"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Operacional");
+    assert_eq!(body["description"], "Departamentos relacionados às operações");
+}
+
+#[tokio::test]
+async fn test_create_department_category_duplicate_name_returns_conflict() {
+    let app = common::spawn_app().await;
+
+    // Create first department category
+    app.api
+        .post("/api/admin/locations/department-categories")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Administrativo"}))
+        .await;
+
+    // Try to create duplicate
+    let response = app
+        .api
+        .post("/api/admin/locations/department-categories")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Administrativo"}))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_get_department_category_success() {
+    let app = common::spawn_app().await;
+
+    // Create department category
+    let create_response = app
+        .api
+        .post("/api/admin/locations/department-categories")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Comercial",
+            "description": "Departamentos de vendas e marketing"
+        }))
+        .await;
+
+    let created: Value = create_response.json();
+    let dept_category_id = created["id"].as_str().unwrap();
+
+    // Get department category
+    let response = app
+        .api
+        .get(&format!("/api/admin/locations/department-categories/{}", dept_category_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Comercial");
+}
+
+#[tokio::test]
+async fn test_update_department_category_success() {
+    let app = common::spawn_app().await;
+
+    // Create department category
+    let create_response = app
+        .api
+        .post("/api/admin/locations/department-categories")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Suporte"}))
+        .await;
+
+    let created: Value = create_response.json();
+    let dept_category_id = created["id"].as_str().unwrap();
+
+    // Update department category
+    let response = app
+        .api
+        .put(&format!("/api/admin/locations/department-categories/{}", dept_category_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Atendimento ao Cliente",
+            "description": "Departamentos focados em suporte e relacionamento"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Atendimento ao Cliente");
+    assert_eq!(body["description"], "Departamentos focados em suporte e relacionamento");
+}
+
+#[tokio::test]
+async fn test_delete_department_category_success() {
+    let app = common::spawn_app().await;
+
+    // Create department category
+    let create_response = app
+        .api
+        .post("/api/admin/locations/department-categories")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Financeiro"}))
+        .await;
+
+    let created: Value = create_response.json();
+    let dept_category_id = created["id"].as_str().unwrap();
+
+    // Delete department category
+    let response = app
+        .api
+        .delete(&format!("/api/admin/locations/department-categories/{}", dept_category_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+
+    // Verify deletion
+    let get_response = app
+        .api
+        .get(&format!("/api/admin/locations/department-categories/{}", dept_category_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(get_response.status_code(), StatusCode::NOT_FOUND);
+}

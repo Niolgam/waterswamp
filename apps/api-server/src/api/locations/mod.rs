@@ -4,6 +4,9 @@
 //! - Estados (states)
 //! - Cidades (cities)
 //! - Tipos de sites (site_types)
+//! - Tipos de edifícios (building_types)
+//! - Tipos de espaços (space_types)
+//! - Categorias de departamentos (department_categories)
 //!
 //! # Arquitetura
 //!
@@ -34,7 +37,10 @@ use crate::infra::state::AppState;
 // RE-EXPORTS
 // =============================================================================
 
-pub use contracts::{CityResponse, CityWithStateResponse, SiteTypeResponse, StateResponse};
+pub use contracts::{
+    BuildingTypeResponse, CityResponse, CityWithStateResponse, DepartmentCategoryResponse,
+    SiteTypeResponse, SpaceTypeResponse, StateResponse,
+};
 
 // =============================================================================
 // ROUTER
@@ -71,6 +77,36 @@ pub use contracts::{CityResponse, CityWithStateResponse, SiteTypeResponse, State
 /// | POST   | /admin/locations/site-types       | create_site_type  | Criar novo tipo de site       |
 /// | PUT    | /admin/locations/site-types/:id   | update_site_type  | Atualizar tipo de site        |
 /// | DELETE | /admin/locations/site-types/:id   | delete_site_type  | Deletar tipo de site          |
+///
+/// # Rotas - Building Types
+///
+/// | Método | Path                                  | Handler               | Descrição                         |
+/// |--------|---------------------------------------|-----------------------|-----------------------------------|
+/// | GET    | /admin/locations/building-types       | list_building_types   | Listar tipos de edifício          |
+/// | GET    | /admin/locations/building-types/:id   | get_building_type     | Obter tipo de edifício por ID     |
+/// | POST   | /admin/locations/building-types       | create_building_type  | Criar novo tipo de edifício       |
+/// | PUT    | /admin/locations/building-types/:id   | update_building_type  | Atualizar tipo de edifício        |
+/// | DELETE | /admin/locations/building-types/:id   | delete_building_type  | Deletar tipo de edifício          |
+///
+/// # Rotas - Space Types
+///
+/// | Método | Path                              | Handler           | Descrição                     |
+/// |--------|-----------------------------------|-------------------|-------------------------------|
+/// | GET    | /admin/locations/space-types      | list_space_types  | Listar tipos de espaço        |
+/// | GET    | /admin/locations/space-types/:id  | get_space_type    | Obter tipo de espaço por ID   |
+/// | POST   | /admin/locations/space-types      | create_space_type | Criar novo tipo de espaço     |
+/// | PUT    | /admin/locations/space-types/:id  | update_space_type | Atualizar tipo de espaço      |
+/// | DELETE | /admin/locations/space-types/:id  | delete_space_type | Deletar tipo de espaço        |
+///
+/// # Rotas - Department Categories
+///
+/// | Método | Path                                         | Handler                      | Descrição                              |
+/// |--------|----------------------------------------------|------------------------------|----------------------------------------|
+/// | GET    | /admin/locations/department-categories       | list_department_categories   | Listar categorias de departamento      |
+/// | GET    | /admin/locations/department-categories/:id   | get_department_category      | Obter categoria de departamento por ID |
+/// | POST   | /admin/locations/department-categories       | create_department_category   | Criar nova categoria de departamento   |
+/// | PUT    | /admin/locations/department-categories/:id   | update_department_category   | Atualizar categoria de departamento    |
+/// | DELETE | /admin/locations/department-categories/:id   | delete_department_category   | Deletar categoria de departamento      |
 pub fn router() -> Router<AppState> {
     let states_router = Router::new()
         .route("/", get(handlers::list_states).post(handlers::create_state))
@@ -102,8 +138,47 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_site_type),
         );
 
+    let building_types_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_building_types).post(handlers::create_building_type),
+        )
+        .route(
+            "/:id",
+            get(handlers::get_building_type)
+                .put(handlers::update_building_type)
+                .delete(handlers::delete_building_type),
+        );
+
+    let space_types_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_space_types).post(handlers::create_space_type),
+        )
+        .route(
+            "/:id",
+            get(handlers::get_space_type)
+                .put(handlers::update_space_type)
+                .delete(handlers::delete_space_type),
+        );
+
+    let department_categories_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_department_categories).post(handlers::create_department_category),
+        )
+        .route(
+            "/:id",
+            get(handlers::get_department_category)
+                .put(handlers::update_department_category)
+                .delete(handlers::delete_department_category),
+        );
+
     Router::new()
         .nest("/states", states_router)
         .nest("/cities", cities_router)
         .nest("/site-types", site_types_router)
+        .nest("/building-types", building_types_router)
+        .nest("/space-types", space_types_router)
+        .nest("/department-categories", department_categories_router)
 }

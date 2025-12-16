@@ -211,6 +211,57 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/site-types/{id}", ACTION_DELETE])
         .await?;
 
+    // Building Types
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/building-types", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/building-types", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/building-types/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/building-types/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/building-types/{id}", ACTION_DELETE])
+        .await?;
+
+    // Space Types
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/space-types", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/space-types", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/space-types/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/space-types/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/space-types/{id}", ACTION_DELETE])
+        .await?;
+
+    // Department Categories
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/department-categories", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/department-categories", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/department-categories/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/department-categories/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/department-categories/{id}", ACTION_DELETE])
+        .await?;
+
     info!("Políticas de Location Management carregadas");
 
     match enforcer.save_policy().await {

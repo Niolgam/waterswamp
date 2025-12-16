@@ -16,12 +16,16 @@ use application::services::{
     user_service::UserService,
 };
 use domain::ports::{
-    AuthRepositoryPort, CityRepositoryPort, EmailServicePort, MfaRepositoryPort,
-    SiteTypeRepositoryPort, StateRepositoryPort, UserRepositoryPort,
+    AuthRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
+    DepartmentCategoryRepositoryPort, EmailServicePort, MfaRepositoryPort, SiteTypeRepositoryPort,
+    SpaceTypeRepositoryPort, StateRepositoryPort, UserRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
-    location_repository::{CityRepository, SiteTypeRepository, StateRepository},
+    location_repository::{
+        BuildingTypeRepository, CityRepository, DepartmentCategoryRepository, SiteTypeRepository,
+        SpaceTypeRepository, StateRepository,
+    },
     mfa_repository::MfaRepository,
     user_repository::UserRepository,
 };
@@ -93,11 +97,20 @@ pub fn build_application_state(
         Arc::new(CityRepository::new(pool_auth.clone()));
     let site_type_repo_port: Arc<dyn SiteTypeRepositoryPort> =
         Arc::new(SiteTypeRepository::new(pool_auth.clone()));
+    let building_type_repo_port: Arc<dyn BuildingTypeRepositoryPort> =
+        Arc::new(BuildingTypeRepository::new(pool_auth.clone()));
+    let space_type_repo_port: Arc<dyn SpaceTypeRepositoryPort> =
+        Arc::new(SpaceTypeRepository::new(pool_auth.clone()));
+    let department_category_repo_port: Arc<dyn DepartmentCategoryRepositoryPort> =
+        Arc::new(DepartmentCategoryRepository::new(pool_auth.clone()));
 
     let location_service = Arc::new(LocationService::new(
         state_repo_port,
         city_repo_port,
         site_type_repo_port,
+        building_type_repo_port,
+        space_type_repo_port,
+        department_category_repo_port,
     ));
 
     // Cache com TTL e tamanho máximo para políticas do Casbin

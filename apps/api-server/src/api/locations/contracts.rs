@@ -51,3 +51,42 @@ pub struct SiteTypeResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
+
+// ============================
+// Building Type Response DTOs
+// ============================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BuildingTypeResponse {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+// ============================
+// Space Type Response DTOs
+// ============================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpaceTypeResponse {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+// ============================
+// Department Category Response DTOs
+// ============================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DepartmentCategoryResponse {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}

@@ -1,10 +1,17 @@
 use crate::errors::ServiceError;
 use domain::models::{
-    CityDto, CityWithStateDto, CreateCityPayload, CreateSiteTypePayload, CreateStatePayload,
-    PaginatedCities, PaginatedSiteTypes, PaginatedStates, SiteTypeDto, StateDto,
-    UpdateCityPayload, UpdateSiteTypePayload, UpdateStatePayload,
+    BuildingTypeDto, CityDto, CityWithStateDto, CreateBuildingTypePayload, CreateCityPayload,
+    CreateDepartmentCategoryPayload, CreateSiteTypePayload, CreateSpaceTypePayload,
+    CreateStatePayload, DepartmentCategoryDto, PaginatedBuildingTypes, PaginatedCities,
+    PaginatedDepartmentCategories, PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates,
+    SiteTypeDto, SpaceTypeDto, StateDto, UpdateBuildingTypePayload, UpdateCityPayload,
+    UpdateDepartmentCategoryPayload, UpdateSiteTypePayload, UpdateSpaceTypePayload,
+    UpdateStatePayload,
 };
-use domain::ports::{CityRepositoryPort, SiteTypeRepositoryPort, StateRepositoryPort};
+use domain::ports::{
+    BuildingTypeRepositoryPort, CityRepositoryPort, DepartmentCategoryRepositoryPort,
+    SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -12,6 +19,9 @@ pub struct LocationService {
     state_repo: Arc<dyn StateRepositoryPort>,
     city_repo: Arc<dyn CityRepositoryPort>,
     site_type_repo: Arc<dyn SiteTypeRepositoryPort>,
+    building_type_repo: Arc<dyn BuildingTypeRepositoryPort>,
+    space_type_repo: Arc<dyn SpaceTypeRepositoryPort>,
+    department_category_repo: Arc<dyn DepartmentCategoryRepositoryPort>,
 }
 
 impl LocationService {
@@ -19,11 +29,17 @@ impl LocationService {
         state_repo: Arc<dyn StateRepositoryPort>,
         city_repo: Arc<dyn CityRepositoryPort>,
         site_type_repo: Arc<dyn SiteTypeRepositoryPort>,
+        building_type_repo: Arc<dyn BuildingTypeRepositoryPort>,
+        space_type_repo: Arc<dyn SpaceTypeRepositoryPort>,
+        department_category_repo: Arc<dyn DepartmentCategoryRepositoryPort>,
     ) -> Self {
         Self {
             state_repo,
             city_repo,
             site_type_repo,
+            building_type_repo,
+            space_type_repo,
+            department_category_repo,
         }
     }
 
@@ -276,6 +292,289 @@ impl LocationService {
 
         Ok(PaginatedSiteTypes {
             site_types,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    // ============================
+    // Building Type Operations
+    // ============================
+
+    pub async fn create_building_type(
+        &self,
+        payload: CreateBuildingTypePayload,
+    ) -> Result<BuildingTypeDto, ServiceError> {
+        if self.building_type_repo.exists_by_name(&payload.name).await? {
+            return Err(ServiceError::Conflict(format!(
+                "Tipo de edifício com nome '{}' já existe",
+                payload.name
+            )));
+        }
+
+        let building_type = self
+            .building_type_repo
+            .create(&payload.name, payload.description.as_deref())
+            .await?;
+
+        Ok(building_type)
+    }
+
+    pub async fn get_building_type(&self, id: Uuid) -> Result<BuildingTypeDto, ServiceError> {
+        self.building_type_repo
+            .find_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Tipo de edifício não encontrado".to_string(),
+            ))
+    }
+
+    pub async fn update_building_type(
+        &self,
+        id: Uuid,
+        payload: UpdateBuildingTypePayload,
+    ) -> Result<BuildingTypeDto, ServiceError> {
+        let _ = self.get_building_type(id).await?;
+
+        if let Some(ref new_name) = payload.name {
+            if self
+                .building_type_repo
+                .exists_by_name_excluding(new_name, id)
+                .await?
+            {
+                return Err(ServiceError::Conflict(format!(
+                    "Tipo de edifício com nome '{}' já existe",
+                    new_name
+                )));
+            }
+        }
+
+        let building_type = self
+            .building_type_repo
+            .update(id, payload.name.as_ref(), payload.description.as_deref())
+            .await?;
+
+        Ok(building_type)
+    }
+
+    pub async fn delete_building_type(&self, id: Uuid) -> Result<(), ServiceError> {
+        let deleted = self.building_type_repo.delete(id).await?;
+
+        if deleted {
+            Ok(())
+        } else {
+            Err(ServiceError::NotFound(
+                "Tipo de edifício não encontrado".to_string(),
+            ))
+        }
+    }
+
+    pub async fn list_building_types(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        search: Option<String>,
+    ) -> Result<PaginatedBuildingTypes, ServiceError> {
+        let limit = limit.unwrap_or(50).min(100);
+        let offset = offset.unwrap_or(0);
+
+        let (building_types, total) = self.building_type_repo.list(limit, offset, search).await?;
+
+        Ok(PaginatedBuildingTypes {
+            building_types,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    // ============================
+    // Space Type Operations
+    // ============================
+
+    pub async fn create_space_type(
+        &self,
+        payload: CreateSpaceTypePayload,
+    ) -> Result<SpaceTypeDto, ServiceError> {
+        if self.space_type_repo.exists_by_name(&payload.name).await? {
+            return Err(ServiceError::Conflict(format!(
+                "Tipo de espaço com nome '{}' já existe",
+                payload.name
+            )));
+        }
+
+        let space_type = self
+            .space_type_repo
+            .create(&payload.name, payload.description.as_deref())
+            .await?;
+
+        Ok(space_type)
+    }
+
+    pub async fn get_space_type(&self, id: Uuid) -> Result<SpaceTypeDto, ServiceError> {
+        self.space_type_repo
+            .find_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Tipo de espaço não encontrado".to_string(),
+            ))
+    }
+
+    pub async fn update_space_type(
+        &self,
+        id: Uuid,
+        payload: UpdateSpaceTypePayload,
+    ) -> Result<SpaceTypeDto, ServiceError> {
+        let _ = self.get_space_type(id).await?;
+
+        if let Some(ref new_name) = payload.name {
+            if self
+                .space_type_repo
+                .exists_by_name_excluding(new_name, id)
+                .await?
+            {
+                return Err(ServiceError::Conflict(format!(
+                    "Tipo de espaço com nome '{}' já existe",
+                    new_name
+                )));
+            }
+        }
+
+        let space_type = self
+            .space_type_repo
+            .update(id, payload.name.as_ref(), payload.description.as_deref())
+            .await?;
+
+        Ok(space_type)
+    }
+
+    pub async fn delete_space_type(&self, id: Uuid) -> Result<(), ServiceError> {
+        let deleted = self.space_type_repo.delete(id).await?;
+
+        if deleted {
+            Ok(())
+        } else {
+            Err(ServiceError::NotFound(
+                "Tipo de espaço não encontrado".to_string(),
+            ))
+        }
+    }
+
+    pub async fn list_space_types(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        search: Option<String>,
+    ) -> Result<PaginatedSpaceTypes, ServiceError> {
+        let limit = limit.unwrap_or(50).min(100);
+        let offset = offset.unwrap_or(0);
+
+        let (space_types, total) = self.space_type_repo.list(limit, offset, search).await?;
+
+        Ok(PaginatedSpaceTypes {
+            space_types,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    // ============================
+    // Department Category Operations
+    // ============================
+
+    pub async fn create_department_category(
+        &self,
+        payload: CreateDepartmentCategoryPayload,
+    ) -> Result<DepartmentCategoryDto, ServiceError> {
+        if self
+            .department_category_repo
+            .exists_by_name(&payload.name)
+            .await?
+        {
+            return Err(ServiceError::Conflict(format!(
+                "Categoria de departamento com nome '{}' já existe",
+                payload.name
+            )));
+        }
+
+        let department_category = self
+            .department_category_repo
+            .create(&payload.name, payload.description.as_deref())
+            .await?;
+
+        Ok(department_category)
+    }
+
+    pub async fn get_department_category(
+        &self,
+        id: Uuid,
+    ) -> Result<DepartmentCategoryDto, ServiceError> {
+        self.department_category_repo
+            .find_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Categoria de departamento não encontrada".to_string(),
+            ))
+    }
+
+    pub async fn update_department_category(
+        &self,
+        id: Uuid,
+        payload: UpdateDepartmentCategoryPayload,
+    ) -> Result<DepartmentCategoryDto, ServiceError> {
+        let _ = self.get_department_category(id).await?;
+
+        if let Some(ref new_name) = payload.name {
+            if self
+                .department_category_repo
+                .exists_by_name_excluding(new_name, id)
+                .await?
+            {
+                return Err(ServiceError::Conflict(format!(
+                    "Categoria de departamento com nome '{}' já existe",
+                    new_name
+                )));
+            }
+        }
+
+        let department_category = self
+            .department_category_repo
+            .update(id, payload.name.as_ref(), payload.description.as_deref())
+            .await?;
+
+        Ok(department_category)
+    }
+
+    pub async fn delete_department_category(&self, id: Uuid) -> Result<(), ServiceError> {
+        let deleted = self.department_category_repo.delete(id).await?;
+
+        if deleted {
+            Ok(())
+        } else {
+            Err(ServiceError::NotFound(
+                "Categoria de departamento não encontrada".to_string(),
+            ))
+        }
+    }
+
+    pub async fn list_department_categories(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        search: Option<String>,
+    ) -> Result<PaginatedDepartmentCategories, ServiceError> {
+        let limit = limit.unwrap_or(50).min(100);
+        let offset = offset.unwrap_or(0);
+
+        let (department_categories, total) = self
+            .department_category_repo
+            .list(limit, offset, search)
+            .await?;
+
+        Ok(PaginatedDepartmentCategories {
+            department_categories,
             total,
             limit,
             offset,

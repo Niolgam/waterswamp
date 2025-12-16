@@ -4,9 +4,13 @@ use axum::{
     Json,
 };
 use domain::models::{
-    CreateCityPayload, CreateSiteTypePayload, CreateStatePayload, ListCitiesQuery,
-    ListSiteTypesQuery, ListStatesQuery, PaginatedCities, PaginatedSiteTypes, PaginatedStates,
-    UpdateCityPayload, UpdateSiteTypePayload, UpdateStatePayload,
+    CreateBuildingTypePayload, CreateCityPayload, CreateDepartmentCategoryPayload,
+    CreateSiteTypePayload, CreateSpaceTypePayload, CreateStatePayload, ListBuildingTypesQuery,
+    ListCitiesQuery, ListDepartmentCategoriesQuery, ListSiteTypesQuery, ListSpaceTypesQuery,
+    ListStatesQuery, PaginatedBuildingTypes, PaginatedCities, PaginatedDepartmentCategories,
+    PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates, UpdateBuildingTypePayload,
+    UpdateCityPayload, UpdateDepartmentCategoryPayload, UpdateSiteTypePayload,
+    UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use uuid::Uuid;
 use validator::Validate;
@@ -14,7 +18,8 @@ use validator::Validate;
 use crate::infra::{errors::AppError, state::AppState};
 
 use super::contracts::{
-    CityResponse, CityWithStateResponse, SiteTypeResponse, StateResponse,
+    BuildingTypeResponse, CityResponse, CityWithStateResponse, DepartmentCategoryResponse,
+    SiteTypeResponse, SpaceTypeResponse, StateResponse,
 };
 
 // ============================
@@ -274,5 +279,272 @@ pub async fn delete_site_type(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     state.location_service.delete_site_type(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================
+// Building Type Handlers
+// ============================
+
+/// GET /admin/locations/building-types
+pub async fn list_building_types(
+    State(state): State<AppState>,
+    Query(params): Query<ListBuildingTypesQuery>,
+) -> Result<Json<PaginatedBuildingTypes>, AppError> {
+    let result = state
+        .location_service
+        .list_building_types(params.limit, params.offset, params.search)
+        .await?;
+
+    Ok(Json(result))
+}
+
+/// GET /admin/locations/building-types/:id
+pub async fn get_building_type(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<BuildingTypeResponse>, AppError> {
+    let building_type_dto = state.location_service.get_building_type(id).await?;
+
+    Ok(Json(BuildingTypeResponse {
+        id: building_type_dto.id,
+        name: building_type_dto.name,
+        description: building_type_dto.description,
+        created_at: building_type_dto.created_at,
+        updated_at: building_type_dto.updated_at,
+    }))
+}
+
+/// POST /admin/locations/building-types
+pub async fn create_building_type(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateBuildingTypePayload>,
+) -> Result<(StatusCode, Json<BuildingTypeResponse>), AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let building_type_dto = state.location_service.create_building_type(payload).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(BuildingTypeResponse {
+            id: building_type_dto.id,
+            name: building_type_dto.name,
+            description: building_type_dto.description,
+            created_at: building_type_dto.created_at,
+            updated_at: building_type_dto.updated_at,
+        }),
+    ))
+}
+
+/// PUT /admin/locations/building-types/:id
+pub async fn update_building_type(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateBuildingTypePayload>,
+) -> Result<Json<BuildingTypeResponse>, AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let building_type_dto = state.location_service.update_building_type(id, payload).await?;
+
+    Ok(Json(BuildingTypeResponse {
+        id: building_type_dto.id,
+        name: building_type_dto.name,
+        description: building_type_dto.description,
+        created_at: building_type_dto.created_at,
+        updated_at: building_type_dto.updated_at,
+    }))
+}
+
+/// DELETE /admin/locations/building-types/:id
+pub async fn delete_building_type(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.location_service.delete_building_type(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================
+// Space Type Handlers
+// ============================
+
+/// GET /admin/locations/space-types
+pub async fn list_space_types(
+    State(state): State<AppState>,
+    Query(params): Query<ListSpaceTypesQuery>,
+) -> Result<Json<PaginatedSpaceTypes>, AppError> {
+    let result = state
+        .location_service
+        .list_space_types(params.limit, params.offset, params.search)
+        .await?;
+
+    Ok(Json(result))
+}
+
+/// GET /admin/locations/space-types/:id
+pub async fn get_space_type(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<SpaceTypeResponse>, AppError> {
+    let space_type_dto = state.location_service.get_space_type(id).await?;
+
+    Ok(Json(SpaceTypeResponse {
+        id: space_type_dto.id,
+        name: space_type_dto.name,
+        description: space_type_dto.description,
+        created_at: space_type_dto.created_at,
+        updated_at: space_type_dto.updated_at,
+    }))
+}
+
+/// POST /admin/locations/space-types
+pub async fn create_space_type(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateSpaceTypePayload>,
+) -> Result<(StatusCode, Json<SpaceTypeResponse>), AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let space_type_dto = state.location_service.create_space_type(payload).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(SpaceTypeResponse {
+            id: space_type_dto.id,
+            name: space_type_dto.name,
+            description: space_type_dto.description,
+            created_at: space_type_dto.created_at,
+            updated_at: space_type_dto.updated_at,
+        }),
+    ))
+}
+
+/// PUT /admin/locations/space-types/:id
+pub async fn update_space_type(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateSpaceTypePayload>,
+) -> Result<Json<SpaceTypeResponse>, AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let space_type_dto = state.location_service.update_space_type(id, payload).await?;
+
+    Ok(Json(SpaceTypeResponse {
+        id: space_type_dto.id,
+        name: space_type_dto.name,
+        description: space_type_dto.description,
+        created_at: space_type_dto.created_at,
+        updated_at: space_type_dto.updated_at,
+    }))
+}
+
+/// DELETE /admin/locations/space-types/:id
+pub async fn delete_space_type(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.location_service.delete_space_type(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================
+// Department Category Handlers
+// ============================
+
+/// GET /admin/locations/department-categories
+pub async fn list_department_categories(
+    State(state): State<AppState>,
+    Query(params): Query<ListDepartmentCategoriesQuery>,
+) -> Result<Json<PaginatedDepartmentCategories>, AppError> {
+    let result = state
+        .location_service
+        .list_department_categories(params.limit, params.offset, params.search)
+        .await?;
+
+    Ok(Json(result))
+}
+
+/// GET /admin/locations/department-categories/:id
+pub async fn get_department_category(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<DepartmentCategoryResponse>, AppError> {
+    let department_category_dto = state.location_service.get_department_category(id).await?;
+
+    Ok(Json(DepartmentCategoryResponse {
+        id: department_category_dto.id,
+        name: department_category_dto.name,
+        description: department_category_dto.description,
+        created_at: department_category_dto.created_at,
+        updated_at: department_category_dto.updated_at,
+    }))
+}
+
+/// POST /admin/locations/department-categories
+pub async fn create_department_category(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateDepartmentCategoryPayload>,
+) -> Result<(StatusCode, Json<DepartmentCategoryResponse>), AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let department_category_dto = state
+        .location_service
+        .create_department_category(payload)
+        .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(DepartmentCategoryResponse {
+            id: department_category_dto.id,
+            name: department_category_dto.name,
+            description: department_category_dto.description,
+            created_at: department_category_dto.created_at,
+            updated_at: department_category_dto.updated_at,
+        }),
+    ))
+}
+
+/// PUT /admin/locations/department-categories/:id
+pub async fn update_department_category(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateDepartmentCategoryPayload>,
+) -> Result<Json<DepartmentCategoryResponse>, AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let department_category_dto = state
+        .location_service
+        .update_department_category(id, payload)
+        .await?;
+
+    Ok(Json(DepartmentCategoryResponse {
+        id: department_category_dto.id,
+        name: department_category_dto.name,
+        description: department_category_dto.description,
+        created_at: department_category_dto.created_at,
+        updated_at: department_category_dto.updated_at,
+    }))
+}
+
+/// DELETE /admin/locations/department-categories/:id
+pub async fn delete_department_category(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state
+        .location_service
+        .delete_department_category(id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
