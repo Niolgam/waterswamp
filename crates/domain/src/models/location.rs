@@ -264,3 +264,70 @@ pub struct UpdateDepartmentCategoryPayload {
     #[validate(length(max = 500))]
     pub description: Option<String>,
 }
+
+// ============================
+// Site Models (Phase 3A)
+// ============================
+
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct SiteDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub city_id: Uuid,
+    pub site_type_id: Uuid,
+    pub address: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// DTO with joined data from city, state, and site_type
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct SiteWithRelationsDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub city_id: Uuid,
+    pub city_name: LocationName,
+    pub state_id: Uuid,
+    pub state_name: LocationName,
+    pub state_code: StateCode,
+    pub site_type_id: Uuid,
+    pub site_type_name: LocationName,
+    pub address: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedSites {
+    pub sites: Vec<SiteWithRelationsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListSitesQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+    pub city_id: Option<Uuid>,
+    pub site_type_id: Option<Uuid>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct CreateSitePayload {
+    pub name: LocationName,
+    pub city_id: Uuid,
+    pub site_type_id: Uuid,
+    #[validate(length(max = 500))]
+    pub address: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateSitePayload {
+    pub name: Option<LocationName>,
+    pub city_id: Option<Uuid>,
+    pub site_type_id: Option<Uuid>,
+    #[validate(length(max = 500))]
+    pub address: Option<String>,
+}

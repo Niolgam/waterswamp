@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use domain::errors::RepositoryError;
 use domain::models::{
-    BuildingTypeDto, CityDto, CityWithStateDto, DepartmentCategoryDto, SiteTypeDto, SpaceTypeDto,
-    StateDto,
+    BuildingTypeDto, CityDto, CityWithStateDto, DepartmentCategoryDto, SiteDto, SiteTypeDto,
+    SiteWithRelationsDto, SpaceTypeDto, StateDto,
 };
 use domain::ports::{
     BuildingTypeRepositoryPort, CityRepositoryPort, DepartmentCategoryRepositoryPort,
-    SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
 };
 use domain::value_objects::{LocationName, StateCode};
 use sqlx::PgPool;
@@ -1245,5 +1245,253 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
         };
 
         Ok((department_categories, total))
+    }
+}
+
+// =============================================================================
+// Site Repository (Phase 3A)
+// =============================================================================
+
+#[derive(Clone)]
+pub struct SiteRepository {
+    pool: PgPool,
+}
+
+impl SiteRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(err: sqlx::Error) -> RepositoryError {
+        match &err {
+            sqlx::Error::Database(db_err) => {
+                if let Some(code) = db_err.code() {
+                    if code == "23505" {
+                        return RepositoryError::DuplicateKey(
+                            db_err
+                                .message()
+                                .to_string()
+                                .split("DETAIL:")
+                                .nth(1)
+                                .unwrap_or("Duplicate key violation")
+                                .trim()
+                                .to_string(),
+                        );
+                    } else if code == "23503" {
+                        return RepositoryError::ForeignKeyViolation(
+                            "Foreign key constraint violated".to_string(),
+                        );
+                    }
+                }
+            }
+            sqlx::Error::RowNotFound => return RepositoryError::NotFound,
+            _ => {}
+        }
+        RepositoryError::DatabaseError(err.to_string())
+    }
+}
+
+#[async_trait]
+impl SiteRepositoryPort for SiteRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiteDto>, RepositoryError> {
+        let site = sqlx::query_as::<_, SiteDto>(
+            "SELECT id, name, city_id, site_type_id, address, created_at, updated_at
+             FROM sites WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+
+        Ok(site)
+    }
+
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<SiteWithRelationsDto>, RepositoryError> {
+        let site = sqlx::query_as::<_, SiteWithRelationsDto>(
+            "SELECT
+                s.id, s.name,
+                s.city_id, c.name as city_name,
+                st.id as state_id, st.name as state_name, st.code as state_code,
+                s.site_type_id, stype.name as site_type_name,
+                s.address,
+                s.created_at, s.updated_at
+             FROM sites s
+             INNER JOIN cities c ON s.city_id = c.id
+             INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN site_types stype ON s.site_type_id = stype.id
+             WHERE s.id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+
+        Ok(site)
+    }
+
+    async fn create(
+        &self,
+        name: &LocationName,
+        city_id: Uuid,
+        site_type_id: Uuid,
+        address: Option<&str>,
+    ) -> Result<SiteDto, RepositoryError> {
+        let site = sqlx::query_as::<_, SiteDto>(
+            "INSERT INTO sites (name, city_id, site_type_id, address)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, name, city_id, site_type_id, address, created_at, updated_at",
+        )
+        .bind(name.as_str())
+        .bind(city_id)
+        .bind(site_type_id)
+        .bind(address)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+
+        Ok(site)
+    }
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        city_id: Option<Uuid>,
+        site_type_id: Option<Uuid>,
+        address: Option<&str>,
+    ) -> Result<SiteDto, RepositoryError> {
+        // First, fetch current values
+        let current = self
+            .find_by_id(id)
+            .await?
+            .ok_or(RepositoryError::NotFound)?;
+
+        // Use provided values or keep current ones
+        let final_name = name.unwrap_or(&current.name);
+        let final_city_id = city_id.unwrap_or(current.city_id);
+        let final_site_type_id = site_type_id.unwrap_or(current.site_type_id);
+        let final_address = address.or(current.address.as_deref());
+
+        let site = sqlx::query_as::<_, SiteDto>(
+            "UPDATE sites
+             SET name = $1, city_id = $2, site_type_id = $3, address = $4, updated_at = NOW()
+             WHERE id = $5
+             RETURNING id, name, city_id, site_type_id, address, created_at, updated_at",
+        )
+        .bind(final_name.as_str())
+        .bind(final_city_id)
+        .bind(final_site_type_id)
+        .bind(final_address)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+
+        Ok(site)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("DELETE FROM sites WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        city_id: Option<Uuid>,
+        site_type_id: Option<Uuid>,
+    ) -> Result<(Vec<SiteWithRelationsDto>, i64), RepositoryError> {
+        let search_pattern = search.map(|s| format!("%{}%", s));
+
+        // Build query dynamically based on filters
+        let mut conditions = Vec::new();
+        let mut bind_index = 1;
+
+        if search_pattern.is_some() {
+            conditions.push(format!("s.name ILIKE ${}", bind_index));
+            bind_index += 1;
+        }
+        if city_id.is_some() {
+            conditions.push(format!("s.city_id = ${}", bind_index));
+            bind_index += 1;
+        }
+        if site_type_id.is_some() {
+            conditions.push(format!("s.site_type_id = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let query_str = format!(
+            "SELECT
+                s.id, s.name,
+                s.city_id, c.name as city_name,
+                st.id as state_id, st.name as state_name, st.code as state_code,
+                s.site_type_id, stype.name as site_type_name,
+                s.address,
+                s.created_at, s.updated_at
+             FROM sites s
+             INNER JOIN cities c ON s.city_id = c.id
+             INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN site_types stype ON s.site_type_id = stype.id
+             {}
+             ORDER BY s.name LIMIT ${} OFFSET ${}",
+            where_clause, bind_index, bind_index + 1
+        );
+
+        let mut query = sqlx::query_as::<_, SiteWithRelationsDto>(&query_str);
+
+        // Bind parameters in order
+        if let Some(ref pattern) = search_pattern {
+            query = query.bind(pattern);
+        }
+        if let Some(cid) = city_id {
+            query = query.bind(cid);
+        }
+        if let Some(stid) = site_type_id {
+            query = query.bind(stid);
+        }
+        query = query.bind(limit).bind(offset);
+
+        let sites = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+
+        // Count total
+        let count_query_str = format!(
+            "SELECT COUNT(*) FROM sites s {}",
+            where_clause
+        );
+
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_query_str);
+
+        if let Some(ref pattern) = search_pattern {
+            count_query = count_query.bind(pattern);
+        }
+        if let Some(cid) = city_id {
+            count_query = count_query.bind(cid);
+        }
+        if let Some(stid) = site_type_id {
+            count_query = count_query.bind(stid);
+        }
+
+        let total = count_query
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+
+        Ok((sites, total))
     }
 }
