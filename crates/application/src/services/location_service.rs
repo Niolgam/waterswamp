@@ -1,16 +1,16 @@
 use crate::errors::ServiceError;
 use domain::models::{
     BuildingTypeDto, CityDto, CityWithStateDto, CreateBuildingTypePayload, CreateCityPayload,
-    CreateDepartmentCategoryPayload, CreateSiteTypePayload, CreateSpaceTypePayload,
-    CreateStatePayload, DepartmentCategoryDto, PaginatedBuildingTypes, PaginatedCities,
-    PaginatedDepartmentCategories, PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates,
-    SiteTypeDto, SpaceTypeDto, StateDto, UpdateBuildingTypePayload, UpdateCityPayload,
-    UpdateDepartmentCategoryPayload, UpdateSiteTypePayload, UpdateSpaceTypePayload,
-    UpdateStatePayload,
+    CreateDepartmentCategoryPayload, CreateSitePayload, CreateSiteTypePayload,
+    CreateSpaceTypePayload, CreateStatePayload, DepartmentCategoryDto, PaginatedBuildingTypes,
+    PaginatedCities, PaginatedDepartmentCategories, PaginatedSites, PaginatedSiteTypes,
+    PaginatedSpaceTypes, PaginatedStates, SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto,
+    StateDto, UpdateBuildingTypePayload, UpdateCityPayload, UpdateDepartmentCategoryPayload,
+    UpdateSitePayload, UpdateSiteTypePayload, UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use domain::ports::{
     BuildingTypeRepositoryPort, CityRepositoryPort, DepartmentCategoryRepositoryPort,
-    SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -22,6 +22,7 @@ pub struct LocationService {
     building_type_repo: Arc<dyn BuildingTypeRepositoryPort>,
     space_type_repo: Arc<dyn SpaceTypeRepositoryPort>,
     department_category_repo: Arc<dyn DepartmentCategoryRepositoryPort>,
+    site_repo: Arc<dyn SiteRepositoryPort>,
 }
 
 impl LocationService {
@@ -32,6 +33,7 @@ impl LocationService {
         building_type_repo: Arc<dyn BuildingTypeRepositoryPort>,
         space_type_repo: Arc<dyn SpaceTypeRepositoryPort>,
         department_category_repo: Arc<dyn DepartmentCategoryRepositoryPort>,
+        site_repo: Arc<dyn SiteRepositoryPort>,
     ) -> Self {
         Self {
             state_repo,
@@ -40,6 +42,7 @@ impl LocationService {
             building_type_repo,
             space_type_repo,
             department_category_repo,
+            site_repo,
         }
     }
 
@@ -575,6 +578,149 @@ impl LocationService {
 
         Ok(PaginatedDepartmentCategories {
             department_categories,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    // ============================
+    // Site Operations (Phase 3A)
+    // ============================
+
+    pub async fn create_site(
+        &self,
+        payload: CreateSitePayload,
+    ) -> Result<SiteWithRelationsDto, ServiceError> {
+        // Validate that city exists
+        if self.city_repo.find_by_id(payload.city_id).await?.is_none() {
+            return Err(ServiceError::NotFound("Cidade não encontrada".to_string()));
+        }
+
+        // Validate that site_type exists
+        if self
+            .site_type_repo
+            .find_by_id(payload.site_type_id)
+            .await?
+            .is_none()
+        {
+            return Err(ServiceError::NotFound(
+                "Tipo de site não encontrado".to_string(),
+            ));
+        }
+
+        // Create site
+        let site = self
+            .site_repo
+            .create(
+                &payload.name,
+                payload.city_id,
+                payload.site_type_id,
+                payload.address.as_deref(),
+            )
+            .await?;
+
+        // Fetch with relations for response
+        let site_with_relations = self
+            .site_repo
+            .find_with_relations_by_id(site.id)
+            .await?
+            .ok_or(ServiceError::NotFound("Site não encontrado".to_string()))?;
+
+        Ok(site_with_relations)
+    }
+
+    pub async fn get_site(&self, id: Uuid) -> Result<SiteWithRelationsDto, ServiceError> {
+        let site = self
+            .site_repo
+            .find_with_relations_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound("Site não encontrado".to_string()))?;
+
+        Ok(site)
+    }
+
+    pub async fn update_site(
+        &self,
+        id: Uuid,
+        payload: UpdateSitePayload,
+    ) -> Result<SiteWithRelationsDto, ServiceError> {
+        // Validate site exists
+        if self.site_repo.find_by_id(id).await?.is_none() {
+            return Err(ServiceError::NotFound("Site não encontrado".to_string()));
+        }
+
+        // Validate city if provided
+        if let Some(city_id) = payload.city_id {
+            if self.city_repo.find_by_id(city_id).await?.is_none() {
+                return Err(ServiceError::NotFound("Cidade não encontrada".to_string()));
+            }
+        }
+
+        // Validate site_type if provided
+        if let Some(site_type_id) = payload.site_type_id {
+            if self
+                .site_type_repo
+                .find_by_id(site_type_id)
+                .await?
+                .is_none()
+            {
+                return Err(ServiceError::NotFound(
+                    "Tipo de site não encontrado".to_string(),
+                ));
+            }
+        }
+
+        // Update site
+        let site = self
+            .site_repo
+            .update(
+                id,
+                payload.name.as_ref(),
+                payload.city_id,
+                payload.site_type_id,
+                payload.address.as_deref(),
+            )
+            .await?;
+
+        // Fetch with relations for response
+        let site_with_relations = self
+            .site_repo
+            .find_with_relations_by_id(site.id)
+            .await?
+            .ok_or(ServiceError::NotFound("Site não encontrado".to_string()))?;
+
+        Ok(site_with_relations)
+    }
+
+    pub async fn delete_site(&self, id: Uuid) -> Result<(), ServiceError> {
+        let deleted = self.site_repo.delete(id).await?;
+
+        if deleted {
+            Ok(())
+        } else {
+            Err(ServiceError::NotFound("Site não encontrado".to_string()))
+        }
+    }
+
+    pub async fn list_sites(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        search: Option<String>,
+        city_id: Option<Uuid>,
+        site_type_id: Option<Uuid>,
+    ) -> Result<PaginatedSites, ServiceError> {
+        let limit = limit.unwrap_or(50).min(100);
+        let offset = offset.unwrap_or(0);
+
+        let (sites, total) = self
+            .site_repo
+            .list(limit, offset, search, city_id, site_type_id)
+            .await?;
+
+        Ok(PaginatedSites {
+            sites,
             total,
             limit,
             offset,

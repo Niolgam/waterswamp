@@ -90,3 +90,23 @@ pub struct DepartmentCategoryResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
+
+// ============================
+// Site Response DTOs (Phase 3A)
+// ============================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SiteResponse {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub city_id: Uuid,
+    pub city_name: LocationName,
+    pub state_id: Uuid,
+    pub state_name: LocationName,
+    pub state_code: StateCode,
+    pub site_type_id: Uuid,
+    pub site_type_name: LocationName,
+    pub address: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
