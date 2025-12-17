@@ -1,16 +1,19 @@
 use crate::errors::ServiceError;
 use domain::models::{
-    BuildingTypeDto, CityDto, CityWithStateDto, CreateBuildingTypePayload, CreateCityPayload,
+    BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto,
+    CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload,
     CreateDepartmentCategoryPayload, CreateSitePayload, CreateSiteTypePayload,
-    CreateSpaceTypePayload, CreateStatePayload, DepartmentCategoryDto, PaginatedBuildingTypes,
-    PaginatedCities, PaginatedDepartmentCategories, PaginatedSites, PaginatedSiteTypes,
-    PaginatedSpaceTypes, PaginatedStates, SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto,
-    StateDto, UpdateBuildingTypePayload, UpdateCityPayload, UpdateDepartmentCategoryPayload,
+    CreateSpaceTypePayload, CreateStatePayload, DepartmentCategoryDto, PaginatedBuildings,
+    PaginatedBuildingTypes, PaginatedCities, PaginatedDepartmentCategories, PaginatedSites,
+    PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates, SiteTypeDto,
+    SiteWithRelationsDto, SpaceTypeDto, StateDto, UpdateBuildingPayload,
+    UpdateBuildingTypePayload, UpdateCityPayload, UpdateDepartmentCategoryPayload,
     UpdateSitePayload, UpdateSiteTypePayload, UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use domain::ports::{
-    BuildingTypeRepositoryPort, CityRepositoryPort, DepartmentCategoryRepositoryPort,
-    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
+    DepartmentCategoryRepositoryPort, SiteRepositoryPort, SiteTypeRepositoryPort,
+    SpaceTypeRepositoryPort, StateRepositoryPort,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -23,6 +26,7 @@ pub struct LocationService {
     space_type_repo: Arc<dyn SpaceTypeRepositoryPort>,
     department_category_repo: Arc<dyn DepartmentCategoryRepositoryPort>,
     site_repo: Arc<dyn SiteRepositoryPort>,
+    building_repo: Arc<dyn BuildingRepositoryPort>,
 }
 
 impl LocationService {
@@ -34,6 +38,7 @@ impl LocationService {
         space_type_repo: Arc<dyn SpaceTypeRepositoryPort>,
         department_category_repo: Arc<dyn DepartmentCategoryRepositoryPort>,
         site_repo: Arc<dyn SiteRepositoryPort>,
+        building_repo: Arc<dyn BuildingRepositoryPort>,
     ) -> Self {
         Self {
             state_repo,
@@ -43,6 +48,7 @@ impl LocationService {
             space_type_repo,
             department_category_repo,
             site_repo,
+            building_repo,
         }
     }
 
@@ -721,6 +727,156 @@ impl LocationService {
 
         Ok(PaginatedSites {
             sites,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    // ============================
+    // Building Operations (Phase 3B)
+    // ============================
+
+    pub async fn create_building(
+        &self,
+        payload: CreateBuildingPayload,
+    ) -> Result<BuildingWithRelationsDto, ServiceError> {
+        // Validate that site exists
+        if self.site_repo.find_by_id(payload.site_id).await?.is_none() {
+            return Err(ServiceError::NotFound("Site não encontrado".to_string()));
+        }
+
+        // Validate that building_type exists
+        if self
+            .building_type_repo
+            .find_by_id(payload.building_type_id)
+            .await?
+            .is_none()
+        {
+            return Err(ServiceError::NotFound(
+                "Tipo de edifício não encontrado".to_string(),
+            ));
+        }
+
+        // Create building
+        let building = self
+            .building_repo
+            .create(
+                &payload.name,
+                payload.site_id,
+                payload.building_type_id,
+                payload.description.as_deref(),
+            )
+            .await?;
+
+        // Fetch with relations for response
+        let building_with_relations = self
+            .building_repo
+            .find_with_relations_by_id(building.id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Edifício não encontrado".to_string(),
+            ))?;
+
+        Ok(building_with_relations)
+    }
+
+    pub async fn get_building(&self, id: Uuid) -> Result<BuildingWithRelationsDto, ServiceError> {
+        self.building_repo
+            .find_with_relations_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Edifício não encontrado".to_string(),
+            ))
+    }
+
+    pub async fn update_building(
+        &self,
+        id: Uuid,
+        payload: UpdateBuildingPayload,
+    ) -> Result<BuildingWithRelationsDto, ServiceError> {
+        // Validate building exists
+        if self.building_repo.find_by_id(id).await?.is_none() {
+            return Err(ServiceError::NotFound(
+                "Edifício não encontrado".to_string(),
+            ));
+        }
+
+        // Validate site if provided
+        if let Some(site_id) = payload.site_id {
+            if self.site_repo.find_by_id(site_id).await?.is_none() {
+                return Err(ServiceError::NotFound("Site não encontrado".to_string()));
+            }
+        }
+
+        // Validate building_type if provided
+        if let Some(building_type_id) = payload.building_type_id {
+            if self
+                .building_type_repo
+                .find_by_id(building_type_id)
+                .await?
+                .is_none()
+            {
+                return Err(ServiceError::NotFound(
+                    "Tipo de edifício não encontrado".to_string(),
+                ));
+            }
+        }
+
+        // Update building
+        let building = self
+            .building_repo
+            .update(
+                id,
+                payload.name.as_ref(),
+                payload.site_id,
+                payload.building_type_id,
+                payload.description.as_deref(),
+            )
+            .await?;
+
+        // Fetch with relations for response
+        let building_with_relations = self
+            .building_repo
+            .find_with_relations_by_id(building.id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Edifício não encontrado".to_string(),
+            ))?;
+
+        Ok(building_with_relations)
+    }
+
+    pub async fn delete_building(&self, id: Uuid) -> Result<(), ServiceError> {
+        let deleted = self.building_repo.delete(id).await?;
+
+        if deleted {
+            Ok(())
+        } else {
+            Err(ServiceError::NotFound(
+                "Edifício não encontrado".to_string(),
+            ))
+        }
+    }
+
+    pub async fn list_buildings(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        search: Option<String>,
+        site_id: Option<Uuid>,
+        building_type_id: Option<Uuid>,
+    ) -> Result<PaginatedBuildings, ServiceError> {
+        let limit = limit.unwrap_or(50).min(100);
+        let offset = offset.unwrap_or(0);
+
+        let (buildings, total) = self
+            .building_repo
+            .list(limit, offset, search, site_id, building_type_id)
+            .await?;
+
+        Ok(PaginatedBuildings {
+            buildings,
             total,
             limit,
             offset,

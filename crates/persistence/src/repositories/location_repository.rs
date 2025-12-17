@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 use domain::errors::RepositoryError;
 use domain::models::{
-    BuildingTypeDto, CityDto, CityWithStateDto, DepartmentCategoryDto, SiteDto, SiteTypeDto,
-    SiteWithRelationsDto, SpaceTypeDto, StateDto,
+    BuildingDto, BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto,
+    DepartmentCategoryDto, SiteDto, SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto, StateDto,
 };
 use domain::ports::{
-    BuildingTypeRepositoryPort, CityRepositoryPort, DepartmentCategoryRepositoryPort,
-    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
+    DepartmentCategoryRepositoryPort, SiteRepositoryPort, SiteTypeRepositoryPort,
+    SpaceTypeRepositoryPort, StateRepositoryPort,
 };
 use domain::value_objects::{LocationName, StateCode};
 use sqlx::PgPool;
@@ -1493,5 +1494,235 @@ impl SiteRepositoryPort for SiteRepository {
             .map_err(Self::map_err)?;
 
         Ok((sites, total))
+    }
+}
+
+// ============================
+// Building Repository (Phase 3B)
+// ============================
+
+#[derive(Clone)]
+pub struct BuildingRepository {
+    pool: PgPool,
+}
+
+impl BuildingRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(e: sqlx::Error) -> RepositoryError {
+        if let Some(db_err) = e.as_database_error() {
+            if let Some(code) = db_err.code() {
+                if code == "23505" {
+                    return RepositoryError::Duplicate(db_err.message().to_string());
+                }
+                if code == "23503" {
+                    return RepositoryError::Database(
+                        "Foreign key constraint violation".to_string(),
+                    );
+                }
+            }
+        }
+        RepositoryError::Database(e.to_string())
+    }
+}
+
+#[async_trait]
+impl BuildingRepositoryPort for BuildingRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<BuildingDto>, RepositoryError> {
+        sqlx::query_as::<_, BuildingDto>(
+            "SELECT id, name, site_id, building_type_id, description, created_at, updated_at
+             FROM buildings
+             WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<BuildingWithRelationsDto>, RepositoryError> {
+        let building = sqlx::query_as::<_, BuildingWithRelationsDto>(
+            "SELECT
+                b.id, b.name,
+                b.site_id, s.name as site_name,
+                s.city_id, c.name as city_name,
+                st.id as state_id, st.name as state_name, st.code as state_code,
+                b.building_type_id, bt.name as building_type_name,
+                b.description,
+                b.created_at, b.updated_at
+             FROM buildings b
+             INNER JOIN sites s ON b.site_id = s.id
+             INNER JOIN cities c ON s.city_id = c.id
+             INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN building_types bt ON b.building_type_id = bt.id
+             WHERE b.id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+        Ok(building)
+    }
+
+    async fn create(
+        &self,
+        name: &LocationName,
+        site_id: Uuid,
+        building_type_id: Uuid,
+        description: Option<&str>,
+    ) -> Result<BuildingDto, RepositoryError> {
+        sqlx::query_as::<_, BuildingDto>(
+            "INSERT INTO buildings (name, site_id, building_type_id, description)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, name, site_id, building_type_id, description, created_at, updated_at",
+        )
+        .bind(name.as_str())
+        .bind(site_id)
+        .bind(building_type_id)
+        .bind(description)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        site_id: Option<Uuid>,
+        building_type_id: Option<Uuid>,
+        description: Option<&str>,
+    ) -> Result<BuildingDto, RepositoryError> {
+        let existing = self
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound("Building not found".to_string()))?;
+
+        let final_name = name.unwrap_or(&existing.name);
+        let final_site_id = site_id.unwrap_or(existing.site_id);
+        let final_building_type_id = building_type_id.unwrap_or(existing.building_type_id);
+        let final_description = description.or(existing.description.as_deref());
+
+        sqlx::query_as::<_, BuildingDto>(
+            "UPDATE buildings
+             SET name = $1, site_id = $2, building_type_id = $3, description = $4
+             WHERE id = $5
+             RETURNING id, name, site_id, building_type_id, description, created_at, updated_at",
+        )
+        .bind(final_name.as_str())
+        .bind(final_site_id)
+        .bind(final_building_type_id)
+        .bind(final_description)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("DELETE FROM buildings WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        site_id: Option<Uuid>,
+        building_type_id: Option<Uuid>,
+    ) -> Result<(Vec<BuildingWithRelationsDto>, i64), RepositoryError> {
+        let search_pattern = search.map(|s| format!("%{}%", s));
+        let mut conditions = Vec::new();
+        let mut bind_index = 1;
+
+        if search_pattern.is_some() {
+            conditions.push(format!("b.name ILIKE ${}", bind_index));
+            bind_index += 1;
+        }
+        if site_id.is_some() {
+            conditions.push(format!("b.site_id = ${}", bind_index));
+            bind_index += 1;
+        }
+        if building_type_id.is_some() {
+            conditions.push(format!("b.building_type_id = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let query_str = format!(
+            "SELECT
+                b.id, b.name,
+                b.site_id, s.name as site_name,
+                s.city_id, c.name as city_name,
+                st.id as state_id, st.name as state_name, st.code as state_code,
+                b.building_type_id, bt.name as building_type_name,
+                b.description,
+                b.created_at, b.updated_at
+             FROM buildings b
+             INNER JOIN sites s ON b.site_id = s.id
+             INNER JOIN cities c ON s.city_id = c.id
+             INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN building_types bt ON b.building_type_id = bt.id
+             {}
+             ORDER BY b.name LIMIT ${} OFFSET ${}",
+            where_clause, bind_index, bind_index + 1
+        );
+
+        let mut query = sqlx::query_as::<_, BuildingWithRelationsDto>(&query_str);
+
+        // Bind parameters in order
+        if let Some(ref pattern) = search_pattern {
+            query = query.bind(pattern);
+        }
+        if let Some(sid) = site_id {
+            query = query.bind(sid);
+        }
+        if let Some(btid) = building_type_id {
+            query = query.bind(btid);
+        }
+        query = query.bind(limit).bind(offset);
+
+        let buildings = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+
+        // Count total
+        let count_query_str = format!(
+            "SELECT COUNT(*) FROM buildings b {}",
+            where_clause
+        );
+
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_query_str);
+
+        if let Some(ref pattern) = search_pattern {
+            count_query = count_query.bind(pattern);
+        }
+        if let Some(sid) = site_id {
+            count_query = count_query.bind(sid);
+        }
+        if let Some(btid) = building_type_id {
+            count_query = count_query.bind(btid);
+        }
+
+        let total = count_query
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+
+        Ok((buildings, total))
     }
 }

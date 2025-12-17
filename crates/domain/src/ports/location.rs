@@ -1,7 +1,7 @@
 use crate::errors::RepositoryError;
 use crate::models::{
-    BuildingTypeDto, CityDto, CityWithStateDto, DepartmentCategoryDto, SiteDto, SiteTypeDto,
-    SiteWithRelationsDto, SpaceTypeDto, StateDto,
+    BuildingDto, BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto,
+    DepartmentCategoryDto, SiteDto, SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto, StateDto,
 };
 use crate::value_objects::{LocationName, StateCode};
 use async_trait::async_trait;
@@ -315,4 +315,48 @@ pub trait SiteRepositoryPort: Send + Sync {
         city_id: Option<Uuid>,
         site_type_id: Option<Uuid>,
     ) -> Result<(Vec<SiteWithRelationsDto>, i64), RepositoryError>;
+}
+
+// ============================
+// Building Repository Port (Phase 3B)
+// ============================
+
+#[async_trait]
+pub trait BuildingRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<BuildingDto>, RepositoryError>;
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<BuildingWithRelationsDto>, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        name: &LocationName,
+        site_id: Uuid,
+        building_type_id: Uuid,
+        description: Option<&str>,
+    ) -> Result<BuildingDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        site_id: Option<Uuid>,
+        building_type_id: Option<Uuid>,
+        description: Option<&str>,
+    ) -> Result<BuildingDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        site_id: Option<Uuid>,
+        building_type_id: Option<Uuid>,
+    ) -> Result<(Vec<BuildingWithRelationsDto>, i64), RepositoryError>;
 }

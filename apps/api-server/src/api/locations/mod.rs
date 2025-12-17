@@ -38,8 +38,9 @@ use crate::infra::state::AppState;
 // =============================================================================
 
 pub use contracts::{
-    BuildingTypeResponse, CityResponse, CityWithStateResponse, DepartmentCategoryResponse,
-    SiteResponse, SiteTypeResponse, SpaceTypeResponse, StateResponse,
+    BuildingResponse, BuildingTypeResponse, CityResponse, CityWithStateResponse,
+    DepartmentCategoryResponse, SiteResponse, SiteTypeResponse, SpaceTypeResponse,
+    StateResponse,
 };
 
 // =============================================================================
@@ -117,6 +118,16 @@ pub use contracts::{
 /// | POST   | /admin/locations/sites       | create_site  | Criar novo site                              |
 /// | PUT    | /admin/locations/sites/:id   | update_site  | Atualizar site                               |
 /// | DELETE | /admin/locations/sites/:id   | delete_site  | Deletar site                                 |
+///
+/// # Rotas - Buildings (Phase 3B)
+///
+/// | Método | Path                            | Handler         | Descrição                                               |
+/// |--------|----------------------------------|-----------------|--------------------------------------------------------|
+/// | GET    | /admin/locations/buildings       | list_buildings  | Listar edifícios (com filtros site_id, building_type_id) |
+/// | GET    | /admin/locations/buildings/:id   | get_building    | Obter edifício por ID (com dados relacionados)          |
+/// | POST   | /admin/locations/buildings       | create_building | Criar novo edifício                                     |
+/// | PUT    | /admin/locations/buildings/:id   | update_building | Atualizar edifício                                      |
+/// | DELETE | /admin/locations/buildings/:id   | delete_building | Deletar edifício                                        |
 pub fn router() -> Router<AppState> {
     let states_router = Router::new()
         .route("/", get(handlers::list_states).post(handlers::create_state))
@@ -193,6 +204,18 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_site),
         );
 
+    let buildings_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_buildings).post(handlers::create_building),
+        )
+        .route(
+            "/:id",
+            get(handlers::get_building)
+                .put(handlers::update_building)
+                .delete(handlers::delete_building),
+        );
+
     Router::new()
         .nest("/states", states_router)
         .nest("/cities", cities_router)
@@ -201,4 +224,5 @@ pub fn router() -> Router<AppState> {
         .nest("/space-types", space_types_router)
         .nest("/department-categories", department_categories_router)
         .nest("/sites", sites_router)
+        .nest("/buildings", buildings_router)
 }

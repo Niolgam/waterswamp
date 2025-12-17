@@ -4,13 +4,14 @@ use axum::{
     Json,
 };
 use domain::models::{
-    CreateBuildingTypePayload, CreateCityPayload, CreateDepartmentCategoryPayload,
-    CreateSitePayload, CreateSiteTypePayload, CreateSpaceTypePayload, CreateStatePayload,
-    ListBuildingTypesQuery, ListCitiesQuery, ListDepartmentCategoriesQuery, ListSitesQuery,
-    ListSiteTypesQuery, ListSpaceTypesQuery, ListStatesQuery, PaginatedBuildingTypes,
+    CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload,
+    CreateDepartmentCategoryPayload, CreateSitePayload, CreateSiteTypePayload,
+    CreateSpaceTypePayload, CreateStatePayload, ListBuildingsQuery, ListBuildingTypesQuery,
+    ListCitiesQuery, ListDepartmentCategoriesQuery, ListSitesQuery, ListSiteTypesQuery,
+    ListSpaceTypesQuery, ListStatesQuery, PaginatedBuildings, PaginatedBuildingTypes,
     PaginatedCities, PaginatedDepartmentCategories, PaginatedSites, PaginatedSiteTypes,
-    PaginatedSpaceTypes, PaginatedStates, UpdateBuildingTypePayload, UpdateCityPayload,
-    UpdateDepartmentCategoryPayload, UpdateSitePayload, UpdateSiteTypePayload,
+    PaginatedSpaceTypes, PaginatedStates, UpdateBuildingPayload, UpdateBuildingTypePayload,
+    UpdateCityPayload, UpdateDepartmentCategoryPayload, UpdateSitePayload, UpdateSiteTypePayload,
     UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use uuid::Uuid;
@@ -19,8 +20,9 @@ use validator::Validate;
 use crate::infra::{errors::AppError, state::AppState};
 
 use super::contracts::{
-    BuildingTypeResponse, CityResponse, CityWithStateResponse, DepartmentCategoryResponse,
-    SiteResponse, SiteTypeResponse, SpaceTypeResponse, StateResponse,
+    BuildingResponse, BuildingTypeResponse, CityResponse, CityWithStateResponse,
+    DepartmentCategoryResponse, SiteResponse, SiteTypeResponse, SpaceTypeResponse,
+    StateResponse,
 };
 
 // ============================
@@ -660,5 +662,124 @@ pub async fn delete_site(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     state.location_service.delete_site(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================
+// Building Handlers (Phase 3B)
+// ============================
+
+/// GET /admin/locations/buildings
+pub async fn list_buildings(
+    State(state): State<AppState>,
+    Query(params): Query<ListBuildingsQuery>,
+) -> Result<Json<PaginatedBuildings>, AppError> {
+    let result = state
+        .location_service
+        .list_buildings(
+            params.limit,
+            params.offset,
+            params.search,
+            params.site_id,
+            params.building_type_id,
+        )
+        .await?;
+
+    Ok(Json(result))
+}
+
+/// GET /admin/locations/buildings/:id
+pub async fn get_building(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<BuildingResponse>, AppError> {
+    let building = state.location_service.get_building(id).await?;
+
+    Ok(Json(BuildingResponse {
+        id: building.id,
+        name: building.name,
+        site_id: building.site_id,
+        site_name: building.site_name,
+        city_id: building.city_id,
+        city_name: building.city_name,
+        state_id: building.state_id,
+        state_name: building.state_name,
+        state_code: building.state_code,
+        building_type_id: building.building_type_id,
+        building_type_name: building.building_type_name,
+        description: building.description,
+        created_at: building.created_at,
+        updated_at: building.updated_at,
+    }))
+}
+
+/// POST /admin/locations/buildings
+pub async fn create_building(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateBuildingPayload>,
+) -> Result<(StatusCode, Json<BuildingResponse>), AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let building = state.location_service.create_building(payload).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(BuildingResponse {
+            id: building.id,
+            name: building.name,
+            site_id: building.site_id,
+            site_name: building.site_name,
+            city_id: building.city_id,
+            city_name: building.city_name,
+            state_id: building.state_id,
+            state_name: building.state_name,
+            state_code: building.state_code,
+            building_type_id: building.building_type_id,
+            building_type_name: building.building_type_name,
+            description: building.description,
+            created_at: building.created_at,
+            updated_at: building.updated_at,
+        }),
+    ))
+}
+
+/// PUT /admin/locations/buildings/:id
+pub async fn update_building(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateBuildingPayload>,
+) -> Result<Json<BuildingResponse>, AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let building = state.location_service.update_building(id, payload).await?;
+
+    Ok(Json(BuildingResponse {
+        id: building.id,
+        name: building.name,
+        site_id: building.site_id,
+        site_name: building.site_name,
+        city_id: building.city_id,
+        city_name: building.city_name,
+        state_id: building.state_id,
+        state_name: building.state_name,
+        state_code: building.state_code,
+        building_type_id: building.building_type_id,
+        building_type_name: building.building_type_name,
+        description: building.description,
+        created_at: building.created_at,
+        updated_at: building.updated_at,
+    }))
+}
+
+/// DELETE /admin/locations/buildings/:id
+pub async fn delete_building(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.location_service.delete_building(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

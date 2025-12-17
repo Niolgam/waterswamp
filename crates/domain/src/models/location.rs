@@ -331,3 +331,72 @@ pub struct UpdateSitePayload {
     #[validate(length(max = 500))]
     pub address: Option<String>,
 }
+
+// ============================
+// Building Models (Phase 3B)
+// ============================
+
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct BuildingDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub site_id: Uuid,
+    pub building_type_id: Uuid,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// DTO with joined data from site, city, state, and building_type
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct BuildingWithRelationsDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub site_id: Uuid,
+    pub site_name: LocationName,
+    pub city_id: Uuid,
+    pub city_name: LocationName,
+    pub state_id: Uuid,
+    pub state_name: LocationName,
+    pub state_code: StateCode,
+    pub building_type_id: Uuid,
+    pub building_type_name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedBuildings {
+    pub buildings: Vec<BuildingWithRelationsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListBuildingsQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+    pub site_id: Option<Uuid>,
+    pub building_type_id: Option<Uuid>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct CreateBuildingPayload {
+    pub name: LocationName,
+    pub site_id: Uuid,
+    pub building_type_id: Uuid,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateBuildingPayload {
+    pub name: Option<LocationName>,
+    pub site_id: Option<Uuid>,
+    pub building_type_id: Option<Uuid>,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
