@@ -1158,3 +1158,633 @@ async fn test_delete_department_category_success() {
 
     assert_eq!(get_response.status_code(), StatusCode::NOT_FOUND);
 }
+
+// ============================
+// SITE TESTS (Phase 3A)
+// ============================
+
+#[tokio::test]
+async fn test_create_site_success() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites: state, city, site_type
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "São Paulo", "code": "SP"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "São Paulo", "state_id": state["id"]}))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Matriz"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    // Create site
+    let response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sede Central",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"],
+            "address": "Av. Paulista, 1000"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Sede Central");
+    assert_eq!(body["city_id"], city["id"]);
+    assert_eq!(body["city_name"], "São Paulo");
+    assert_eq!(body["state_name"], "São Paulo");
+    assert_eq!(body["state_code"], "SP");
+    assert_eq!(body["site_type_id"], site_type["id"]);
+    assert_eq!(body["site_type_name"], "Matriz");
+    assert_eq!(body["address"], "Av. Paulista, 1000");
+}
+
+#[tokio::test]
+async fn test_create_site_invalid_city_returns_404() {
+    let app = common::spawn_app().await;
+
+    // Create site_type only
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Filial"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let fake_city_id = Uuid::new_v4();
+
+    let response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Site Teste",
+            "city_id": fake_city_id,
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_create_site_invalid_site_type_returns_404() {
+    let app = common::spawn_app().await;
+
+    // Create state and city only
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Rio de Janeiro", "code": "RJ"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Rio de Janeiro", "state_id": state["id"]}))
+        .await;
+    let city: Value = city_response.json();
+
+    let fake_site_type_id = Uuid::new_v4();
+
+    let response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Site Teste",
+            "city_id": city["id"],
+            "site_type_id": fake_site_type_id
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_create_site_duplicate_name_in_same_city_returns_conflict() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Minas Gerais", "code": "MG"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Belo Horizonte", "state_id": state["id"]}))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Escritório"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    // Create first site
+    app.api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Unidade Centro",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+
+    // Try to create duplicate in same city
+    let response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Unidade Centro",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_create_site_same_name_in_different_cities_succeeds() {
+    let app = common::spawn_app().await;
+
+    // Create state and two cities
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Paraná", "code": "PR"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city1_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Curitiba", "state_id": state["id"]}))
+        .await;
+    let city1: Value = city1_response.json();
+
+    let city2_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Londrina", "state_id": state["id"]}))
+        .await;
+    let city2: Value = city2_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Loja"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    // Create site with same name in city1
+    let response1 = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Loja Principal",
+            "city_id": city1["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+
+    assert_eq!(response1.status_code(), StatusCode::CREATED);
+
+    // Create site with same name in city2 - should succeed
+    let response2 = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Loja Principal",
+            "city_id": city2["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+
+    assert_eq!(response2.status_code(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn test_get_site_with_relations() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Bahia", "code": "BA"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Salvador", "state_id": state["id"]}))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Depósito"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let create_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "CD Bahia",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"],
+            "address": "Rodovia BR-324, Km 10"
+        }))
+        .await;
+    let created: Value = create_response.json();
+
+    // Get site with relations
+    let response = app
+        .api
+        .get(&format!("/api/admin/locations/sites/{}", created["id"].as_str().unwrap()))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "CD Bahia");
+    assert_eq!(body["city_name"], "Salvador");
+    assert_eq!(body["state_name"], "Bahia");
+    assert_eq!(body["state_code"], "BA");
+    assert_eq!(body["site_type_name"], "Depósito");
+    assert_eq!(body["address"], "Rodovia BR-324, Km 10");
+}
+
+#[tokio::test]
+async fn test_update_site_success() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Ceará", "code": "CE"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Fortaleza", "state_id": state["id"]}))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Fábrica"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let create_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Planta 1",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let created: Value = create_response.json();
+
+    // Update site
+    let response = app
+        .api
+        .put(&format!("/api/admin/locations/sites/{}", created["id"].as_str().unwrap()))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Planta Industrial 1",
+            "address": "Distrito Industrial, Lote 42"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["name"], "Planta Industrial 1");
+    assert_eq!(body["address"], "Distrito Industrial, Lote 42");
+}
+
+#[tokio::test]
+async fn test_delete_site_success() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Pernambuco", "code": "PE"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Recife", "state_id": state["id"]}))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Ponto de Venda"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let create_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "PDV Centro",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let created: Value = create_response.json();
+    let site_id = created["id"].as_str().unwrap();
+
+    // Delete site
+    let response = app
+        .api
+        .delete(&format!("/api/admin/locations/sites/{}", site_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+
+    // Verify deletion
+    let get_response = app
+        .api
+        .get(&format!("/api/admin/locations/sites/{}", site_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(get_response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_list_sites_success() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Santa Catarina", "code": "SC"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Florianópolis", "state_id": state["id"]}))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Filial"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    // Create multiple sites
+    for name in ["Site A", "Site B", "Site C"] {
+        app.api
+            .post("/api/admin/locations/sites")
+            .add_header("Authorization", format!("Bearer {}", app.admin_token))
+            .json(&json!({
+                "name": name,
+                "city_id": city["id"],
+                "site_type_id": site_type["id"]
+            }))
+            .await;
+    }
+
+    // List sites
+    let response = app
+        .api
+        .get("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert!(body["sites"].is_array());
+    assert!(body["total"].as_i64().unwrap() >= 3);
+}
+
+#[tokio::test]
+async fn test_list_sites_filtered_by_city() {
+    let app = common::spawn_app().await;
+
+    // Create state and two cities
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Goiás", "code": "GO"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city1_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Goiânia", "state_id": state["id"]}))
+        .await;
+    let city1: Value = city1_response.json();
+
+    let city2_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Anápolis", "state_id": state["id"]}))
+        .await;
+    let city2: Value = city2_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Regional"}))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    // Create sites in city1
+    app.api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Site Goiânia 1",
+            "city_id": city1["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+
+    // Create site in city2
+    app.api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Site Anápolis 1",
+            "city_id": city2["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+
+    // List sites filtered by city1
+    let response = app
+        .api
+        .get(&format!("/api/admin/locations/sites?city_id={}", city1["id"].as_str().unwrap()))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let sites = body["sites"].as_array().unwrap();
+
+    // All sites should be from city1
+    for site in sites {
+        assert_eq!(site["city_id"], city1["id"]);
+    }
+}
+
+#[tokio::test]
+async fn test_list_sites_filtered_by_site_type() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Espírito Santo", "code": "ES"}))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Vitória", "state_id": state["id"]}))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type1_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Administrativo"}))
+        .await;
+    let site_type1: Value = site_type1_response.json();
+
+    let site_type2_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({"name": "Operacional"}))
+        .await;
+    let site_type2: Value = site_type2_response.json();
+
+    // Create site with site_type1
+    app.api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sede Admin",
+            "city_id": city["id"],
+            "site_type_id": site_type1["id"]
+        }))
+        .await;
+
+    // Create site with site_type2
+    app.api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Centro Operacional",
+            "city_id": city["id"],
+            "site_type_id": site_type2["id"]
+        }))
+        .await;
+
+    // List sites filtered by site_type1
+    let response = app
+        .api
+        .get(&format!("/api/admin/locations/sites?site_type_id={}", site_type1["id"].as_str().unwrap()))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let sites = body["sites"].as_array().unwrap();
+
+    // All sites should be of site_type1
+    for site in sites {
+        assert_eq!(site["site_type_id"], site_type1["id"]);
+    }
+}
