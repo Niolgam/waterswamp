@@ -1941,3 +1941,271 @@ impl FloorRepositoryPort for FloorRepository {
         Ok((floors, total))
     }
 }
+
+// =============================================================================
+// SPACE REPOSITORY (Phase 3D)
+// =============================================================================
+
+pub struct SpaceRepository {
+    pool: PgPool,
+}
+
+impl SpaceRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(err: sqlx::Error) -> RepositoryError {
+        match err {
+            sqlx::Error::Database(db_err) => {
+                if let Some(constraint) = db_err.constraint() {
+                    if constraint.contains("unique_space_name_per_floor") {
+                        return RepositoryError::AlreadyExists(
+                            "Já existe um espaço com este nome neste andar".to_string(),
+                        );
+                    }
+                    if constraint.contains("fk") || constraint.contains("foreign") {
+                        return RepositoryError::NotFound(
+                            "Andar ou tipo de espaço não encontrado".to_string(),
+                        );
+                    }
+                }
+                RepositoryError::Database(db_err.to_string())
+            }
+            _ => RepositoryError::Database(err.to_string()),
+        }
+    }
+}
+
+#[async_trait]
+impl SpaceRepositoryPort for SpaceRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SpaceDto>, RepositoryError> {
+        sqlx::query_as::<_, SpaceDto>(
+            r#"
+            SELECT id, name, floor_id, space_type_id, description, created_at, updated_at
+            FROM spaces
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<SpaceWithRelationsDto>, RepositoryError> {
+        sqlx::query_as::<_, SpaceWithRelationsDto>(
+            r#"
+            SELECT
+                sp.id,
+                sp.name,
+                sp.floor_id,
+                f.floor_number,
+                f.building_id,
+                b.name AS building_name,
+                b.site_id,
+                s.name AS site_name,
+                s.city_id,
+                c.name AS city_name,
+                c.state_id,
+                st.name AS state_name,
+                st.code AS state_code,
+                sp.space_type_id,
+                spt.name AS space_type_name,
+                sp.description,
+                sp.created_at,
+                sp.updated_at
+            FROM spaces sp
+            INNER JOIN floors f ON sp.floor_id = f.id
+            INNER JOIN buildings b ON f.building_id = b.id
+            INNER JOIN sites s ON b.site_id = s.id
+            INNER JOIN cities c ON s.city_id = c.id
+            INNER JOIN states st ON c.state_id = st.id
+            INNER JOIN space_types spt ON sp.space_type_id = spt.id
+            WHERE sp.id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn create(
+        &self,
+        name: &LocationName,
+        floor_id: Uuid,
+        space_type_id: Uuid,
+        description: Option<&str>,
+    ) -> Result<SpaceDto, RepositoryError> {
+        sqlx::query_as::<_, SpaceDto>(
+            r#"
+            INSERT INTO spaces (name, floor_id, space_type_id, description)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, name, floor_id, space_type_id, description, created_at, updated_at
+            "#,
+        )
+        .bind(name.as_ref())
+        .bind(floor_id)
+        .bind(space_type_id)
+        .bind(description)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        floor_id: Option<Uuid>,
+        space_type_id: Option<Uuid>,
+        description: Option<&str>,
+    ) -> Result<SpaceDto, RepositoryError> {
+        // Fetch current record
+        let current = self
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound("Espaço não encontrado".to_string()))?;
+
+        // Use provided values or keep current ones
+        let final_name = name.unwrap_or(&current.name);
+        let final_floor_id = floor_id.unwrap_or(current.floor_id);
+        let final_space_type_id = space_type_id.unwrap_or(current.space_type_id);
+        let final_description = description.or(current.description.as_deref());
+
+        sqlx::query_as::<_, SpaceDto>(
+            r#"
+            UPDATE spaces
+            SET name = $1, floor_id = $2, space_type_id = $3, description = $4, updated_at = NOW()
+            WHERE id = $5
+            RETURNING id, name, floor_id, space_type_id, description, created_at, updated_at
+            "#,
+        )
+        .bind(final_name.as_ref())
+        .bind(final_floor_id)
+        .bind(final_space_type_id)
+        .bind(final_description)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("DELETE FROM spaces WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        floor_id: Option<Uuid>,
+        space_type_id: Option<Uuid>,
+    ) -> Result<(Vec<SpaceWithRelationsDto>, i64), RepositoryError> {
+        let search_pattern = search.map(|s| format!("%{}%", s));
+        let mut conditions = Vec::new();
+        let mut bind_index = 1;
+
+        if search_pattern.is_some() {
+            conditions.push(format!("sp.name ILIKE ${}", bind_index));
+            bind_index += 1;
+        }
+        if floor_id.is_some() {
+            conditions.push(format!("sp.floor_id = ${}", bind_index));
+            bind_index += 1;
+        }
+        if space_type_id.is_some() {
+            conditions.push(format!("sp.space_type_id = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let query_str = format!(
+            r#"
+             SELECT
+                sp.id,
+                sp.name,
+                sp.floor_id,
+                f.floor_number,
+                f.building_id,
+                b.name AS building_name,
+                b.site_id,
+                s.name AS site_name,
+                s.city_id,
+                c.name AS city_name,
+                c.state_id,
+                st.name AS state_name,
+                st.code AS state_code,
+                sp.space_type_id,
+                spt.name AS space_type_name,
+                sp.description,
+                sp.created_at,
+                sp.updated_at
+             FROM spaces sp
+             INNER JOIN floors f ON sp.floor_id = f.id
+             INNER JOIN buildings b ON f.building_id = b.id
+             INNER JOIN sites s ON b.site_id = s.id
+             INNER JOIN cities c ON s.city_id = c.id
+             INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN space_types spt ON sp.space_type_id = spt.id
+             {}
+             ORDER BY b.name, f.floor_number, sp.name LIMIT ${} OFFSET ${}
+            "#,
+            where_clause, bind_index, bind_index + 1
+        );
+
+        let mut query = sqlx::query_as::<_, SpaceWithRelationsDto>(&query_str);
+
+        // Bind parameters in order
+        if let Some(ref pattern) = search_pattern {
+            query = query.bind(pattern);
+        }
+        if let Some(fid) = floor_id {
+            query = query.bind(fid);
+        }
+        if let Some(stid) = space_type_id {
+            query = query.bind(stid);
+        }
+        query = query.bind(limit).bind(offset);
+
+        let spaces = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+
+        // Count total
+        let count_query_str = format!("SELECT COUNT(*) FROM spaces sp {}", where_clause);
+
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_query_str);
+
+        if let Some(ref pattern) = search_pattern {
+            count_query = count_query.bind(pattern);
+        }
+        if let Some(fid) = floor_id {
+            count_query = count_query.bind(fid);
+        }
+        if let Some(stid) = space_type_id {
+            count_query = count_query.bind(stid);
+        }
+
+        let total = count_query
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+
+        Ok((spaces, total))
+    }
+}

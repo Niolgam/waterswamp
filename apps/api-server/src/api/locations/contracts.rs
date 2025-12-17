@@ -154,3 +154,29 @@ pub struct FloorResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
+
+// ============================
+// Space Response DTOs (Phase 3D)
+// ============================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SpaceResponse {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub floor_id: Uuid,
+    pub floor_number: i32,
+    pub building_id: Uuid,
+    pub building_name: LocationName,
+    pub site_id: Uuid,
+    pub site_name: LocationName,
+    pub city_id: Uuid,
+    pub city_name: LocationName,
+    pub state_id: Uuid,
+    pub state_name: LocationName,
+    pub state_code: StateCode,
+    pub space_type_id: Uuid,
+    pub space_type_name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}

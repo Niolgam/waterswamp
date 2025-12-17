@@ -29,6 +29,7 @@ pub struct LocationService {
     site_repo: Arc<dyn SiteRepositoryPort>,
     building_repo: Arc<dyn BuildingRepositoryPort>,
     floor_repo: Arc<dyn FloorRepositoryPort>,
+    space_repo: Arc<dyn SpaceRepositoryPort>,
 }
 
 impl LocationService {
@@ -42,6 +43,7 @@ impl LocationService {
         site_repo: Arc<dyn SiteRepositoryPort>,
         building_repo: Arc<dyn BuildingRepositoryPort>,
         floor_repo: Arc<dyn FloorRepositoryPort>,
+        space_repo: Arc<dyn SpaceRepositoryPort>,
     ) -> Self {
         Self {
             state_repo,
@@ -53,6 +55,7 @@ impl LocationService {
             site_repo,
             building_repo,
             floor_repo,
+            space_repo,
         }
     }
 
@@ -1002,6 +1005,144 @@ impl LocationService {
 
         Ok(PaginatedFloors {
             floors,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    // ============================
+    // Space Operations (Phase 3D)
+    // ============================
+
+    pub async fn create_space(
+        &self,
+        payload: CreateSpacePayload,
+    ) -> Result<SpaceWithRelationsDto, ServiceError> {
+        // Validate that floor exists
+        if self.floor_repo.find_by_id(payload.floor_id).await?.is_none() {
+            return Err(ServiceError::NotFound("Andar não encontrado".to_string()));
+        }
+
+        // Validate that space_type exists
+        if self
+            .space_type_repo
+            .find_by_id(payload.space_type_id)
+            .await?
+            .is_none()
+        {
+            return Err(ServiceError::NotFound(
+                "Tipo de espaço não encontrado".to_string(),
+            ));
+        }
+
+        // Create space
+        let space = self
+            .space_repo
+            .create(
+                &payload.name,
+                payload.floor_id,
+                payload.space_type_id,
+                payload.description.as_deref(),
+            )
+            .await?;
+
+        // Fetch with relations for response
+        let space_with_relations = self
+            .space_repo
+            .find_with_relations_by_id(space.id)
+            .await?
+            .ok_or(ServiceError::NotFound("Espaço não encontrado".to_string()))?;
+
+        Ok(space_with_relations)
+    }
+
+    pub async fn get_space(&self, id: Uuid) -> Result<SpaceWithRelationsDto, ServiceError> {
+        self.space_repo
+            .find_with_relations_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound("Espaço não encontrado".to_string()))
+    }
+
+    pub async fn update_space(
+        &self,
+        id: Uuid,
+        payload: UpdateSpacePayload,
+    ) -> Result<SpaceWithRelationsDto, ServiceError> {
+        // Check if space exists
+        let _ = self.get_space(id).await?;
+
+        // If updating floor_id, validate that floor exists
+        if let Some(floor_id) = payload.floor_id {
+            if self.floor_repo.find_by_id(floor_id).await?.is_none() {
+                return Err(ServiceError::NotFound("Andar não encontrado".to_string()));
+            }
+        }
+
+        // If updating space_type_id, validate that space_type exists
+        if let Some(space_type_id) = payload.space_type_id {
+            if self
+                .space_type_repo
+                .find_by_id(space_type_id)
+                .await?
+                .is_none()
+            {
+                return Err(ServiceError::NotFound(
+                    "Tipo de espaço não encontrado".to_string(),
+                ));
+            }
+        }
+
+        // Update space
+        let space = self
+            .space_repo
+            .update(
+                id,
+                payload.name.as_ref(),
+                payload.floor_id,
+                payload.space_type_id,
+                payload.description.as_deref(),
+            )
+            .await?;
+
+        // Fetch with relations for response
+        let space_with_relations = self
+            .space_repo
+            .find_with_relations_by_id(space.id)
+            .await?
+            .ok_or(ServiceError::NotFound("Espaço não encontrado".to_string()))?;
+
+        Ok(space_with_relations)
+    }
+
+    pub async fn delete_space(&self, id: Uuid) -> Result<(), ServiceError> {
+        let deleted = self.space_repo.delete(id).await?;
+
+        if deleted {
+            Ok(())
+        } else {
+            Err(ServiceError::NotFound("Espaço não encontrado".to_string()))
+        }
+    }
+
+    pub async fn list_spaces(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        search: Option<String>,
+        floor_id: Option<Uuid>,
+        space_type_id: Option<Uuid>,
+    ) -> Result<PaginatedSpaces, ServiceError> {
+        let limit = limit.unwrap_or(50).min(100);
+        let offset = offset.unwrap_or(0);
+
+        let (spaces, total) = self
+            .space_repo
+            .list(limit, offset, search, floor_id, space_type_id)
+            .await?;
+
+        Ok(PaginatedSpaces {
+            spaces,
             total,
             limit,
             offset,

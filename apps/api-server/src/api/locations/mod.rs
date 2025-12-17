@@ -238,6 +238,19 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_floor),
         );
 
+    // Phase 3D - Spaces
+    let spaces_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_spaces).post(handlers::create_space),
+        )
+        .route(
+            "/:id",
+            get(handlers::get_space)
+                .put(handlers::update_space)
+                .delete(handlers::delete_space),
+        );
+
     Router::new()
         .nest("/states", states_router)
         .nest("/cities", cities_router)
@@ -248,4 +261,5 @@ pub fn router() -> Router<AppState> {
         .nest("/sites", sites_router)
         .nest("/buildings", buildings_router)
         .nest("/floors", floors_router)
+        .nest("/spaces", spaces_router)
 }

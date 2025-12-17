@@ -18,14 +18,15 @@ use application::services::{
 use domain::ports::{
     AuthRepositoryPort, BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
     DepartmentCategoryRepositoryPort, EmailServicePort, FloorRepositoryPort, MfaRepositoryPort,
-    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
-    UserRepositoryPort,
+    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    StateRepositoryPort, UserRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
     location_repository::{
         BuildingRepository, BuildingTypeRepository, CityRepository, DepartmentCategoryRepository,
-        FloorRepository, SiteRepository, SiteTypeRepository, SpaceTypeRepository, StateRepository,
+        FloorRepository, SiteRepository, SiteTypeRepository, SpaceRepository,
+        SpaceTypeRepository, StateRepository,
     },
     mfa_repository::MfaRepository,
     user_repository::UserRepository,
@@ -110,6 +111,8 @@ pub fn build_application_state(
         Arc::new(BuildingRepository::new(pool_auth.clone()));
     let floor_repo_port: Arc<dyn FloorRepositoryPort> =
         Arc::new(FloorRepository::new(pool_auth.clone()));
+    let space_repo_port: Arc<dyn SpaceRepositoryPort> =
+        Arc::new(SpaceRepository::new(pool_auth.clone()));
 
     let location_service = Arc::new(LocationService::new(
         state_repo_port,
@@ -121,6 +124,7 @@ pub fn build_application_state(
         site_repo_port,
         building_repo_port,
         floor_repo_port,
+        space_repo_port,
     ));
 
     // Cache com TTL e tamanho máximo para políticas do Casbin

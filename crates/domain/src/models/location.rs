@@ -465,3 +465,76 @@ pub struct UpdateFloorPayload {
     #[validate(length(max = 500))]
     pub description: Option<String>,
 }
+
+// ============================
+// Space Models (Phase 3D)
+// ============================
+
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct SpaceDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub floor_id: Uuid,
+    pub space_type_id: Uuid,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// DTO with joined data from floor, building, site, city, state, and space_type
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct SpaceWithRelationsDto {
+    pub id: Uuid,
+    pub name: LocationName,
+    pub floor_id: Uuid,
+    pub floor_number: i32,
+    pub building_id: Uuid,
+    pub building_name: LocationName,
+    pub site_id: Uuid,
+    pub site_name: LocationName,
+    pub city_id: Uuid,
+    pub city_name: LocationName,
+    pub state_id: Uuid,
+    pub state_name: LocationName,
+    pub state_code: StateCode,
+    pub space_type_id: Uuid,
+    pub space_type_name: LocationName,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedSpaces {
+    pub spaces: Vec<SpaceWithRelationsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListSpacesQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+    pub floor_id: Option<Uuid>,
+    pub space_type_id: Option<Uuid>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct CreateSpacePayload {
+    pub name: LocationName,
+    pub floor_id: Uuid,
+    pub space_type_id: Uuid,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateSpacePayload {
+    pub name: Option<LocationName>,
+    pub floor_id: Option<Uuid>,
+    pub space_type_id: Option<Uuid>,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}

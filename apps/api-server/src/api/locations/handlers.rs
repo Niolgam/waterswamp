@@ -897,3 +897,164 @@ pub async fn delete_floor(
     state.location_service.delete_floor(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+// =============================================================================
+// SPACE HANDLERS (Phase 3D)
+// =============================================================================
+
+/// GET /admin/locations/spaces
+pub async fn list_spaces(
+    State(state): State<AppState>,
+    Query(query): Query<ListSpacesQuery>,
+) -> Result<Json<Value>, AppError> {
+    let result = state
+        .location_service
+        .list_spaces(
+            query.limit,
+            query.offset,
+            query.search,
+            query.floor_id,
+            query.space_type_id,
+        )
+        .await?;
+
+    let spaces: Vec<SpaceResponse> = result
+        .spaces
+        .into_iter()
+        .map(|space| SpaceResponse {
+            id: space.id,
+            name: space.name,
+            floor_id: space.floor_id,
+            floor_number: space.floor_number,
+            building_id: space.building_id,
+            building_name: space.building_name,
+            site_id: space.site_id,
+            site_name: space.site_name,
+            city_id: space.city_id,
+            city_name: space.city_name,
+            state_id: space.state_id,
+            state_name: space.state_name,
+            state_code: space.state_code,
+            space_type_id: space.space_type_id,
+            space_type_name: space.space_type_name,
+            description: space.description,
+            created_at: space.created_at,
+            updated_at: space.updated_at,
+        })
+        .collect();
+
+    Ok(Json(json!({
+        "spaces": spaces,
+        "total": result.total,
+        "limit": result.limit,
+        "offset": result.offset
+    })))
+}
+
+/// POST /admin/locations/spaces
+pub async fn create_space(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateSpacePayload>,
+) -> Result<(StatusCode, Json<SpaceResponse>), AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let space = state.location_service.create_space(payload).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(SpaceResponse {
+            id: space.id,
+            name: space.name,
+            floor_id: space.floor_id,
+            floor_number: space.floor_number,
+            building_id: space.building_id,
+            building_name: space.building_name,
+            site_id: space.site_id,
+            site_name: space.site_name,
+            city_id: space.city_id,
+            city_name: space.city_name,
+            state_id: space.state_id,
+            state_name: space.state_name,
+            state_code: space.state_code,
+            space_type_id: space.space_type_id,
+            space_type_name: space.space_type_name,
+            description: space.description,
+            created_at: space.created_at,
+            updated_at: space.updated_at,
+        }),
+    ))
+}
+
+/// GET /admin/locations/spaces/:id
+pub async fn get_space(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<SpaceResponse>, AppError> {
+    let space = state.location_service.get_space(id).await?;
+
+    Ok(Json(SpaceResponse {
+        id: space.id,
+        name: space.name,
+        floor_id: space.floor_id,
+        floor_number: space.floor_number,
+        building_id: space.building_id,
+        building_name: space.building_name,
+        site_id: space.site_id,
+        site_name: space.site_name,
+        city_id: space.city_id,
+        city_name: space.city_name,
+        state_id: space.state_id,
+        state_name: space.state_name,
+        state_code: space.state_code,
+        space_type_id: space.space_type_id,
+        space_type_name: space.space_type_name,
+        description: space.description,
+        created_at: space.created_at,
+        updated_at: space.updated_at,
+    }))
+}
+
+/// PUT /admin/locations/spaces/:id
+pub async fn update_space(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateSpacePayload>,
+) -> Result<Json<SpaceResponse>, AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let space = state.location_service.update_space(id, payload).await?;
+
+    Ok(Json(SpaceResponse {
+        id: space.id,
+        name: space.name,
+        floor_id: space.floor_id,
+        floor_number: space.floor_number,
+        building_id: space.building_id,
+        building_name: space.building_name,
+        site_id: space.site_id,
+        site_name: space.site_name,
+        city_id: space.city_id,
+        city_name: space.city_name,
+        state_id: space.state_id,
+        state_name: space.state_name,
+        state_code: space.state_code,
+        space_type_id: space.space_type_id,
+        space_type_name: space.space_type_name,
+        description: space.description,
+        created_at: space.created_at,
+        updated_at: space.updated_at,
+    }))
+}
+
+/// DELETE /admin/locations/spaces/:id
+pub async fn delete_space(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.location_service.delete_space(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
