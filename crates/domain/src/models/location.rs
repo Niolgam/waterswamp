@@ -400,3 +400,68 @@ pub struct UpdateBuildingPayload {
     #[validate(length(max = 500))]
     pub description: Option<String>,
 }
+
+// ============================
+// Floor Models (Phase 3C)
+// ============================
+
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct FloorDto {
+    pub id: Uuid,
+    pub floor_number: i32,
+    pub building_id: Uuid,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// DTO with joined data from building, site, city, state
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+pub struct FloorWithRelationsDto {
+    pub id: Uuid,
+    pub floor_number: i32,
+    pub building_id: Uuid,
+    pub building_name: LocationName,
+    pub site_id: Uuid,
+    pub site_name: LocationName,
+    pub city_id: Uuid,
+    pub city_name: LocationName,
+    pub state_id: Uuid,
+    pub state_name: LocationName,
+    pub state_code: StateCode,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedFloors {
+    pub floors: Vec<FloorWithRelationsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListFloorsQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+    pub building_id: Option<Uuid>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct CreateFloorPayload {
+    pub floor_number: i32,
+    pub building_id: Uuid,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateFloorPayload {
+    pub floor_number: Option<i32>,
+    pub building_id: Option<Uuid>,
+    #[validate(length(max = 500))]
+    pub description: Option<String>,
+}

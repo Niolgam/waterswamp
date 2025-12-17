@@ -2,12 +2,13 @@ use async_trait::async_trait;
 use domain::errors::RepositoryError;
 use domain::models::{
     BuildingDto, BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto,
-    DepartmentCategoryDto, SiteDto, SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto, StateDto,
+    DepartmentCategoryDto, FloorDto, FloorWithRelationsDto, SiteDto, SiteTypeDto,
+    SiteWithRelationsDto, SpaceTypeDto, StateDto,
 };
 use domain::ports::{
     BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
-    DepartmentCategoryRepositoryPort, SiteRepositoryPort, SiteTypeRepositoryPort,
-    SpaceTypeRepositoryPort, StateRepositoryPort,
+    DepartmentCategoryRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
+    SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
 };
 use domain::value_objects::{LocationName, StateCode};
 use sqlx::PgPool;
@@ -1724,5 +1725,219 @@ impl BuildingRepositoryPort for BuildingRepository {
             .map_err(Self::map_err)?;
 
         Ok((buildings, total))
+    }
+}
+
+// ============================
+// Floor Repository (Phase 3C)
+// ============================
+
+#[derive(Clone)]
+pub struct FloorRepository {
+    pool: PgPool,
+}
+
+impl FloorRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(e: sqlx::Error) -> RepositoryError {
+        if let Some(db_err) = e.as_database_error() {
+            if let Some(code) = db_err.code() {
+                if code == "23505" {
+                    return RepositoryError::Duplicate(db_err.message().to_string());
+                }
+                if code == "23503" {
+                    return RepositoryError::Database(
+                        "Foreign key constraint violation".to_string(),
+                    );
+                }
+            }
+        }
+        RepositoryError::Database(e.to_string())
+    }
+}
+
+#[async_trait]
+impl FloorRepositoryPort for FloorRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<FloorDto>, RepositoryError> {
+        sqlx::query_as::<_, FloorDto>(
+            "SELECT id, floor_number, building_id, description, created_at, updated_at
+             FROM floors
+             WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<FloorWithRelationsDto>, RepositoryError> {
+        let floor = sqlx::query_as::<_, FloorWithRelationsDto>(
+            "SELECT
+                f.id, f.floor_number,
+                f.building_id, b.name as building_name,
+                s.id as site_id, s.name as site_name,
+                c.id as city_id, c.name as city_name,
+                st.id as state_id, st.name as state_name, st.code as state_code,
+                f.description,
+                f.created_at, f.updated_at
+             FROM floors f
+             INNER JOIN buildings b ON f.building_id = b.id
+             INNER JOIN sites s ON b.site_id = s.id
+             INNER JOIN cities c ON s.city_id = c.id
+             INNER JOIN states st ON c.state_id = st.id
+             WHERE f.id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+        Ok(floor)
+    }
+
+    async fn create(
+        &self,
+        floor_number: i32,
+        building_id: Uuid,
+        description: Option<&str>,
+    ) -> Result<FloorDto, RepositoryError> {
+        sqlx::query_as::<_, FloorDto>(
+            "INSERT INTO floors (floor_number, building_id, description)
+             VALUES ($1, $2, $3)
+             RETURNING id, floor_number, building_id, description, created_at, updated_at",
+        )
+        .bind(floor_number)
+        .bind(building_id)
+        .bind(description)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn update(
+        &self,
+        id: Uuid,
+        floor_number: Option<i32>,
+        building_id: Option<Uuid>,
+        description: Option<&str>,
+    ) -> Result<FloorDto, RepositoryError> {
+        let existing = self
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| RepositoryError::NotFound("Floor not found".to_string()))?;
+
+        let final_floor_number = floor_number.unwrap_or(existing.floor_number);
+        let final_building_id = building_id.unwrap_or(existing.building_id);
+        let final_description = description.or(existing.description.as_deref());
+
+        sqlx::query_as::<_, FloorDto>(
+            "UPDATE floors
+             SET floor_number = $1, building_id = $2, description = $3
+             WHERE id = $4
+             RETURNING id, floor_number, building_id, description, created_at, updated_at",
+        )
+        .bind(final_floor_number)
+        .bind(final_building_id)
+        .bind(final_description)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("DELETE FROM floors WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        building_id: Option<Uuid>,
+    ) -> Result<(Vec<FloorWithRelationsDto>, i64), RepositoryError> {
+        let search_pattern = search.map(|s| format!("%{}%", s));
+        let mut conditions = Vec::new();
+        let mut bind_index = 1;
+
+        if search_pattern.is_some() {
+            conditions.push(format!("CAST(f.floor_number AS TEXT) ILIKE ${}", bind_index));
+            bind_index += 1;
+        }
+        if building_id.is_some() {
+            conditions.push(format!("f.building_id = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let query_str = format!(
+            "SELECT
+                f.id, f.floor_number,
+                f.building_id, b.name as building_name,
+                s.id as site_id, s.name as site_name,
+                c.id as city_id, c.name as city_name,
+                st.id as state_id, st.name as state_name, st.code as state_code,
+                f.description,
+                f.created_at, f.updated_at
+             FROM floors f
+             INNER JOIN buildings b ON f.building_id = b.id
+             INNER JOIN sites s ON b.site_id = s.id
+             INNER JOIN cities c ON s.city_id = c.id
+             INNER JOIN states st ON c.state_id = st.id
+             {}
+             ORDER BY b.name, f.floor_number LIMIT ${} OFFSET ${}",
+            where_clause, bind_index, bind_index + 1
+        );
+
+        let mut query = sqlx::query_as::<_, FloorWithRelationsDto>(&query_str);
+
+        // Bind parameters in order
+        if let Some(ref pattern) = search_pattern {
+            query = query.bind(pattern);
+        }
+        if let Some(bid) = building_id {
+            query = query.bind(bid);
+        }
+        query = query.bind(limit).bind(offset);
+
+        let floors = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+
+        // Count total
+        let count_query_str = format!(
+            "SELECT COUNT(*) FROM floors f {}",
+            where_clause
+        );
+
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_query_str);
+
+        if let Some(ref pattern) = search_pattern {
+            count_query = count_query.bind(pattern);
+        }
+        if let Some(bid) = building_id {
+            count_query = count_query.bind(bid);
+        }
+
+        let total = count_query
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+
+        Ok((floors, total))
     }
 }

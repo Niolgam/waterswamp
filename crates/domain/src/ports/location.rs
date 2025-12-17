@@ -1,7 +1,8 @@
 use crate::errors::RepositoryError;
 use crate::models::{
     BuildingDto, BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto,
-    DepartmentCategoryDto, SiteDto, SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto, StateDto,
+    DepartmentCategoryDto, FloorDto, FloorWithRelationsDto, SiteDto, SiteTypeDto,
+    SiteWithRelationsDto, SpaceTypeDto, StateDto,
 };
 use crate::value_objects::{LocationName, StateCode};
 use async_trait::async_trait;
@@ -359,4 +360,45 @@ pub trait BuildingRepositoryPort: Send + Sync {
         site_id: Option<Uuid>,
         building_type_id: Option<Uuid>,
     ) -> Result<(Vec<BuildingWithRelationsDto>, i64), RepositoryError>;
+}
+
+// ============================
+// Floor Repository Port (Phase 3C)
+// ============================
+
+#[async_trait]
+pub trait FloorRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<FloorDto>, RepositoryError>;
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<FloorWithRelationsDto>, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        floor_number: i32,
+        building_id: Uuid,
+        description: Option<&str>,
+    ) -> Result<FloorDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        floor_number: Option<i32>,
+        building_id: Option<Uuid>,
+        description: Option<&str>,
+    ) -> Result<FloorDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        building_id: Option<Uuid>,
+    ) -> Result<(Vec<FloorWithRelationsDto>, i64), RepositoryError>;
 }
