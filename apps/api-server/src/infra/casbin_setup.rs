@@ -296,6 +296,23 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/buildings/{id}", ACTION_DELETE])
         .await?;
 
+    // Floors (Phase 3C)
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/floors", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/floors", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/floors/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/floors/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/locations/floors/{id}", ACTION_DELETE])
+        .await?;
+
     info!("Políticas de Location Management carregadas");
 
     match enforcer.save_policy().await {

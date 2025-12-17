@@ -39,7 +39,7 @@ use crate::infra::state::AppState;
 
 pub use contracts::{
     BuildingResponse, BuildingTypeResponse, CityResponse, CityWithStateResponse,
-    DepartmentCategoryResponse, SiteResponse, SiteTypeResponse, SpaceTypeResponse,
+    DepartmentCategoryResponse, FloorResponse, SiteResponse, SiteTypeResponse, SpaceTypeResponse,
     StateResponse,
 };
 
@@ -128,6 +128,16 @@ pub use contracts::{
 /// | POST   | /admin/locations/buildings       | create_building | Criar novo edifício                                     |
 /// | PUT    | /admin/locations/buildings/:id   | update_building | Atualizar edifício                                      |
 /// | DELETE | /admin/locations/buildings/:id   | delete_building | Deletar edifício                                        |
+///
+/// # Rotas - Floors (Phase 3C)
+///
+/// | Método | Path                         | Handler      | Descrição                                            |
+/// |--------|------------------------------|--------------|------------------------------------------------------|
+/// | GET    | /admin/locations/floors       | list_floors  | Listar andares (com filtro building_id)             |
+/// | GET    | /admin/locations/floors/:id   | get_floor    | Obter andar por ID (com dados relacionados)         |
+/// | POST   | /admin/locations/floors       | create_floor | Criar novo andar                                    |
+/// | PUT    | /admin/locations/floors/:id   | update_floor | Atualizar andar                                     |
+/// | DELETE | /admin/locations/floors/:id   | delete_floor | Deletar andar                                       |
 pub fn router() -> Router<AppState> {
     let states_router = Router::new()
         .route("/", get(handlers::list_states).post(handlers::create_state))
@@ -216,6 +226,18 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_building),
         );
 
+    let floors_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_floors).post(handlers::create_floor),
+        )
+        .route(
+            "/:id",
+            get(handlers::get_floor)
+                .put(handlers::update_floor)
+                .delete(handlers::delete_floor),
+        );
+
     Router::new()
         .nest("/states", states_router)
         .nest("/cities", cities_router)
@@ -225,4 +247,5 @@ pub fn router() -> Router<AppState> {
         .nest("/department-categories", department_categories_router)
         .nest("/sites", sites_router)
         .nest("/buildings", buildings_router)
+        .nest("/floors", floors_router)
 }

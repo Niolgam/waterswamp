@@ -41,6 +41,7 @@ impl LocationService {
         department_category_repo: Arc<dyn DepartmentCategoryRepositoryPort>,
         site_repo: Arc<dyn SiteRepositoryPort>,
         building_repo: Arc<dyn BuildingRepositoryPort>,
+        floor_repo: Arc<dyn FloorRepositoryPort>,
     ) -> Self {
         Self {
             state_repo,
@@ -51,6 +52,7 @@ impl LocationService {
             department_category_repo,
             site_repo,
             building_repo,
+            floor_repo,
         }
     }
 
@@ -879,6 +881,127 @@ impl LocationService {
 
         Ok(PaginatedBuildings {
             buildings,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    // ============================
+    // Floor Operations (Phase 3C)
+    // ============================
+
+    pub async fn create_floor(
+        &self,
+        payload: CreateFloorPayload,
+    ) -> Result<FloorWithRelationsDto, ServiceError> {
+        // Validate that building exists
+        if self.building_repo.find_by_id(payload.building_id).await?.is_none() {
+            return Err(ServiceError::NotFound("Edifício não encontrado".to_string()));
+        }
+
+        // Create floor
+        let floor = self
+            .floor_repo
+            .create(
+                payload.floor_number,
+                payload.building_id,
+                payload.description.as_deref(),
+            )
+            .await?;
+
+        // Fetch with relations for response
+        let floor_with_relations = self
+            .floor_repo
+            .find_with_relations_by_id(floor.id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Andar não encontrado".to_string(),
+            ))?;
+
+        Ok(floor_with_relations)
+    }
+
+    pub async fn get_floor(&self, id: Uuid) -> Result<FloorWithRelationsDto, ServiceError> {
+        self.floor_repo
+            .find_with_relations_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Andar não encontrado".to_string(),
+            ))
+    }
+
+    pub async fn update_floor(
+        &self,
+        id: Uuid,
+        payload: UpdateFloorPayload,
+    ) -> Result<FloorWithRelationsDto, ServiceError> {
+        // Validate floor exists
+        if self.floor_repo.find_by_id(id).await?.is_none() {
+            return Err(ServiceError::NotFound(
+                "Andar não encontrado".to_string(),
+            ));
+        }
+
+        // Validate building if provided
+        if let Some(building_id) = payload.building_id {
+            if self.building_repo.find_by_id(building_id).await?.is_none() {
+                return Err(ServiceError::NotFound("Edifício não encontrado".to_string()));
+            }
+        }
+
+        // Update floor
+        let floor = self
+            .floor_repo
+            .update(
+                id,
+                payload.floor_number,
+                payload.building_id,
+                payload.description.as_deref(),
+            )
+            .await?;
+
+        // Fetch with relations for response
+        let floor_with_relations = self
+            .floor_repo
+            .find_with_relations_by_id(floor.id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Andar não encontrado".to_string(),
+            ))?;
+
+        Ok(floor_with_relations)
+    }
+
+    pub async fn delete_floor(&self, id: Uuid) -> Result<(), ServiceError> {
+        let deleted = self.floor_repo.delete(id).await?;
+
+        if deleted {
+            Ok(())
+        } else {
+            Err(ServiceError::NotFound(
+                "Andar não encontrado".to_string(),
+            ))
+        }
+    }
+
+    pub async fn list_floors(
+        &self,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        search: Option<String>,
+        building_id: Option<Uuid>,
+    ) -> Result<PaginatedFloors, ServiceError> {
+        let limit = limit.unwrap_or(50).min(100);
+        let offset = offset.unwrap_or(0);
+
+        let (floors, total) = self
+            .floor_repo
+            .list(limit, offset, search, building_id)
+            .await?;
+
+        Ok(PaginatedFloors {
+            floors,
             total,
             limit,
             offset,

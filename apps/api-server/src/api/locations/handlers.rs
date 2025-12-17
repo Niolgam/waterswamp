@@ -5,13 +5,14 @@ use axum::{
 };
 use domain::models::{
     CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload,
-    CreateDepartmentCategoryPayload, CreateSitePayload, CreateSiteTypePayload,
+    CreateDepartmentCategoryPayload, CreateFloorPayload, CreateSitePayload, CreateSiteTypePayload,
     CreateSpaceTypePayload, CreateStatePayload, ListBuildingsQuery, ListBuildingTypesQuery,
-    ListCitiesQuery, ListDepartmentCategoriesQuery, ListSitesQuery, ListSiteTypesQuery,
-    ListSpaceTypesQuery, ListStatesQuery, PaginatedBuildings, PaginatedBuildingTypes,
-    PaginatedCities, PaginatedDepartmentCategories, PaginatedSites, PaginatedSiteTypes,
-    PaginatedSpaceTypes, PaginatedStates, UpdateBuildingPayload, UpdateBuildingTypePayload,
-    UpdateCityPayload, UpdateDepartmentCategoryPayload, UpdateSitePayload, UpdateSiteTypePayload,
+    ListCitiesQuery, ListDepartmentCategoriesQuery, ListFloorsQuery, ListSitesQuery,
+    ListSiteTypesQuery, ListSpaceTypesQuery, ListStatesQuery, PaginatedBuildings,
+    PaginatedBuildingTypes, PaginatedCities, PaginatedDepartmentCategories, PaginatedFloors,
+    PaginatedSites, PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates,
+    UpdateBuildingPayload, UpdateBuildingTypePayload, UpdateCityPayload,
+    UpdateDepartmentCategoryPayload, UpdateFloorPayload, UpdateSitePayload, UpdateSiteTypePayload,
     UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use uuid::Uuid;
@@ -21,7 +22,7 @@ use crate::infra::{errors::AppError, state::AppState};
 
 use super::contracts::{
     BuildingResponse, BuildingTypeResponse, CityResponse, CityWithStateResponse,
-    DepartmentCategoryResponse, SiteResponse, SiteTypeResponse, SpaceTypeResponse,
+    DepartmentCategoryResponse, FloorResponse, SiteResponse, SiteTypeResponse, SpaceTypeResponse,
     StateResponse,
 };
 
@@ -781,5 +782,118 @@ pub async fn delete_building(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     state.location_service.delete_building(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================
+// Floor Handlers (Phase 3C)
+// ============================
+
+/// GET /admin/locations/floors
+pub async fn list_floors(
+    State(state): State<AppState>,
+    Query(params): Query<ListFloorsQuery>,
+) -> Result<Json<PaginatedFloors>, AppError> {
+    let result = state
+        .location_service
+        .list_floors(params.limit, params.offset, params.search, params.building_id)
+        .await?;
+
+    Ok(Json(result))
+}
+
+/// GET /admin/locations/floors/:id
+pub async fn get_floor(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<FloorResponse>, AppError> {
+    let floor = state.location_service.get_floor(id).await?;
+
+    Ok(Json(FloorResponse {
+        id: floor.id,
+        floor_number: floor.floor_number,
+        building_id: floor.building_id,
+        building_name: floor.building_name,
+        site_id: floor.site_id,
+        site_name: floor.site_name,
+        city_id: floor.city_id,
+        city_name: floor.city_name,
+        state_id: floor.state_id,
+        state_name: floor.state_name,
+        state_code: floor.state_code,
+        description: floor.description,
+        created_at: floor.created_at,
+        updated_at: floor.updated_at,
+    }))
+}
+
+/// POST /admin/locations/floors
+pub async fn create_floor(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateFloorPayload>,
+) -> Result<(StatusCode, Json<FloorResponse>), AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let floor = state.location_service.create_floor(payload).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(FloorResponse {
+            id: floor.id,
+            floor_number: floor.floor_number,
+            building_id: floor.building_id,
+            building_name: floor.building_name,
+            site_id: floor.site_id,
+            site_name: floor.site_name,
+            city_id: floor.city_id,
+            city_name: floor.city_name,
+            state_id: floor.state_id,
+            state_name: floor.state_name,
+            state_code: floor.state_code,
+            description: floor.description,
+            created_at: floor.created_at,
+            updated_at: floor.updated_at,
+        }),
+    ))
+}
+
+/// PUT /admin/locations/floors/:id
+pub async fn update_floor(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateFloorPayload>,
+) -> Result<Json<FloorResponse>, AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let floor = state.location_service.update_floor(id, payload).await?;
+
+    Ok(Json(FloorResponse {
+        id: floor.id,
+        floor_number: floor.floor_number,
+        building_id: floor.building_id,
+        building_name: floor.building_name,
+        site_id: floor.site_id,
+        site_name: floor.site_name,
+        city_id: floor.city_id,
+        city_name: floor.city_name,
+        state_id: floor.state_id,
+        state_name: floor.state_name,
+        state_code: floor.state_code,
+        description: floor.description,
+        created_at: floor.created_at,
+        updated_at: floor.updated_at,
+    }))
+}
+
+/// DELETE /admin/locations/floors/:id
+pub async fn delete_floor(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.location_service.delete_floor(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
