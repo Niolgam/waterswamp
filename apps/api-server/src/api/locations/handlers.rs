@@ -5,11 +5,12 @@ use axum::{
 };
 use domain::models::{
     CreateBuildingTypePayload, CreateCityPayload, CreateDepartmentCategoryPayload,
-    CreateSiteTypePayload, CreateSpaceTypePayload, CreateStatePayload, ListBuildingTypesQuery,
-    ListCitiesQuery, ListDepartmentCategoriesQuery, ListSiteTypesQuery, ListSpaceTypesQuery,
-    ListStatesQuery, PaginatedBuildingTypes, PaginatedCities, PaginatedDepartmentCategories,
-    PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates, UpdateBuildingTypePayload,
-    UpdateCityPayload, UpdateDepartmentCategoryPayload, UpdateSiteTypePayload,
+    CreateSitePayload, CreateSiteTypePayload, CreateSpaceTypePayload, CreateStatePayload,
+    ListBuildingTypesQuery, ListCitiesQuery, ListDepartmentCategoriesQuery, ListSitesQuery,
+    ListSiteTypesQuery, ListSpaceTypesQuery, ListStatesQuery, PaginatedBuildingTypes,
+    PaginatedCities, PaginatedDepartmentCategories, PaginatedSites, PaginatedSiteTypes,
+    PaginatedSpaceTypes, PaginatedStates, UpdateBuildingTypePayload, UpdateCityPayload,
+    UpdateDepartmentCategoryPayload, UpdateSitePayload, UpdateSiteTypePayload,
     UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use uuid::Uuid;
@@ -19,7 +20,7 @@ use crate::infra::{errors::AppError, state::AppState};
 
 use super::contracts::{
     BuildingTypeResponse, CityResponse, CityWithStateResponse, DepartmentCategoryResponse,
-    SiteTypeResponse, SpaceTypeResponse, StateResponse,
+    SiteResponse, SiteTypeResponse, SpaceTypeResponse, StateResponse,
 };
 
 // ============================
@@ -546,5 +547,118 @@ pub async fn delete_department_category(
         .location_service
         .delete_department_category(id)
         .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ============================
+// Site Handlers (Phase 3A)
+// ============================
+
+/// GET /admin/locations/sites
+pub async fn list_sites(
+    State(state): State<AppState>,
+    Query(params): Query<ListSitesQuery>,
+) -> Result<Json<PaginatedSites>, AppError> {
+    let result = state
+        .location_service
+        .list_sites(
+            params.limit,
+            params.offset,
+            params.search,
+            params.city_id,
+            params.site_type_id,
+        )
+        .await?;
+
+    Ok(Json(result))
+}
+
+/// GET /admin/locations/sites/:id
+pub async fn get_site(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<SiteResponse>, AppError> {
+    let site = state.location_service.get_site(id).await?;
+
+    Ok(Json(SiteResponse {
+        id: site.id,
+        name: site.name,
+        city_id: site.city_id,
+        city_name: site.city_name,
+        state_id: site.state_id,
+        state_name: site.state_name,
+        state_code: site.state_code,
+        site_type_id: site.site_type_id,
+        site_type_name: site.site_type_name,
+        address: site.address,
+        created_at: site.created_at,
+        updated_at: site.updated_at,
+    }))
+}
+
+/// POST /admin/locations/sites
+pub async fn create_site(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateSitePayload>,
+) -> Result<(StatusCode, Json<SiteResponse>), AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let site = state.location_service.create_site(payload).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(SiteResponse {
+            id: site.id,
+            name: site.name,
+            city_id: site.city_id,
+            city_name: site.city_name,
+            state_id: site.state_id,
+            state_name: site.state_name,
+            state_code: site.state_code,
+            site_type_id: site.site_type_id,
+            site_type_name: site.site_type_name,
+            address: site.address,
+            created_at: site.created_at,
+            updated_at: site.updated_at,
+        }),
+    ))
+}
+
+/// PUT /admin/locations/sites/:id
+pub async fn update_site(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateSitePayload>,
+) -> Result<Json<SiteResponse>, AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let site = state.location_service.update_site(id, payload).await?;
+
+    Ok(Json(SiteResponse {
+        id: site.id,
+        name: site.name,
+        city_id: site.city_id,
+        city_name: site.city_name,
+        state_id: site.state_id,
+        state_name: site.state_name,
+        state_code: site.state_code,
+        site_type_id: site.site_type_id,
+        site_type_name: site.site_type_name,
+        address: site.address,
+        created_at: site.created_at,
+        updated_at: site.updated_at,
+    }))
+}
+
+/// DELETE /admin/locations/sites/:id
+pub async fn delete_site(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.location_service.delete_site(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

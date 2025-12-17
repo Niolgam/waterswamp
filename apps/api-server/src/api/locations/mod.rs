@@ -39,7 +39,7 @@ use crate::infra::state::AppState;
 
 pub use contracts::{
     BuildingTypeResponse, CityResponse, CityWithStateResponse, DepartmentCategoryResponse,
-    SiteTypeResponse, SpaceTypeResponse, StateResponse,
+    SiteResponse, SiteTypeResponse, SpaceTypeResponse, StateResponse,
 };
 
 // =============================================================================
@@ -107,6 +107,16 @@ pub use contracts::{
 /// | POST   | /admin/locations/department-categories       | create_department_category   | Criar nova categoria de departamento   |
 /// | PUT    | /admin/locations/department-categories/:id   | update_department_category   | Atualizar categoria de departamento    |
 /// | DELETE | /admin/locations/department-categories/:id   | delete_department_category   | Deletar categoria de departamento      |
+///
+/// # Rotas - Sites (Phase 3A)
+///
+/// | Método | Path                         | Handler      | Descrição                                    |
+/// |--------|------------------------------|--------------|----------------------------------------------|
+/// | GET    | /admin/locations/sites       | list_sites   | Listar sites (com filtros city_id, site_type_id) |
+/// | GET    | /admin/locations/sites/:id   | get_site     | Obter site por ID (com dados relacionados)   |
+/// | POST   | /admin/locations/sites       | create_site  | Criar novo site                              |
+/// | PUT    | /admin/locations/sites/:id   | update_site  | Atualizar site                               |
+/// | DELETE | /admin/locations/sites/:id   | delete_site  | Deletar site                                 |
 pub fn router() -> Router<AppState> {
     let states_router = Router::new()
         .route("/", get(handlers::list_states).post(handlers::create_state))
@@ -174,6 +184,15 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_department_category),
         );
 
+    let sites_router = Router::new()
+        .route("/", get(handlers::list_sites).post(handlers::create_site))
+        .route(
+            "/:id",
+            get(handlers::get_site)
+                .put(handlers::update_site)
+                .delete(handlers::delete_site),
+        );
+
     Router::new()
         .nest("/states", states_router)
         .nest("/cities", cities_router)
@@ -181,4 +200,5 @@ pub fn router() -> Router<AppState> {
         .nest("/building-types", building_types_router)
         .nest("/space-types", space_types_router)
         .nest("/department-categories", department_categories_router)
+        .nest("/sites", sites_router)
 }
