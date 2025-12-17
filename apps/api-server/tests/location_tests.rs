@@ -4070,3 +4070,1505 @@ async fn test_floor_endpoints_require_admin_authorization() {
         .await;
     assert_eq!(delete_response.status_code(), StatusCode::FORBIDDEN);
 }
+
+// =============================================================================
+// SPACE TESTS (Phase 3D)
+// =============================================================================
+
+#[tokio::test]
+async fn test_create_space_success() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "São Paulo",
+            "code": "SP"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "São Paulo",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Corporativo"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Escritório"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala de Reunião"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sede Central",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Torre Principal",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 5,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    // Create space
+    let response = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala 501",
+            "floor_id": floor["id"],
+            "space_type_id": space_type["id"],
+            "description": "Sala de reunião executiva"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::CREATED);
+    let body: Value = response.json();
+
+    assert!(body["id"].is_string());
+    assert_eq!(body["name"], "Sala 501");
+    assert_eq!(body["floor_id"], floor["id"]);
+    assert_eq!(body["floor_number"], 5);
+    assert_eq!(body["building_id"], building["id"]);
+    assert_eq!(body["building_name"], "Torre Principal");
+    assert_eq!(body["site_id"], site["id"]);
+    assert_eq!(body["site_name"], "Sede Central");
+    assert_eq!(body["city_id"], city["id"]);
+    assert_eq!(body["city_name"], "São Paulo");
+    assert_eq!(body["state_id"], state["id"]);
+    assert_eq!(body["state_name"], "São Paulo");
+    assert_eq!(body["state_code"], "SP");
+    assert_eq!(body["space_type_id"], space_type["id"]);
+    assert_eq!(body["space_type_name"], "Sala de Reunião");
+    assert_eq!(body["description"], "Sala de reunião executiva");
+    assert!(body["created_at"].is_string());
+    assert!(body["updated_at"].is_string());
+}
+
+#[tokio::test]
+async fn test_create_space_with_invalid_floor_id_returns_404() {
+    let app = common::spawn_app().await;
+
+    // Create space_type
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala de Reunião"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let fake_floor_id = "00000000-0000-0000-0000-000000000000";
+
+    let response = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala 100",
+            "floor_id": fake_floor_id,
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_create_space_with_invalid_space_type_id_returns_404() {
+    let app = common::spawn_app().await;
+
+    // Create full hierarchy up to floor
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Rio de Janeiro",
+            "code": "RJ"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Rio de Janeiro",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Comercial"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Shopping"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Shopping Center",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Torre A",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 2,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    let fake_space_type_id = "00000000-0000-0000-0000-000000000000";
+
+    let response = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Loja 201",
+            "floor_id": floor["id"],
+            "space_type_id": fake_space_type_id
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_create_space_duplicate_name_in_same_floor_returns_conflict() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Minas Gerais",
+            "code": "MG"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Belo Horizonte",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Industrial"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Fábrica"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Laboratório"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Complexo Industrial",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Prédio A",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 1,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    // Create first space
+    let response1 = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Lab A1",
+            "floor_id": floor["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+    assert_eq!(response1.status_code(), StatusCode::CREATED);
+
+    // Try to create another space with same name in same floor
+    let response2 = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Lab A1",
+            "floor_id": floor["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+
+    assert_eq!(response2.status_code(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_create_space_same_name_in_different_floors_succeeds() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Paraná",
+            "code": "PR"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Curitiba",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Hotelaria"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Hotel"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Suíte"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Hotel Plaza",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Torre Norte",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    // Create two different floors
+    let floor1_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 5,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor1: Value = floor1_response.json();
+
+    let floor2_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 6,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor2: Value = floor2_response.json();
+
+    // Create space in floor1
+    let response1 = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Suíte 01",
+            "floor_id": floor1["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+    assert_eq!(response1.status_code(), StatusCode::CREATED);
+
+    // Create space with same name in floor2 - should succeed
+    let response2 = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Suíte 01",
+            "floor_id": floor2["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+
+    assert_eq!(response2.status_code(), StatusCode::CREATED);
+    let body2: Value = response2.json();
+    assert_eq!(body2["name"], "Suíte 01");
+    assert_eq!(body2["floor_id"], floor2["id"]);
+    assert_eq!(body2["floor_number"], 6);
+}
+
+#[tokio::test]
+async fn test_get_space_with_relations() {
+    let app = common::spawn_app().await;
+
+    // Create full hierarchy
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Bahia",
+            "code": "BA"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Salvador",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Educacional"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Campus"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala de Aula"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Campus Universitário",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Bloco A",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 2,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    let space_response = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala 201",
+            "floor_id": floor["id"],
+            "space_type_id": space_type["id"],
+            "description": "Sala de aula grande"
+        }))
+        .await;
+    let space: Value = space_response.json();
+
+    // Get space and verify all relations
+    let response = app
+        .api
+        .get(&format!(
+            "/api/admin/locations/spaces/{}",
+            space["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+
+    assert_eq!(body["id"], space["id"]);
+    assert_eq!(body["name"], "Sala 201");
+    assert_eq!(body["floor_id"], floor["id"]);
+    assert_eq!(body["floor_number"], 2);
+    assert_eq!(body["building_id"], building["id"]);
+    assert_eq!(body["building_name"], "Bloco A");
+    assert_eq!(body["site_id"], site["id"]);
+    assert_eq!(body["site_name"], "Campus Universitário");
+    assert_eq!(body["city_id"], city["id"]);
+    assert_eq!(body["city_name"], "Salvador");
+    assert_eq!(body["state_id"], state["id"]);
+    assert_eq!(body["state_name"], "Bahia");
+    assert_eq!(body["state_code"], "BA");
+    assert_eq!(body["space_type_id"], space_type["id"]);
+    assert_eq!(body["space_type_name"], "Sala de Aula");
+    assert_eq!(body["description"], "Sala de aula grande");
+}
+
+#[tokio::test]
+async fn test_update_space_success() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Ceará",
+            "code": "CE"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Fortaleza",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Residencial"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Condomínio"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Apartamento"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Residencial Beira Mar",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Torre A",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 8,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    let space_response = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Apto 801",
+            "floor_id": floor["id"],
+            "space_type_id": space_type["id"],
+            "description": "Apartamento 2 quartos"
+        }))
+        .await;
+    let space: Value = space_response.json();
+
+    // Update space
+    let response = app
+        .api
+        .put(&format!(
+            "/api/admin/locations/spaces/{}",
+            space["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Apto 802",
+            "description": "Apartamento 3 quartos"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+
+    assert_eq!(body["id"], space["id"]);
+    assert_eq!(body["name"], "Apto 802");
+    assert_eq!(body["floor_id"], floor["id"]);
+    assert_eq!(body["description"], "Apartamento 3 quartos");
+}
+
+#[tokio::test]
+async fn test_delete_space_success() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Pernambuco",
+            "code": "PE"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Recife",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Médico"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Hospital"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Consultório"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Hospital Central",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Ala Sul",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 3,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    let space_response = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Consultório 301",
+            "floor_id": floor["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+    let space: Value = space_response.json();
+
+    // Delete space
+    let response = app
+        .api
+        .delete(&format!(
+            "/api/admin/locations/spaces/{}",
+            space["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+
+    // Verify space is deleted
+    let get_response = app
+        .api
+        .get(&format!(
+            "/api/admin/locations/spaces/{}",
+            space["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(get_response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_list_spaces_with_pagination() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Goiás",
+            "code": "GO"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Goiânia",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Logístico"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Armazém"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Depósito"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Centro Logístico",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Armazém A",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 1,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    // Create 5 spaces
+    for i in 1..=5 {
+        app.api
+            .post("/api/admin/locations/spaces")
+            .add_header("Authorization", format!("Bearer {}", app.admin_token))
+            .json(&json!({
+                "name": format!("Dep {}", i),
+                "floor_id": floor["id"],
+                "space_type_id": space_type["id"]
+            }))
+            .await;
+    }
+
+    // List spaces with pagination (limit=2)
+    let response = app
+        .api
+        .get("/api/admin/locations/spaces?limit=2")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let spaces = body["spaces"].as_array().unwrap();
+
+    assert_eq!(spaces.len(), 2);
+    assert_eq!(body["total"].as_i64().unwrap(), 5);
+    assert_eq!(body["limit"].as_i64().unwrap(), 2);
+    assert_eq!(body["offset"].as_i64().unwrap(), 0);
+}
+
+#[tokio::test]
+async fn test_list_spaces_filtered_by_floor() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Amazonas",
+            "code": "AM"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Manaus",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Comercial"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Torre Comercial"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Escritório"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Centro Empresarial",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Torre Alpha",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    // Create two floors
+    let floor1_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 10,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor1: Value = floor1_response.json();
+
+    let floor2_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 11,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor2: Value = floor2_response.json();
+
+    // Create spaces in floor1
+    app.api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala 1001",
+            "floor_id": floor1["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+
+    app.api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala 1002",
+            "floor_id": floor1["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+
+    // Create space in floor2
+    app.api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala 1101",
+            "floor_id": floor2["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+
+    // List spaces filtered by floor1
+    let response = app
+        .api
+        .get(&format!(
+            "/api/admin/locations/spaces?floor_id={}",
+            floor1["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let spaces = body["spaces"].as_array().unwrap();
+
+    // Should return only spaces from floor1
+    assert_eq!(spaces.len(), 2);
+    for space in spaces {
+        assert_eq!(space["floor_id"], floor1["id"]);
+    }
+}
+
+#[tokio::test]
+async fn test_list_spaces_filtered_by_space_type() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Distrito Federal",
+            "code": "DF"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Brasília",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Coworking"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Prédio Comercial"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    // Create two space types
+    let space_type1_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala Privada"
+        }))
+        .await;
+    let space_type1: Value = space_type1_response.json();
+
+    let space_type2_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala de Reunião"
+        }))
+        .await;
+    let space_type2: Value = space_type2_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Coworking Hub",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Edifício Central",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 7,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    // Create spaces with different types
+    app.api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala 701",
+            "floor_id": floor["id"],
+            "space_type_id": space_type1["id"]
+        }))
+        .await;
+
+    app.api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Sala 702",
+            "floor_id": floor["id"],
+            "space_type_id": space_type1["id"]
+        }))
+        .await;
+
+    app.api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Reunião A",
+            "floor_id": floor["id"],
+            "space_type_id": space_type2["id"]
+        }))
+        .await;
+
+    // List spaces filtered by space_type1
+    let response = app
+        .api
+        .get(&format!(
+            "/api/admin/locations/spaces?space_type_id={}",
+            space_type1["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let spaces = body["spaces"].as_array().unwrap();
+
+    // Should return only spaces with space_type1
+    assert_eq!(spaces.len(), 2);
+    for space in spaces {
+        assert_eq!(space["space_type_id"], space_type1["id"]);
+    }
+}
+
+#[tokio::test]
+async fn test_space_endpoints_require_admin_authorization() {
+    let app = common::spawn_app().await;
+
+    // Create prerequisites with admin token
+    let state_response = app
+        .api
+        .post("/api/admin/locations/states")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Espírito Santo",
+            "code": "ES"
+        }))
+        .await;
+    let state: Value = state_response.json();
+
+    let city_response = app
+        .api
+        .post("/api/admin/locations/cities")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Vitória",
+            "state_id": state["id"]
+        }))
+        .await;
+    let city: Value = city_response.json();
+
+    let site_type_response = app
+        .api
+        .post("/api/admin/locations/site-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Laboratório"
+        }))
+        .await;
+    let site_type: Value = site_type_response.json();
+
+    let building_type_response = app
+        .api
+        .post("/api/admin/locations/building-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Pesquisa"
+        }))
+        .await;
+    let building_type: Value = building_type_response.json();
+
+    let space_type_response = app
+        .api
+        .post("/api/admin/locations/space-types")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Lab Química"
+        }))
+        .await;
+    let space_type: Value = space_type_response.json();
+
+    let site_response = app
+        .api
+        .post("/api/admin/locations/sites")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Centro de Pesquisa",
+            "city_id": city["id"],
+            "site_type_id": site_type["id"]
+        }))
+        .await;
+    let site: Value = site_response.json();
+
+    let building_response = app
+        .api
+        .post("/api/admin/locations/buildings")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Bloco Experimental",
+            "site_id": site["id"],
+            "building_type_id": building_type["id"]
+        }))
+        .await;
+    let building: Value = building_response.json();
+
+    let floor_response = app
+        .api
+        .post("/api/admin/locations/floors")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "floor_number": 1,
+            "building_id": building["id"]
+        }))
+        .await;
+    let floor: Value = floor_response.json();
+
+    let space_response = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "name": "Lab 101",
+            "floor_id": floor["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+    let space: Value = space_response.json();
+
+    // Try all space endpoints with regular user (non-admin) - should fail with 403
+    let list_response = app
+        .api
+        .get("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
+        .await;
+    assert_eq!(list_response.status_code(), StatusCode::FORBIDDEN);
+
+    let get_response = app
+        .api
+        .get(&format!(
+            "/api/admin/locations/spaces/{}",
+            space["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
+        .await;
+    assert_eq!(get_response.status_code(), StatusCode::FORBIDDEN);
+
+    let create_response = app
+        .api
+        .post("/api/admin/locations/spaces")
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
+        .json(&json!({
+            "name": "Lab 102",
+            "floor_id": floor["id"],
+            "space_type_id": space_type["id"]
+        }))
+        .await;
+    assert_eq!(create_response.status_code(), StatusCode::FORBIDDEN);
+
+    let update_response = app
+        .api
+        .put(&format!(
+            "/api/admin/locations/spaces/{}",
+            space["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
+        .json(&json!({
+            "name": "Lab 103"
+        }))
+        .await;
+    assert_eq!(update_response.status_code(), StatusCode::FORBIDDEN);
+
+    let delete_response = app
+        .api
+        .delete(&format!(
+            "/api/admin/locations/spaces/{}",
+            space["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
+        .await;
+    assert_eq!(delete_response.status_code(), StatusCode::FORBIDDEN);
+}
