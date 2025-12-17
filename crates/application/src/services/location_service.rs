@@ -2,18 +2,19 @@ use crate::errors::ServiceError;
 use domain::models::{
     BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto,
     CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload,
-    CreateDepartmentCategoryPayload, CreateSitePayload, CreateSiteTypePayload,
-    CreateSpaceTypePayload, CreateStatePayload, DepartmentCategoryDto, PaginatedBuildings,
-    PaginatedBuildingTypes, PaginatedCities, PaginatedDepartmentCategories, PaginatedSites,
-    PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates, SiteTypeDto,
-    SiteWithRelationsDto, SpaceTypeDto, StateDto, UpdateBuildingPayload,
-    UpdateBuildingTypePayload, UpdateCityPayload, UpdateDepartmentCategoryPayload,
-    UpdateSitePayload, UpdateSiteTypePayload, UpdateSpaceTypePayload, UpdateStatePayload,
+    CreateDepartmentCategoryPayload, CreateFloorPayload, CreateSitePayload, CreateSiteTypePayload,
+    CreateSpaceTypePayload, CreateStatePayload, DepartmentCategoryDto, FloorWithRelationsDto,
+    PaginatedBuildings, PaginatedBuildingTypes, PaginatedCities,
+    PaginatedDepartmentCategories, PaginatedFloors, PaginatedSites, PaginatedSiteTypes,
+    PaginatedSpaceTypes, PaginatedStates, SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto,
+    StateDto, UpdateBuildingPayload, UpdateBuildingTypePayload, UpdateCityPayload,
+    UpdateDepartmentCategoryPayload, UpdateFloorPayload, UpdateSitePayload, UpdateSiteTypePayload,
+    UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use domain::ports::{
     BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
-    DepartmentCategoryRepositoryPort, SiteRepositoryPort, SiteTypeRepositoryPort,
-    SpaceTypeRepositoryPort, StateRepositoryPort,
+    DepartmentCategoryRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
+    SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -27,6 +28,7 @@ pub struct LocationService {
     department_category_repo: Arc<dyn DepartmentCategoryRepositoryPort>,
     site_repo: Arc<dyn SiteRepositoryPort>,
     building_repo: Arc<dyn BuildingRepositoryPort>,
+    floor_repo: Arc<dyn FloorRepositoryPort>,
 }
 
 impl LocationService {
