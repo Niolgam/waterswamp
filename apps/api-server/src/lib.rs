@@ -165,7 +165,7 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     let config_arc = Arc::new(config.clone());
 
     info!("🔌 Conectando aos bancos de dados...");
-    let pool_auth = PgPool::connect(&config.auth_db).await?;
+    let pool_auth = PgPool::connect(&config.main_db).await?;
     let pool_logs = PgPool::connect(&config.logs_db).await?;
 
     info!("🔐 Inicializando Casbin...");
