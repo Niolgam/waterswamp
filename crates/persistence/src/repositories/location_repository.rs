@@ -2,17 +2,188 @@ use async_trait::async_trait;
 use domain::errors::RepositoryError;
 use domain::models::{
     BuildingDto, BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto,
-    DepartmentCategoryDto, FloorDto, FloorWithRelationsDto, SiteDto, SiteTypeDto,
-    SiteWithRelationsDto, SpaceTypeDto, StateDto,
+    CountryDto, DepartmentCategoryDto, FloorDto, FloorWithRelationsDto, SiteDto, SiteTypeDto,
+    SiteWithRelationsDto, SpaceDto, SpaceTypeDto, SpaceWithRelationsDto, StateDto,
+    StateWithCountryDto,
 };
 use domain::ports::{
     BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
-    DepartmentCategoryRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
-    SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    CountryRepositoryPort, DepartmentCategoryRepositoryPort, FloorRepositoryPort,
+    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    StateRepositoryPort,
 };
 use domain::value_objects::{LocationName, StateCode};
 use sqlx::PgPool;
 use uuid::Uuid;
+
+// ============================
+// Country Repository
+// ============================
+
+#[derive(Clone)]
+pub struct CountryRepository {
+    pool: PgPool,
+}
+
+impl CountryRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(e: sqlx::Error) -> RepositoryError {
+        if let Some(db_err) = e.as_database_error() {
+            if let Some(code) = db_err.code() {
+                if code == "23505" {
+                    return RepositoryError::Duplicate(db_err.message().to_string());
+                }
+                if code == "23503" {
+                    return RepositoryError::Database(
+                        "Foreign key constraint violation".to_string(),
+                    );
+                }
+            }
+        }
+        RepositoryError::Database(e.to_string())
+    }
+}
+
+#[async_trait]
+impl CountryRepositoryPort for CountryRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<CountryDto>, RepositoryError> {
+        sqlx::query_as::<_, CountryDto>(
+            "SELECT id, name, code, created_at, updated_at FROM countries WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_by_code(&self, code: &str) -> Result<Option<CountryDto>, RepositoryError> {
+        sqlx::query_as::<_, CountryDto>(
+            "SELECT id, name, code, created_at, updated_at FROM countries WHERE code = $1",
+        )
+        .bind(code)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM countries WHERE code = $1")
+            .bind(code)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+        Ok(count > 0)
+    }
+
+    async fn exists_by_code_excluding(
+        &self,
+        code: &str,
+        exclude_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM countries WHERE code = $1 AND id != $2")
+                .bind(code)
+                .bind(exclude_id)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(Self::map_err)?;
+        Ok(count > 0)
+    }
+
+    async fn create(
+        &self,
+        name: &LocationName,
+        code: &str,
+    ) -> Result<CountryDto, RepositoryError> {
+        sqlx::query_as::<_, CountryDto>(
+            "INSERT INTO countries (name, code) VALUES ($1, $2) RETURNING id, name, code, created_at, updated_at",
+        )
+        .bind(name.as_str())
+        .bind(code)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        code: Option<&str>,
+    ) -> Result<CountryDto, RepositoryError> {
+        let current = self.find_by_id(id).await?.ok_or(RepositoryError::NotFound)?;
+
+        let new_name = name.unwrap_or(&current.name);
+        let new_code = code.unwrap_or(&current.code);
+
+        sqlx::query_as::<_, CountryDto>(
+            "UPDATE countries SET name = $1, code = $2, updated_at = NOW() WHERE id = $3 RETURNING id, name, code, created_at, updated_at",
+        )
+        .bind(new_name.as_str())
+        .bind(new_code)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("DELETE FROM countries WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+    ) -> Result<(Vec<CountryDto>, i64), RepositoryError> {
+        let search_pattern = search.map(|s| format!("%{}%", s));
+
+        let countries = if let Some(ref pattern) = search_pattern {
+            sqlx::query_as::<_, CountryDto>(
+                "SELECT id, name, code, created_at, updated_at FROM countries WHERE name ILIKE $1 ORDER BY name LIMIT $2 OFFSET $3",
+            )
+            .bind(pattern)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Self::map_err)?
+        } else {
+            sqlx::query_as::<_, CountryDto>(
+                "SELECT id, name, code, created_at, updated_at FROM countries ORDER BY name LIMIT $1 OFFSET $2",
+            )
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Self::map_err)?
+        };
+
+        let total: i64 = if let Some(ref pattern) = search_pattern {
+            sqlx::query_scalar("SELECT COUNT(*) FROM countries WHERE name ILIKE $1")
+                .bind(pattern)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(Self::map_err)?
+        } else {
+            sqlx::query_scalar("SELECT COUNT(*) FROM countries")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(Self::map_err)?
+        };
+
+        Ok((countries, total))
+    }
+}
 
 // ============================
 // State Repository
@@ -49,7 +220,28 @@ impl StateRepository {
 impl StateRepositoryPort for StateRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<StateDto>, RepositoryError> {
         sqlx::query_as::<_, StateDto>(
-            "SELECT id, name, code, created_at, updated_at FROM states WHERE id = $1",
+            "SELECT id, name, code, country_id, created_at, updated_at FROM states WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_with_country_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StateWithCountryDto>, RepositoryError> {
+        sqlx::query_as::<_, StateWithCountryDto>(
+            r#"
+            SELECT
+                s.id, s.name, s.code, s.country_id,
+                c.name as country_name, c.code as country_code,
+                s.created_at, s.updated_at
+            FROM states s
+            INNER JOIN countries c ON s.country_id = c.id
+            WHERE s.id = $1
+            "#,
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -59,7 +251,7 @@ impl StateRepositoryPort for StateRepository {
 
     async fn find_by_code(&self, code: &StateCode) -> Result<Option<StateDto>, RepositoryError> {
         sqlx::query_as::<_, StateDto>(
-            "SELECT id, name, code, created_at, updated_at FROM states WHERE code = $1",
+            "SELECT id, name, code, country_id, created_at, updated_at FROM states WHERE code = $1",
         )
         .bind(code.as_str())
         .fetch_optional(&self.pool)
@@ -95,12 +287,14 @@ impl StateRepositoryPort for StateRepository {
         &self,
         name: &LocationName,
         code: &StateCode,
+        country_id: Uuid,
     ) -> Result<StateDto, RepositoryError> {
         sqlx::query_as::<_, StateDto>(
-            "INSERT INTO states (name, code) VALUES ($1, $2) RETURNING id, name, code, created_at, updated_at",
+            "INSERT INTO states (name, code, country_id) VALUES ($1, $2, $3) RETURNING id, name, code, country_id, created_at, updated_at",
         )
         .bind(name.as_str())
         .bind(code.as_str())
+        .bind(country_id)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -111,6 +305,7 @@ impl StateRepositoryPort for StateRepository {
         id: Uuid,
         name: Option<&LocationName>,
         code: Option<&StateCode>,
+        country_id: Option<Uuid>,
     ) -> Result<StateDto, RepositoryError> {
         let mut query_parts = vec![];
         let mut bind_index = 1;
@@ -123,6 +318,10 @@ impl StateRepositoryPort for StateRepository {
             query_parts.push(format!("code = ${}", bind_index));
             bind_index += 1;
         }
+        if country_id.is_some() {
+            query_parts.push(format!("country_id = ${}", bind_index));
+            bind_index += 1;
+        }
 
         if query_parts.is_empty() {
             // If no fields to update, just return the existing state
@@ -133,7 +332,7 @@ impl StateRepositoryPort for StateRepository {
         }
 
         let query_str = format!(
-            "UPDATE states SET {} WHERE id = ${} RETURNING id, name, code, created_at, updated_at",
+            "UPDATE states SET {} WHERE id = ${} RETURNING id, name, code, country_id, created_at, updated_at",
             query_parts.join(", "),
             bind_index
         );
@@ -145,6 +344,9 @@ impl StateRepositoryPort for StateRepository {
         }
         if let Some(code_val) = code {
             query = query.bind(code_val.as_str());
+        }
+        if let Some(country_id_val) = country_id {
+            query = query.bind(country_id_val);
         }
         query = query.bind(id);
 
@@ -166,47 +368,72 @@ impl StateRepositoryPort for StateRepository {
         limit: i64,
         offset: i64,
         search: Option<String>,
-    ) -> Result<(Vec<StateDto>, i64), RepositoryError> {
+        country_id: Option<Uuid>,
+    ) -> Result<(Vec<StateWithCountryDto>, i64), RepositoryError> {
         let search_pattern = search.map(|s| format!("%{}%", s));
+        let mut conditions = Vec::new();
+        let mut bind_index = 1;
 
-        let states = if let Some(ref pattern) = search_pattern {
-            sqlx::query_as::<_, StateDto>(
-                "SELECT id, name, code, created_at, updated_at FROM states
-                 WHERE name ILIKE $1 OR code ILIKE $1
-                 ORDER BY name LIMIT $2 OFFSET $3",
-            )
-            .bind(pattern)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Self::map_err)?
+        if search_pattern.is_some() {
+            conditions.push(format!("(s.name ILIKE ${} OR s.code ILIKE ${})", bind_index, bind_index));
+            bind_index += 1;
+        }
+        if country_id.is_some() {
+            conditions.push(format!("s.country_id = ${}", bind_index));
+            bind_index += 1;
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
         } else {
-            sqlx::query_as::<_, StateDto>(
-                "SELECT id, name, code, created_at, updated_at FROM states
-                 ORDER BY name LIMIT $1 OFFSET $2",
-            )
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Self::map_err)?
+            format!("WHERE {}", conditions.join(" AND "))
         };
 
-        let total: i64 = if let Some(ref pattern) = search_pattern {
-            sqlx::query_scalar(
-                "SELECT COUNT(*) FROM states WHERE name ILIKE $1 OR code ILIKE $1",
-            )
-            .bind(pattern)
+        let query_str = format!(
+            r#"
+            SELECT
+                s.id, s.name, s.code, s.country_id,
+                c.name as country_name, c.code as country_code,
+                s.created_at, s.updated_at
+            FROM states s
+            INNER JOIN countries c ON s.country_id = c.id
+            {}
+            ORDER BY s.name LIMIT ${} OFFSET ${}
+            "#,
+            where_clause, bind_index, bind_index + 1
+        );
+
+        let mut query = sqlx::query_as::<_, StateWithCountryDto>(&query_str);
+
+        if let Some(ref pattern) = search_pattern {
+            query = query.bind(pattern);
+        }
+        if let Some(country_id_val) = country_id {
+            query = query.bind(country_id_val);
+        }
+        query = query.bind(limit).bind(offset);
+
+        let states = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+
+        // Count query
+        let count_query_str = format!(
+            "SELECT COUNT(*) FROM states s INNER JOIN countries c ON s.country_id = c.id {}",
+            where_clause
+        );
+
+        let mut count_query = sqlx::query_scalar(&count_query_str);
+
+        if let Some(ref pattern) = search_pattern {
+            count_query = count_query.bind(pattern);
+        }
+        if let Some(country_id_val) = country_id {
+            count_query = count_query.bind(country_id_val);
+        }
+
+        let total: i64 = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?
-        } else {
-            sqlx::query_scalar("SELECT COUNT(*) FROM states")
-                .fetch_one(&self.pool)
-                .await
-                .map_err(Self::map_err)?
-        };
+            .map_err(Self::map_err)?;
 
         Ok((states, total))
     }
@@ -1269,7 +1496,7 @@ impl SiteRepository {
             sqlx::Error::Database(db_err) => {
                 if let Some(code) = db_err.code() {
                     if code == "23505" {
-                        return RepositoryError::DuplicateKey(
+                        return RepositoryError::Duplicate(
                             db_err
                                 .message()
                                 .to_string()
@@ -1280,7 +1507,7 @@ impl SiteRepository {
                                 .to_string(),
                         );
                     } else if code == "23503" {
-                        return RepositoryError::ForeignKeyViolation(
+                        return RepositoryError::Database(
                             "Foreign key constraint violated".to_string(),
                         );
                     }
@@ -1289,7 +1516,7 @@ impl SiteRepository {
             sqlx::Error::RowNotFound => return RepositoryError::NotFound,
             _ => {}
         }
-        RepositoryError::DatabaseError(err.to_string())
+        RepositoryError::Database(err.to_string())
     }
 }
 
@@ -1602,7 +1829,7 @@ impl BuildingRepositoryPort for BuildingRepository {
         let existing = self
             .find_by_id(id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound("Building not found".to_string()))?;
+            .ok_or(RepositoryError::NotFound)?;
 
         let final_name = name.unwrap_or(&existing.name);
         let final_site_id = site_id.unwrap_or(existing.site_id);
@@ -1829,7 +2056,7 @@ impl FloorRepositoryPort for FloorRepository {
         let existing = self
             .find_by_id(id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound("Floor not found".to_string()))?;
+            .ok_or(RepositoryError::NotFound)?;
 
         let final_floor_number = floor_number.unwrap_or(existing.floor_number);
         let final_building_id = building_id.unwrap_or(existing.building_id);
@@ -1960,12 +2187,12 @@ impl SpaceRepository {
             sqlx::Error::Database(db_err) => {
                 if let Some(constraint) = db_err.constraint() {
                     if constraint.contains("unique_space_name_per_floor") {
-                        return RepositoryError::AlreadyExists(
+                        return RepositoryError::Duplicate(
                             "Já existe um espaço com este nome neste andar".to_string(),
                         );
                     }
                     if constraint.contains("fk") || constraint.contains("foreign") {
-                        return RepositoryError::NotFound(
+                        return RepositoryError::Database(
                             "Andar ou tipo de espaço não encontrado".to_string(),
                         );
                     }
@@ -2069,7 +2296,7 @@ impl SpaceRepositoryPort for SpaceRepository {
         let current = self
             .find_by_id(id)
             .await?
-            .ok_or_else(|| RepositoryError::NotFound("Espaço não encontrado".to_string()))?;
+            .ok_or(RepositoryError::NotFound)?;
 
         // Use provided values or keep current ones
         let final_name = name.unwrap_or(&current.name);
