@@ -7,8 +7,8 @@ pub mod handlers;
 
 pub use contracts::DepartmentCategoryResponse;
 
-use axum::{routing::get, Router};
 use crate::infra::state::AppState;
+use axum::{routing::get, Router};
 
 /// Creates the departments router with DepartmentCategory routes
 pub fn router() -> Router<AppState> {
@@ -18,7 +18,7 @@ pub fn router() -> Router<AppState> {
             get(handlers::list_department_categories).post(handlers::create_department_category),
         )
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_department_category)
                 .put(handlers::update_department_category)
                 .delete(handlers::delete_department_category),

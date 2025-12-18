@@ -10,8 +10,8 @@ pub use contracts::{
     SpaceResponse, SpaceTypeResponse,
 };
 
-use axum::{routing::get, Router};
 use crate::infra::state::AppState;
+use axum::{routing::get, Router};
 
 /// Creates the facilities router with all Type and Entity routes
 pub fn router() -> Router<AppState> {
@@ -21,7 +21,7 @@ pub fn router() -> Router<AppState> {
             get(handlers::list_site_types).post(handlers::create_site_type),
         )
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_site_type)
                 .put(handlers::update_site_type)
                 .delete(handlers::delete_site_type),
@@ -33,7 +33,7 @@ pub fn router() -> Router<AppState> {
             get(handlers::list_building_types).post(handlers::create_building_type),
         )
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_building_type)
                 .put(handlers::update_building_type)
                 .delete(handlers::delete_building_type),
@@ -45,7 +45,7 @@ pub fn router() -> Router<AppState> {
             get(handlers::list_space_types).post(handlers::create_space_type),
         )
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_space_type)
                 .put(handlers::update_space_type)
                 .delete(handlers::delete_space_type),
@@ -54,7 +54,7 @@ pub fn router() -> Router<AppState> {
     let sites_router = Router::new()
         .route("/", get(handlers::list_sites).post(handlers::create_site))
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_site)
                 .put(handlers::update_site)
                 .delete(handlers::delete_site),
@@ -66,31 +66,25 @@ pub fn router() -> Router<AppState> {
             get(handlers::list_buildings).post(handlers::create_building),
         )
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_building)
                 .put(handlers::update_building)
                 .delete(handlers::delete_building),
         );
 
     let floors_router = Router::new()
+        .route("/", get(handlers::list_floors).post(handlers::create_floor))
         .route(
-            "/",
-            get(handlers::list_floors).post(handlers::create_floor),
-        )
-        .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_floor)
                 .put(handlers::update_floor)
                 .delete(handlers::delete_floor),
         );
 
     let spaces_router = Router::new()
+        .route("/", get(handlers::list_spaces).post(handlers::create_space))
         .route(
-            "/",
-            get(handlers::list_spaces).post(handlers::create_space),
-        )
-        .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_space)
                 .put(handlers::update_space)
                 .delete(handlers::delete_space),
