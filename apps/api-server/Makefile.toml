@@ -29,8 +29,8 @@ script = [
  "set +a",
  "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
  "echo 'Rodando migrações AUTH com $DATABASE_URL'",
- # Roda o comando de migração
- "sqlx migrate run --source ../../crates/persistence/migrations_auth"
+ # Roda o comando de migração usando tabela separada
+ "sqlx migrate run --source ../../crates/persistence/migrations_auth --migrations-table _sqlx_migrations_auth"
 ]
 
 # --- Tarefa para RODAR migração MAIN (Business Domain) ---
@@ -42,8 +42,8 @@ script = [
  "set +a",
  "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
  "echo 'Rodando migrações MAIN com $DATABASE_URL'",
- # Roda o comando de migração
- "sqlx migrate run --source ../../crates/persistence/migrations_main"
+ # Roda o comando de migração usando tabela separada
+ "sqlx migrate run --source ../../crates/persistence/migrations_main --migrations-table _sqlx_migrations_main"
 ]
 
 # --- Tarefa para CRIAR nova migração de AUTENTICAÇÃO ---
@@ -124,8 +124,8 @@ script = [
  # O -y confirma automaticamente sem pedir input
  "sqlx database drop -y",
  "sqlx database create",
- "sqlx migrate run --source ../../crates/persistence/migrations_auth",
- "sqlx migrate run --source ../../crates/persistence/migrations_main"
+ "sqlx migrate run --source ../../crates/persistence/migrations_auth --migrations-table _sqlx_migrations_auth",
+ "sqlx migrate run --source ../../crates/persistence/migrations_main --migrations-table _sqlx_migrations_main"
 ]
 
 # --- Tarefa para RESETAR o banco LOGS ---
