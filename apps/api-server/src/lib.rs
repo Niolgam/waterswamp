@@ -17,16 +17,16 @@ use application::services::{
 };
 use domain::ports::{
     AuthRepositoryPort, BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
-    DepartmentCategoryRepositoryPort, EmailServicePort, FloorRepositoryPort, MfaRepositoryPort,
-    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
-    StateRepositoryPort, UserRepositoryPort,
+    CountryRepositoryPort, DepartmentCategoryRepositoryPort, EmailServicePort, FloorRepositoryPort,
+    MfaRepositoryPort, SiteRepositoryPort, SiteTypeRepositoryPort, SpaceRepositoryPort,
+    SpaceTypeRepositoryPort, StateRepositoryPort, UserRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
     location_repository::{
-        BuildingRepository, BuildingTypeRepository, CityRepository, DepartmentCategoryRepository,
-        FloorRepository, SiteRepository, SiteTypeRepository, SpaceRepository,
-        SpaceTypeRepository, StateRepository,
+        BuildingRepository, BuildingTypeRepository, CityRepository, CountryRepository,
+        DepartmentCategoryRepository, FloorRepository, SiteRepository, SiteTypeRepository,
+        SpaceRepository, SpaceTypeRepository, StateRepository,
     },
     mfa_repository::MfaRepository,
     user_repository::UserRepository,
@@ -93,6 +93,8 @@ pub fn build_application_state(
     ));
 
     // Location repositories and service
+    let country_repo_port: Arc<dyn CountryRepositoryPort> =
+        Arc::new(CountryRepository::new(pool_auth.clone()));
     let state_repo_port: Arc<dyn StateRepositoryPort> =
         Arc::new(StateRepository::new(pool_auth.clone()));
     let city_repo_port: Arc<dyn CityRepositoryPort> =
@@ -115,6 +117,7 @@ pub fn build_application_state(
         Arc::new(SpaceRepository::new(pool_auth.clone()));
 
     let location_service = Arc::new(LocationService::new(
+        country_repo_port,
         state_repo_port,
         city_repo_port,
         site_type_repo_port,
