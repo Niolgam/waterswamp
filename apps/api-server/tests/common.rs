@@ -41,6 +41,10 @@ pub async fn spawn_app() -> TestApp {
         .run(&pool_auth)
         .await
         .expect("Migration auth");
+    sqlx::migrate!("../../crates/persistence/migrations_main")
+        .run(&pool_auth)
+        .await
+        .expect("Migration main");
     sqlx::migrate!("../../crates/persistence/migrations_logs")
         .run(&pool_logs)
         .await

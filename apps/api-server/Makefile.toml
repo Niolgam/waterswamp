@@ -33,6 +33,19 @@ script = [
  "sqlx migrate run --source ../../crates/persistence/migrations_auth"
 ]
 
+# --- Tarefa para RODAR migração MAIN (Business Domain) ---
+[tasks.migrate-main]
+description = "Executa migrações do banco MAIN (business domain)"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "echo 'Rodando migrações MAIN com $DATABASE_URL'",
+ # Roda o comando de migração
+ "sqlx migrate run --source ../../crates/persistence/migrations_main"
+]
+
 # --- Tarefa para CRIAR nova migração de AUTENTICAÇÃO ---
 [tasks.new-migration-auth]
 description = "Cria um novo arquivo de migração SQL para o banco AUTH"
@@ -47,6 +60,20 @@ script = [
  "echo 'Criando migração AUTH na pasta migrations_auth/'",
  # O $1 pega o primeiro argumento passado na linha de comando (o 'name=')
  "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_auth"
+]
+
+# --- Tarefa para CRIAR nova migração de BUSINESS DOMAIN ---
+[tasks.new-migration-main]
+description = "Cria um novo arquivo de migração SQL para o banco MAIN (business domain)"
+# Ex: cargo make new-migration-main name="nome_da_migration"
+script_runner = "@shell"
+script = [
+ "set -a",
+ ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
+ "set +a",
+ "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "echo 'Criando migração MAIN na pasta migrations_main/'",
+ "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_main"
 ]
 
 # --- Tarefa para CRIAR o banco LOGS ---
@@ -87,7 +114,7 @@ script = [
 ]
 
 [tasks.reset-auth]
-description = "Deleta (Drop), Cria e Roda migrações do banco AUTH"
+description = "Deleta (Drop), Cria e Roda migrações do banco AUTH e MAIN"
 script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
@@ -97,7 +124,8 @@ script = [
  # O -y confirma automaticamente sem pedir input
  "sqlx database drop -y",
  "sqlx database create",
- "sqlx migrate run --source ../../crates/persistence/migrations_auth"
+ "sqlx migrate run --source ../../crates/persistence/migrations_auth",
+ "sqlx migrate run --source ../../crates/persistence/migrations_main"
 ]
 
 # --- Tarefa para RESETAR o banco LOGS ---
