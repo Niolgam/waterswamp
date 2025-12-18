@@ -2,9 +2,9 @@
 # Makefile.toml compatível com cargo-make 0.37.x
 # Carrega o .env manualmente antes das tasks
 # ---------------------------------------
-
+ 
 [tasks]
-
+ 
 # --- Tarefa para CRIAR o banco MAIN ---
 [tasks.create-db-main]
 description = "Cria o banco de dados 'waterswamp' (definido em WS_MAIN_DATABASE_URL)"
@@ -19,23 +19,10 @@ script = [
  # Roda o comando de criação
  "sqlx database create"
 ]
-
-# --- Tarefa para RODAR migração AUTH ---
-[tasks.migrate-auth]
-description = "Executa migrações do banco AUTH"
-script = [
- "set -a",
- ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
- "set +a",
- "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
- "echo 'Rodando migrações AUTH com $DATABASE_URL'",
- # Roda o comando de migração
- "sqlx migrate run --source ../../crates/persistence/migrations_auth"
-]
-
-# --- Tarefa para RODAR migração MAIN (Business Domain) ---
+ 
+# --- Tarefa para RODAR migrações do banco MAIN ---
 [tasks.migrate-main]
-description = "Executa migrações do banco MAIN (business domain)"
+description = "Executa todas as migrações do banco MAIN (auth + business domain)"
 script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
@@ -45,37 +32,22 @@ script = [
  # Roda o comando de migração
  "sqlx migrate run --source ../../crates/persistence/migrations_main"
 ]
-
-# --- Tarefa para CRIAR nova migração de AUTENTICAÇÃO ---
-[tasks.new-migration-auth]
-description = "Cria um novo arquivo de migração SQL para o banco AUTH"
-# O cargo-make irá pedir pelo argumento 'name'
-# Ex: cargo make new-migration-auth name="nome_da_migration"
+ 
+# --- Tarefa para CRIAR nova migração ---
+[tasks.new-migration]
+description = "Cria um novo arquivo de migração SQL para o banco MAIN"
+# Ex: cargo make new-migration name="nome_da_migration"
 script_runner = "@shell"
 script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
  "set +a",
  "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
- "echo 'Criando migração AUTH na pasta migrations_auth/'",
+ "echo 'Criando nova migração na pasta migrations_main/'",
  # O $1 pega o primeiro argumento passado na linha de comando (o 'name=')
- "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_auth"
-]
-
-# --- Tarefa para CRIAR nova migração de BUSINESS DOMAIN ---
-[tasks.new-migration-main]
-description = "Cria um novo arquivo de migração SQL para o banco MAIN (business domain)"
-# Ex: cargo make new-migration-main name="nome_da_migration"
-script_runner = "@shell"
-script = [
- "set -a",
- ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
- "set +a",
- "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
- "echo 'Criando migração MAIN na pasta migrations_main/'",
  "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_main"
 ]
-
+ 
 # --- Tarefa para CRIAR o banco LOGS ---
 [tasks.create-db-logs]
 description = "Cria o banco de dados 'logs_db' (definido em WS_LOGS_DATABASE_URL)"
@@ -87,7 +59,7 @@ script = [
  "echo 'Criando banco de dados LOGS: $DATABASE_URL'",
  "sqlx database create"
 ]
-
+ 
 # --- Tarefa para RODAR migração LOGS ---
 [tasks.migrate-logs]
 description = "Executa migrações do banco LOGS"
@@ -99,7 +71,7 @@ script = [
  "echo 'Rodando migrações LOGS com $DATABASE_URL'",
  "sqlx migrate run --source ../../crates/persistence/migrations_logs"
 ]
-
+ 
 # --- Tarefa para CRIAR nova migração de LOGS ---
 [tasks.new-migration-logs]
 description = "Cria um novo arquivo de migração SQL para o banco LOGS"
@@ -112,9 +84,10 @@ script = [
  "echo 'Criando migração LOGS na pasta migrations_logs/'",
  "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_logs"
 ]
-
+ 
+# --- Tarefa para RESETAR o banco MAIN ---
 [tasks.reset-main]
-description = "Deleta (Drop), Cria e Roda migrações do banco MAIN (AUTH + Business Domain)"
+description = "Deleta (Drop), Cria e Roda todas as migrações do banco MAIN"
 script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
@@ -124,10 +97,9 @@ script = [
  # O -y confirma automaticamente sem pedir input
  "sqlx database drop -y",
  "sqlx database create",
- "sqlx migrate run --source ../../crates/persistence/migrations_auth",
  "sqlx migrate run --source ../../crates/persistence/migrations_main"
 ]
-
+ 
 # --- Tarefa para RESETAR o banco LOGS ---
 [tasks.reset-logs]
 description = "Deleta (Drop), Cria e Roda migrações do banco LOGS"
@@ -141,7 +113,7 @@ script = [
  "sqlx database create",
  "sqlx migrate run --source ../../crates/persistence/migrations_logs"
 ]
-
+ 
 # --- Tarefa para RESETAR TUDO ---
 [tasks.reset-all]
 description = "Reseta ambos os bancos de dados"

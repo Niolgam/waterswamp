@@ -9,8 +9,8 @@ pub use contracts::{
     CityResponse, CityWithStateResponse, CountryResponse, StateResponse, StateWithCountryResponse,
 };
 
-use axum::{routing::get, Router};
 use crate::infra::state::AppState;
+use axum::{routing::get, Router};
 
 /// Creates the geo_regions router with all Country, State, and City routes
 pub fn router() -> Router<AppState> {
@@ -20,7 +20,7 @@ pub fn router() -> Router<AppState> {
             get(handlers::list_countries).post(handlers::create_country),
         )
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_country)
                 .put(handlers::update_country)
                 .delete(handlers::delete_country),
@@ -29,7 +29,7 @@ pub fn router() -> Router<AppState> {
     let states_router = Router::new()
         .route("/", get(handlers::list_states).post(handlers::create_state))
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_state)
                 .put(handlers::update_state)
                 .delete(handlers::delete_state),
@@ -38,7 +38,7 @@ pub fn router() -> Router<AppState> {
     let cities_router = Router::new()
         .route("/", get(handlers::list_cities).post(handlers::create_city))
         .route(
-            "/:id",
+            "/{id}",
             get(handlers::get_city)
                 .put(handlers::update_city)
                 .delete(handlers::delete_city),

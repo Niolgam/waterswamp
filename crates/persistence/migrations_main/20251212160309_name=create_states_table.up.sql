@@ -1,4 +1,12 @@
 -- Create states table with country relationship
+CREATE OR REPLACE FUNCTION update_states_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
 CREATE TABLE IF NOT EXISTS states (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL,
@@ -18,4 +26,4 @@ CREATE INDEX idx_states_country_id ON states(country_id);
 CREATE TRIGGER update_states_updated_at
     BEFORE UPDATE ON states
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+    EXECUTE FUNCTION update_states_updated_at_column();
