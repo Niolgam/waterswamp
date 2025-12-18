@@ -23,11 +23,12 @@ use domain::ports::{
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
-    location_repository::{
-        BuildingRepository, BuildingTypeRepository, CityRepository, CountryRepository,
-        DepartmentCategoryRepository, FloorRepository, SiteRepository, SiteTypeRepository,
-        SpaceRepository, SpaceTypeRepository, StateRepository,
+    departments_repository::DepartmentCategoryRepository,
+    facilities_repository::{
+        BuildingRepository, BuildingTypeRepository, FloorRepository, SiteRepository,
+        SiteTypeRepository, SpaceRepository, SpaceTypeRepository,
     },
+    geo_regions_repository::{CityRepository, CountryRepository, StateRepository},
     mfa_repository::MfaRepository,
     user_repository::UserRepository,
 };
