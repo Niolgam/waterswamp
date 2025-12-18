@@ -12,6 +12,12 @@ pub enum ServiceError {
     #[error("{0}")]
     BadRequest(String),
 
+    #[error("{0}")]
+    NotFound(String),
+
+    #[error("{0}")]
+    Conflict(String),
+
     #[error("Erro de repositório: {0}")]
     Repository(#[from] RepositoryError),
 

@@ -6,6 +6,7 @@
 pub mod admin;
 pub mod auth;
 pub mod email_verification;
+pub mod locations;
 pub mod mfa;
 pub mod users;
 

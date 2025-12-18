@@ -30,9 +30,9 @@ pub async fn spawn_app() -> TestApp {
 
     let config = Config::from_env().expect("Falha ao carregar config de teste");
 
-    let pool_auth = PgPool::connect(&config.auth_db)
+    let pool_auth = PgPool::connect(&config.main_db)
         .await
-        .expect("Falha auth_db");
+        .expect("Falha main_db");
     let pool_logs = PgPool::connect(&config.logs_db)
         .await
         .expect("Falha logs_db");
@@ -41,6 +41,10 @@ pub async fn spawn_app() -> TestApp {
         .run(&pool_auth)
         .await
         .expect("Migration auth");
+    sqlx::migrate!("../../crates/persistence/migrations_main")
+        .run(&pool_auth)
+        .await
+        .expect("Migration main");
     sqlx::migrate!("../../crates/persistence/migrations_logs")
         .run(&pool_logs)
         .await
@@ -108,7 +112,7 @@ pub async fn create_test_app_state() -> AppState {
     std::env::set_var("DISABLE_RATE_LIMIT", "true");
 
     let config = Config::from_env().expect("Falha ao carregar config");
-    let pool_auth = PgPool::connect(&config.auth_db).await.expect("Auth DB");
+    let pool_auth = PgPool::connect(&config.main_db).await.expect("Auth DB");
     let pool_logs = PgPool::connect(&config.logs_db).await.expect("Logs DB");
 
     let enforcer = setup_casbin(pool_auth.clone()).await.expect("Casbin");

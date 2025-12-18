@@ -1,0 +1,319 @@
+use crate::errors::RepositoryError;
+use crate::models::facilities::{
+    BuildingDto, BuildingTypeDto, BuildingWithRelationsDto, FloorDto, FloorWithRelationsDto,
+    SiteDto, SiteTypeDto, SiteWithRelationsDto, SpaceDto, SpaceTypeDto, SpaceWithRelationsDto,
+};
+use crate::value_objects::LocationName;
+use async_trait::async_trait;
+use uuid::Uuid;
+
+// ============================
+// Site Type Repository Port
+// ============================
+
+#[async_trait]
+pub trait SiteTypeRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiteTypeDto>, RepositoryError>;
+    async fn find_by_name(
+        &self,
+        name: &LocationName,
+    ) -> Result<Option<SiteTypeDto>, RepositoryError>;
+
+    // Validation checks
+    async fn exists_by_name(&self, name: &LocationName) -> Result<bool, RepositoryError>;
+    async fn exists_by_name_excluding(
+        &self,
+        name: &LocationName,
+        exclude_id: Uuid,
+    ) -> Result<bool, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        name: &LocationName,
+        description: Option<&str>,
+    ) -> Result<SiteTypeDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        description: Option<&str>,
+    ) -> Result<SiteTypeDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+    ) -> Result<(Vec<SiteTypeDto>, i64), RepositoryError>;
+}
+
+// ============================
+// Building Type Repository Port
+// ============================
+
+#[async_trait]
+pub trait BuildingTypeRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<BuildingTypeDto>, RepositoryError>;
+    async fn find_by_name(
+        &self,
+        name: &LocationName,
+    ) -> Result<Option<BuildingTypeDto>, RepositoryError>;
+
+    // Validation checks
+    async fn exists_by_name(&self, name: &LocationName) -> Result<bool, RepositoryError>;
+    async fn exists_by_name_excluding(
+        &self,
+        name: &LocationName,
+        exclude_id: Uuid,
+    ) -> Result<bool, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        name: &LocationName,
+        description: Option<&str>,
+    ) -> Result<BuildingTypeDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        description: Option<&str>,
+    ) -> Result<BuildingTypeDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+    ) -> Result<(Vec<BuildingTypeDto>, i64), RepositoryError>;
+}
+
+// ============================
+// Space Type Repository Port
+// ============================
+
+#[async_trait]
+pub trait SpaceTypeRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SpaceTypeDto>, RepositoryError>;
+    async fn find_by_name(
+        &self,
+        name: &LocationName,
+    ) -> Result<Option<SpaceTypeDto>, RepositoryError>;
+
+    // Validation checks
+    async fn exists_by_name(&self, name: &LocationName) -> Result<bool, RepositoryError>;
+    async fn exists_by_name_excluding(
+        &self,
+        name: &LocationName,
+        exclude_id: Uuid,
+    ) -> Result<bool, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        name: &LocationName,
+        description: Option<&str>,
+    ) -> Result<SpaceTypeDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        description: Option<&str>,
+    ) -> Result<SpaceTypeDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+    ) -> Result<(Vec<SpaceTypeDto>, i64), RepositoryError>;
+}
+
+// ============================
+// Site Repository Port (Phase 3A)
+// ============================
+
+#[async_trait]
+pub trait SiteRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiteDto>, RepositoryError>;
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<SiteWithRelationsDto>, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        name: &LocationName,
+        city_id: Uuid,
+        site_type_id: Uuid,
+        address: Option<&str>,
+    ) -> Result<SiteDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        city_id: Option<Uuid>,
+        site_type_id: Option<Uuid>,
+        address: Option<&str>,
+    ) -> Result<SiteDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        city_id: Option<Uuid>,
+        site_type_id: Option<Uuid>,
+    ) -> Result<(Vec<SiteWithRelationsDto>, i64), RepositoryError>;
+}
+
+// ============================
+// Building Repository Port (Phase 3B)
+// ============================
+
+#[async_trait]
+pub trait BuildingRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<BuildingDto>, RepositoryError>;
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<BuildingWithRelationsDto>, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        name: &LocationName,
+        site_id: Uuid,
+        building_type_id: Uuid,
+        description: Option<&str>,
+    ) -> Result<BuildingDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        site_id: Option<Uuid>,
+        building_type_id: Option<Uuid>,
+        description: Option<&str>,
+    ) -> Result<BuildingDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        site_id: Option<Uuid>,
+        building_type_id: Option<Uuid>,
+    ) -> Result<(Vec<BuildingWithRelationsDto>, i64), RepositoryError>;
+}
+
+// ============================
+// Floor Repository Port (Phase 3C)
+// ============================
+
+#[async_trait]
+pub trait FloorRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<FloorDto>, RepositoryError>;
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<FloorWithRelationsDto>, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        floor_number: i32,
+        building_id: Uuid,
+        description: Option<&str>,
+    ) -> Result<FloorDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        floor_number: Option<i32>,
+        building_id: Option<Uuid>,
+        description: Option<&str>,
+    ) -> Result<FloorDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        building_id: Option<Uuid>,
+    ) -> Result<(Vec<FloorWithRelationsDto>, i64), RepositoryError>;
+}
+
+// ============================
+// Space Repository Port (Phase 3D)
+// ============================
+
+#[async_trait]
+pub trait SpaceRepositoryPort: Send + Sync {
+    // Read operations
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SpaceDto>, RepositoryError>;
+    async fn find_with_relations_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<SpaceWithRelationsDto>, RepositoryError>;
+
+    // Write operations
+    async fn create(
+        &self,
+        name: &LocationName,
+        floor_id: Uuid,
+        space_type_id: Uuid,
+        description: Option<&str>,
+    ) -> Result<SpaceDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&LocationName>,
+        floor_id: Option<Uuid>,
+        space_type_id: Option<Uuid>,
+        description: Option<&str>,
+    ) -> Result<SpaceDto, RepositoryError>;
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
+    // List operations
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        floor_id: Option<Uuid>,
+        space_type_id: Option<Uuid>,
+    ) -> Result<(Vec<SpaceWithRelationsDto>, i64), RepositoryError>;
+}

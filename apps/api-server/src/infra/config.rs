@@ -8,8 +8,8 @@ pub struct DatabaseConfig {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    #[serde(rename = "auth_database_url")]
-    pub auth_db: String,
+    #[serde(rename = "main_database_url")]
+    pub main_db: String,
 
     #[serde(rename = "logs_database_url")]
     pub logs_db: String,
