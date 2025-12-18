@@ -38,9 +38,9 @@ use crate::infra::state::AppState;
 // =============================================================================
 
 pub use contracts::{
-    BuildingResponse, BuildingTypeResponse, CityResponse, CityWithStateResponse,
-    DepartmentCategoryResponse, FloorResponse, SiteResponse, SiteTypeResponse, SpaceTypeResponse,
-    StateResponse,
+    BuildingResponse, BuildingTypeResponse, CityResponse, CityWithStateResponse, CountryResponse,
+    DepartmentCategoryResponse, FloorResponse, SiteResponse, SiteTypeResponse, SpaceResponse,
+    SpaceTypeResponse, StateResponse, StateWithCountryResponse,
 };
 
 // =============================================================================
@@ -48,6 +48,16 @@ pub use contracts::{
 // =============================================================================
 
 /// Cria o router de gerenciamento de localizações.
+///
+/// # Rotas - Countries
+///
+/// | Método | Path                             | Handler          | Descrição                 |
+/// |--------|----------------------------------|------------------|---------------------------|
+/// | GET    | /admin/locations/countries       | list_countries   | Listar todos os países    |
+/// | GET    | /admin/locations/countries/:id   | get_country      | Obter país por ID         |
+/// | POST   | /admin/locations/countries       | create_country   | Criar novo país           |
+/// | PUT    | /admin/locations/countries/:id   | update_country   | Atualizar país            |
+/// | DELETE | /admin/locations/countries/:id   | delete_country   | Deletar país              |
 ///
 /// # Rotas - States
 ///
@@ -139,6 +149,18 @@ pub use contracts::{
 /// | PUT    | /admin/locations/floors/:id   | update_floor | Atualizar andar                                     |
 /// | DELETE | /admin/locations/floors/:id   | delete_floor | Deletar andar                                       |
 pub fn router() -> Router<AppState> {
+    let countries_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_countries).post(handlers::create_country),
+        )
+        .route(
+            "/:id",
+            get(handlers::get_country)
+                .put(handlers::update_country)
+                .delete(handlers::delete_country),
+        );
+
     let states_router = Router::new()
         .route("/", get(handlers::list_states).post(handlers::create_state))
         .route(
@@ -252,6 +274,7 @@ pub fn router() -> Router<AppState> {
         );
 
     Router::new()
+        .nest("/countries", countries_router)
         .nest("/states", states_router)
         .nest("/cities", cities_router)
         .nest("/site-types", site_types_router)

@@ -3,17 +3,18 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use serde_json::{json, Value};
 use domain::models::{
-    CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload,
+    CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload, CreateCountryPayload,
     CreateDepartmentCategoryPayload, CreateFloorPayload, CreateSitePayload, CreateSiteTypePayload,
     CreateSpaceTypePayload, CreateStatePayload, ListBuildingsQuery, ListBuildingTypesQuery,
-    ListCitiesQuery, ListDepartmentCategoriesQuery, ListFloorsQuery, ListSitesQuery,
-    ListSiteTypesQuery, ListSpaceTypesQuery, ListStatesQuery, PaginatedBuildings,
-    PaginatedBuildingTypes, PaginatedCities, PaginatedDepartmentCategories, PaginatedFloors,
-    PaginatedSites, PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates,
-    UpdateBuildingPayload, UpdateBuildingTypePayload, UpdateCityPayload,
-    UpdateDepartmentCategoryPayload, UpdateFloorPayload, UpdateSitePayload, UpdateSiteTypePayload,
-    UpdateSpaceTypePayload, UpdateStatePayload,
+    ListCitiesQuery, ListCountriesQuery, ListDepartmentCategoriesQuery, ListFloorsQuery,
+    ListSitesQuery, ListSiteTypesQuery, ListSpaceTypesQuery, ListStatesQuery,
+    PaginatedBuildings, PaginatedBuildingTypes, PaginatedCities, PaginatedCountries,
+    PaginatedDepartmentCategories, PaginatedFloors, PaginatedSites, PaginatedSiteTypes,
+    PaginatedSpaceTypes, PaginatedStates, UpdateBuildingPayload, UpdateBuildingTypePayload,
+    UpdateCityPayload, UpdateCountryPayload, UpdateDepartmentCategoryPayload, UpdateFloorPayload,
+    UpdateSitePayload, UpdateSiteTypePayload, UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use uuid::Uuid;
 use validator::Validate;
@@ -21,10 +22,96 @@ use validator::Validate;
 use crate::infra::{errors::AppError, state::AppState};
 
 use super::contracts::{
-    BuildingResponse, BuildingTypeResponse, CityResponse, CityWithStateResponse,
-    DepartmentCategoryResponse, FloorResponse, SiteResponse, SiteTypeResponse, SpaceTypeResponse,
-    StateResponse,
+    BuildingResponse, BuildingTypeResponse, CityResponse, CityWithStateResponse, CountryResponse,
+    DepartmentCategoryResponse, FloorResponse, SiteResponse, SiteTypeResponse, SpaceResponse,
+    SpaceTypeResponse, StateResponse, StateWithCountryResponse,
 };
+
+// ============================
+// Country Handlers
+// ============================
+
+/// GET /admin/locations/countries
+pub async fn list_countries(
+    State(state): State<AppState>,
+    Query(params): Query<ListCountriesQuery>,
+) -> Result<Json<PaginatedCountries>, AppError> {
+    let result = state
+        .location_service
+        .list_countries(params.limit, params.offset, params.search)
+        .await?;
+
+    Ok(Json(result))
+}
+
+/// GET /admin/locations/countries/:id
+pub async fn get_country(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<CountryResponse>, AppError> {
+    let country_dto = state.location_service.get_country(id).await?;
+
+    Ok(Json(CountryResponse {
+        id: country_dto.id,
+        name: country_dto.name,
+        code: country_dto.code,
+        created_at: country_dto.created_at,
+        updated_at: country_dto.updated_at,
+    }))
+}
+
+/// POST /admin/locations/countries
+pub async fn create_country(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateCountryPayload>,
+) -> Result<(StatusCode, Json<CountryResponse>), AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let country_dto = state.location_service.create_country(payload).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(CountryResponse {
+            id: country_dto.id,
+            name: country_dto.name,
+            code: country_dto.code,
+            created_at: country_dto.created_at,
+            updated_at: country_dto.updated_at,
+        }),
+    ))
+}
+
+/// PUT /admin/locations/countries/:id
+pub async fn update_country(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateCountryPayload>,
+) -> Result<Json<CountryResponse>, AppError> {
+    if let Err(e) = payload.validate() {
+        return Err(AppError::Validation(e));
+    }
+
+    let country_dto = state.location_service.update_country(id, payload).await?;
+
+    Ok(Json(CountryResponse {
+        id: country_dto.id,
+        name: country_dto.name,
+        code: country_dto.code,
+        created_at: country_dto.created_at,
+        updated_at: country_dto.updated_at,
+    }))
+}
+
+/// DELETE /admin/locations/countries/:id
+pub async fn delete_country(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, AppError> {
+    state.location_service.delete_country(id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
 
 // ============================
 // State Handlers
@@ -54,6 +141,7 @@ pub async fn get_state(
         id: state_dto.id,
         name: state_dto.name,
         code: state_dto.code,
+        country_id: state_dto.country_id,
         created_at: state_dto.created_at,
         updated_at: state_dto.updated_at,
     }))
@@ -76,6 +164,7 @@ pub async fn create_state(
             id: state_dto.id,
             name: state_dto.name,
             code: state_dto.code,
+            country_id: state_dto.country_id,
             created_at: state_dto.created_at,
             updated_at: state_dto.updated_at,
         }),
@@ -98,6 +187,7 @@ pub async fn update_state(
         id: state_dto.id,
         name: state_dto.name,
         code: state_dto.code,
+        country_id: state_dto.country_id,
         created_at: state_dto.created_at,
         updated_at: state_dto.updated_at,
     }))
@@ -142,6 +232,9 @@ pub async fn get_city(
         state_id: city_dto.state_id,
         state_name: city_dto.state_name,
         state_code: city_dto.state_code,
+        country_id: city_dto.country_id,
+        country_name: city_dto.country_name,
+        country_code: city_dto.country_code,
         created_at: city_dto.created_at,
         updated_at: city_dto.updated_at,
     }))
