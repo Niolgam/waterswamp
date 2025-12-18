@@ -5,17 +5,17 @@
 
 [tasks]
 
-# --- Tarefa para CRIAR o banco AUTH ---
-[tasks.create-db-auth]
-description = "Cria o banco de dados 'auth_db' (definido em WS_AUTH_DATABASE_URL)"
+# --- Tarefa para CRIAR o banco MAIN ---
+[tasks.create-db-main]
+description = "Cria o banco de dados 'waterswamp' (definido em WS_MAIN_DATABASE_URL)"
 script = [
  "set -a",
  # Garante que o .env seja carregado (assumindo que está na raiz)
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
  "set +a",
  # Exporta a URL específica para o sqlx-cli
- "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
- "echo 'Criando banco de dados AUTH: $DATABASE_URL'",
+ "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
+ "echo 'Criando banco de dados MAIN: $DATABASE_URL'",
  # Roda o comando de criação
  "sqlx database create"
 ]
@@ -27,10 +27,10 @@ script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
  "set +a",
- "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
  "echo 'Rodando migrações AUTH com $DATABASE_URL'",
- # Roda o comando de migração usando tabela separada
- "sqlx migrate run --source ../../crates/persistence/migrations_auth --migrations-table _sqlx_migrations_auth"
+ # Roda o comando de migração
+ "sqlx migrate run --source ../../crates/persistence/migrations_auth"
 ]
 
 # --- Tarefa para RODAR migração MAIN (Business Domain) ---
@@ -40,10 +40,10 @@ script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
  "set +a",
- "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
  "echo 'Rodando migrações MAIN com $DATABASE_URL'",
- # Roda o comando de migração usando tabela separada
- "sqlx migrate run --source ../../crates/persistence/migrations_main --migrations-table _sqlx_migrations_main"
+ # Roda o comando de migração
+ "sqlx migrate run --source ../../crates/persistence/migrations_main"
 ]
 
 # --- Tarefa para CRIAR nova migração de AUTENTICAÇÃO ---
@@ -56,7 +56,7 @@ script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
  "set +a",
- "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
  "echo 'Criando migração AUTH na pasta migrations_auth/'",
  # O $1 pega o primeiro argumento passado na linha de comando (o 'name=')
  "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_auth"
@@ -71,7 +71,7 @@ script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
  "set +a",
- "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
+ "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
  "echo 'Criando migração MAIN na pasta migrations_main/'",
  "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_main"
 ]
@@ -113,19 +113,19 @@ script = [
  "sqlx migrate add -r \"$@\" --source ../../crates/persistence/migrations_logs"
 ]
 
-[tasks.reset-auth]
-description = "Deleta (Drop), Cria e Roda migrações do banco AUTH e MAIN"
+[tasks.reset-main]
+description = "Deleta (Drop), Cria e Roda migrações do banco MAIN (AUTH + Business Domain)"
 script = [
  "set -a",
  ". ${CARGO_MAKE_WORKING_DIRECTORY}/.env",
  "set +a",
- "export DATABASE_URL=$WS_AUTH_DATABASE_URL",
- "echo 'Resetando banco AUTH...'",
+ "export DATABASE_URL=$WS_MAIN_DATABASE_URL",
+ "echo 'Resetando banco MAIN...'",
  # O -y confirma automaticamente sem pedir input
  "sqlx database drop -y",
  "sqlx database create",
- "sqlx migrate run --source ../../crates/persistence/migrations_auth --migrations-table _sqlx_migrations_auth",
- "sqlx migrate run --source ../../crates/persistence/migrations_main --migrations-table _sqlx_migrations_main"
+ "sqlx migrate run --source ../../crates/persistence/migrations_auth",
+ "sqlx migrate run --source ../../crates/persistence/migrations_main"
 ]
 
 # --- Tarefa para RESETAR o banco LOGS ---
@@ -145,4 +145,4 @@ script = [
 # --- Tarefa para RESETAR TUDO ---
 [tasks.reset-all]
 description = "Reseta ambos os bancos de dados"
-dependencies = ["reset-auth", "reset-logs"]
+dependencies = ["reset-main", "reset-logs"]
