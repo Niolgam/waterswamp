@@ -1,4 +1,4 @@
-use domain::value_objects::LocationName;
+use domain::value_objects::{LocationName, StateCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
