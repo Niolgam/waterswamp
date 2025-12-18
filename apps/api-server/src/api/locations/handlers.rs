@@ -7,14 +7,15 @@ use serde_json::{json, Value};
 use domain::models::{
     CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload, CreateCountryPayload,
     CreateDepartmentCategoryPayload, CreateFloorPayload, CreateSitePayload, CreateSiteTypePayload,
-    CreateSpaceTypePayload, CreateStatePayload, ListBuildingsQuery, ListBuildingTypesQuery,
-    ListCitiesQuery, ListCountriesQuery, ListDepartmentCategoriesQuery, ListFloorsQuery,
-    ListSitesQuery, ListSiteTypesQuery, ListSpaceTypesQuery, ListStatesQuery,
-    PaginatedBuildings, PaginatedBuildingTypes, PaginatedCities, PaginatedCountries,
-    PaginatedDepartmentCategories, PaginatedFloors, PaginatedSites, PaginatedSiteTypes,
-    PaginatedSpaceTypes, PaginatedStates, UpdateBuildingPayload, UpdateBuildingTypePayload,
-    UpdateCityPayload, UpdateCountryPayload, UpdateDepartmentCategoryPayload, UpdateFloorPayload,
-    UpdateSitePayload, UpdateSiteTypePayload, UpdateSpaceTypePayload, UpdateStatePayload,
+    CreateSpacePayload, CreateSpaceTypePayload, CreateStatePayload, ListBuildingsQuery,
+    ListBuildingTypesQuery, ListCitiesQuery, ListCountriesQuery, ListDepartmentCategoriesQuery,
+    ListFloorsQuery, ListSitesQuery, ListSiteTypesQuery, ListSpacesQuery, ListSpaceTypesQuery,
+    ListStatesQuery, PaginatedBuildings, PaginatedBuildingTypes, PaginatedCities,
+    PaginatedCountries, PaginatedDepartmentCategories, PaginatedFloors, PaginatedSites,
+    PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates, UpdateBuildingPayload,
+    UpdateBuildingTypePayload, UpdateCityPayload, UpdateCountryPayload,
+    UpdateDepartmentCategoryPayload, UpdateFloorPayload, UpdateSitePayload, UpdateSiteTypePayload,
+    UpdateSpacePayload, UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use uuid::Uuid;
 use validator::Validate;
@@ -38,7 +39,11 @@ pub async fn list_countries(
 ) -> Result<Json<PaginatedCountries>, AppError> {
     let result = state
         .location_service
-        .list_countries(params.limit, params.offset, params.search)
+        .list_countries(
+            params.limit.unwrap_or(10),
+            params.offset.unwrap_or(0),
+            params.search,
+        )
         .await?;
 
     Ok(Json(result))
@@ -124,7 +129,12 @@ pub async fn list_states(
 ) -> Result<Json<PaginatedStates>, AppError> {
     let result = state
         .location_service
-        .list_states(params.limit, params.offset, params.search)
+        .list_states(
+            params.limit.unwrap_or(10),
+            params.offset.unwrap_or(0),
+            params.search,
+            params.country_id,
+        )
         .await?;
 
     Ok(Json(result))

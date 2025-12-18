@@ -1,3 +1,4 @@
+use application::errors::ServiceError;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -16,6 +17,10 @@ pub enum AppError {
     // Novo: Erro vindo da camada de domínio/repositório
     #[error("Erro de repositório: {0}")]
     Repository(#[from] RepositoryError),
+
+    // Erro vindo da camada de serviço/aplicação
+    #[error("Erro de serviço: {0}")]
+    Service(#[from] ServiceError),
 
     #[error("Não autorizado: {0}")]
     Unauthorized(String),
@@ -78,6 +83,34 @@ impl IntoResponse for AppError {
                 RepositoryError::Database(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Erro interno de persistência.".to_string(),
+                ),
+            },
+            // Mapeamento dos erros de serviço
+            AppError::Service(service_err) => match service_err {
+                ServiceError::UserAlreadyExists => (
+                    StatusCode::CONFLICT,
+                    "Usuário já existe.".to_string(),
+                ),
+                ServiceError::InvalidCredentials => (
+                    StatusCode::UNAUTHORIZED,
+                    "Credenciais inválidas.".to_string(),
+                ),
+                ServiceError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+                ServiceError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
+                ServiceError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+                ServiceError::Repository(repo_err) => match repo_err {
+                    RepositoryError::NotFound => {
+                        (StatusCode::NOT_FOUND, "Recurso não encontrado.".to_string())
+                    }
+                    RepositoryError::Duplicate(msg) => (StatusCode::CONFLICT, msg),
+                    RepositoryError::Database(_) => (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Erro interno de persistência.".to_string(),
+                    ),
+                },
+                ServiceError::Internal(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Erro interno no serviço.".to_string(),
                 ),
             },
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
