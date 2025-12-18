@@ -1,25 +1,28 @@
 use crate::errors::ServiceError;
 use domain::models::{
-    BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto,
-    CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload,
+    BuildingTypeDto, BuildingWithRelationsDto, CityDto, CityWithStateDto, CountryDto,
+    CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload, CreateCountryPayload,
     CreateDepartmentCategoryPayload, CreateFloorPayload, CreateSitePayload, CreateSiteTypePayload,
-    CreateSpaceTypePayload, CreateStatePayload, DepartmentCategoryDto, FloorWithRelationsDto,
-    PaginatedBuildings, PaginatedBuildingTypes, PaginatedCities,
-    PaginatedDepartmentCategories, PaginatedFloors, PaginatedSites, PaginatedSiteTypes,
-    PaginatedSpaceTypes, PaginatedStates, SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto,
-    StateDto, UpdateBuildingPayload, UpdateBuildingTypePayload, UpdateCityPayload,
+    CreateSpacePayload, CreateSpaceTypePayload, CreateStatePayload, DepartmentCategoryDto,
+    FloorWithRelationsDto, PaginatedBuildings, PaginatedBuildingTypes, PaginatedCities,
+    PaginatedCountries, PaginatedDepartmentCategories, PaginatedFloors, PaginatedSites,
+    PaginatedSiteTypes, PaginatedSpaces, PaginatedSpaceTypes, PaginatedStates, SiteTypeDto,
+    SiteWithRelationsDto, SpaceTypeDto, SpaceWithRelationsDto, StateDto, StateWithCountryDto,
+    UpdateBuildingPayload, UpdateBuildingTypePayload, UpdateCityPayload, UpdateCountryPayload,
     UpdateDepartmentCategoryPayload, UpdateFloorPayload, UpdateSitePayload, UpdateSiteTypePayload,
-    UpdateSpaceTypePayload, UpdateStatePayload,
+    UpdateSpacePayload, UpdateSpaceTypePayload, UpdateStatePayload,
 };
 use domain::ports::{
     BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
-    DepartmentCategoryRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
-    SiteTypeRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    CountryRepositoryPort, DepartmentCategoryRepositoryPort, FloorRepositoryPort,
+    SiteRepositoryPort, SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    StateRepositoryPort,
 };
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct LocationService {
+    country_repo: Arc<dyn CountryRepositoryPort>,
     state_repo: Arc<dyn StateRepositoryPort>,
     city_repo: Arc<dyn CityRepositoryPort>,
     site_type_repo: Arc<dyn SiteTypeRepositoryPort>,
@@ -34,6 +37,7 @@ pub struct LocationService {
 
 impl LocationService {
     pub fn new(
+        country_repo: Arc<dyn CountryRepositoryPort>,
         state_repo: Arc<dyn StateRepositoryPort>,
         city_repo: Arc<dyn CityRepositoryPort>,
         site_type_repo: Arc<dyn SiteTypeRepositoryPort>,
@@ -46,6 +50,7 @@ impl LocationService {
         space_repo: Arc<dyn SpaceRepositoryPort>,
     ) -> Self {
         Self {
+            country_repo,
             state_repo,
             city_repo,
             site_type_repo,
@@ -60,10 +65,100 @@ impl LocationService {
     }
 
     // ============================
+    // Country Operations
+    // ============================
+
+    pub async fn create_country(
+        &self,
+        payload: CreateCountryPayload,
+    ) -> Result<CountryDto, ServiceError> {
+        // Check if country code already exists
+        if self.country_repo.exists_by_code(&payload.code).await? {
+            return Err(ServiceError::Conflict(format!(
+                "País com código '{}' já existe",
+                payload.code
+            )));
+        }
+
+        let country = self
+            .country_repo
+            .create(&payload.name, &payload.code)
+            .await?;
+
+        Ok(country)
+    }
+
+    pub async fn get_country(&self, id: Uuid) -> Result<CountryDto, ServiceError> {
+        self.country_repo
+            .find_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound("País não encontrado".to_string()))
+    }
+
+    pub async fn update_country(
+        &self,
+        id: Uuid,
+        payload: UpdateCountryPayload,
+    ) -> Result<CountryDto, ServiceError> {
+        // Check if country exists
+        let _ = self.get_country(id).await?;
+
+        // If updating code, check for duplicates
+        if let Some(ref new_code) = payload.code {
+            if self
+                .country_repo
+                .exists_by_code_excluding(new_code, id)
+                .await?
+            {
+                return Err(ServiceError::Conflict(format!(
+                    "País com código '{}' já existe",
+                    new_code
+                )));
+            }
+        }
+
+        let country = self
+            .country_repo
+            .update(id, payload.name.as_ref(), payload.code.as_deref())
+            .await?;
+
+        Ok(country)
+    }
+
+    pub async fn delete_country(&self, id: Uuid) -> Result<(), ServiceError> {
+        let deleted = self.country_repo.delete(id).await?;
+
+        if !deleted {
+            return Err(ServiceError::NotFound("País não encontrado".to_string()));
+        }
+
+        Ok(())
+    }
+
+    pub async fn list_countries(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+    ) -> Result<PaginatedCountries, ServiceError> {
+        let (countries, total) = self.country_repo.list(limit, offset, search).await?;
+
+        Ok(PaginatedCountries {
+            countries,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    // ============================
     // State Operations
     // ============================
 
-    pub async fn create_state(&self, payload: CreateStatePayload) -> Result<StateDto, ServiceError> {
+    pub async fn create_state(
+        &self,
+        payload: CreateStatePayload,
+    ) -> Result<StateWithCountryDto, ServiceError> {
         // Check if state code already exists
         if self.state_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!(
@@ -72,12 +167,29 @@ impl LocationService {
             )));
         }
 
+        // Validate that country exists
+        if self
+            .country_repo
+            .find_by_id(payload.country_id)
+            .await?
+            .is_none()
+        {
+            return Err(ServiceError::NotFound("País não encontrado".to_string()));
+        }
+
         let state = self
             .state_repo
-            .create(&payload.name, &payload.code)
+            .create(&payload.name, &payload.code, payload.country_id)
             .await?;
 
-        Ok(state)
+        // Return state with country information
+        let state_with_country = self
+            .state_repo
+            .find_with_country_by_id(state.id)
+            .await?
+            .ok_or(ServiceError::NotFound("Estado não encontrado".to_string()))?;
+
+        Ok(state_with_country)
     }
 
     pub async fn get_state(&self, id: Uuid) -> Result<StateDto, ServiceError> {
@@ -87,11 +199,21 @@ impl LocationService {
             .ok_or(ServiceError::NotFound("Estado não encontrado".to_string()))
     }
 
+    pub async fn get_state_with_country(
+        &self,
+        id: Uuid,
+    ) -> Result<StateWithCountryDto, ServiceError> {
+        self.state_repo
+            .find_with_country_by_id(id)
+            .await?
+            .ok_or(ServiceError::NotFound("Estado não encontrado".to_string()))
+    }
+
     pub async fn update_state(
         &self,
         id: Uuid,
         payload: UpdateStatePayload,
-    ) -> Result<StateDto, ServiceError> {
+    ) -> Result<StateWithCountryDto, ServiceError> {
         // Check if state exists
         let _ = self.get_state(id).await?;
 
@@ -109,12 +231,31 @@ impl LocationService {
             }
         }
 
+        // If updating country, validate it exists
+        if let Some(country_id) = payload.country_id {
+            if self.country_repo.find_by_id(country_id).await?.is_none() {
+                return Err(ServiceError::NotFound("País não encontrado".to_string()));
+            }
+        }
+
         let state = self
             .state_repo
-            .update(id, payload.name.as_ref(), payload.code.as_ref())
+            .update(
+                id,
+                payload.name.as_ref(),
+                payload.code.as_ref(),
+                payload.country_id,
+            )
             .await?;
 
-        Ok(state)
+        // Return state with country information
+        let state_with_country = self
+            .state_repo
+            .find_with_country_by_id(state.id)
+            .await?
+            .ok_or(ServiceError::NotFound("Estado não encontrado".to_string()))?;
+
+        Ok(state_with_country)
     }
 
     pub async fn delete_state(&self, id: Uuid) -> Result<(), ServiceError> {
@@ -132,11 +273,15 @@ impl LocationService {
         limit: Option<i64>,
         offset: Option<i64>,
         search: Option<String>,
+        country_id: Option<Uuid>,
     ) -> Result<PaginatedStates, ServiceError> {
         let limit = limit.unwrap_or(50).min(100);
         let offset = offset.unwrap_or(0);
 
-        let (states, total) = self.state_repo.list(limit, offset, search).await?;
+        let (states, total) = self
+            .state_repo
+            .list(limit, offset, search, country_id)
+            .await?;
 
         Ok(PaginatedStates {
             states,
