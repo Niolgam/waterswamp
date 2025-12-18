@@ -129,12 +129,7 @@ pub async fn list_states(
 ) -> Result<Json<PaginatedStates>, AppError> {
     let result = state
         .location_service
-        .list_states(
-            params.limit.unwrap_or(10),
-            params.offset.unwrap_or(0),
-            params.search,
-            params.country_id,
-        )
+        .list_states(params.limit, params.offset, params.search, params.country_id)
         .await?;
 
     Ok(Json(result))
