@@ -12,6 +12,7 @@ use domain::value_objects::LocationName;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+// ... (SiteType, BuildingType, SpaceType repositories unchanged) ...
 // ============================
 // Site Type Repository
 // ============================
@@ -122,10 +123,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
         }
 
         if query_parts.is_empty() {
-            return self
-                .find_by_id(id)
-                .await?
-                .ok_or(RepositoryError::NotFound);
+            return self.find_by_id(id).await?.ok_or(RepositoryError::NotFound);
         }
 
         let query_str = format!(
@@ -316,10 +314,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
         }
 
         if query_parts.is_empty() {
-            return self
-                .find_by_id(id)
-                .await?
-                .ok_or(RepositoryError::NotFound);
+            return self.find_by_id(id).await?.ok_or(RepositoryError::NotFound);
         }
 
         let query_str = format!(
@@ -510,10 +505,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
         }
 
         if query_parts.is_empty() {
-            return self
-                .find_by_id(id)
-                .await?
-                .ok_or(RepositoryError::NotFound);
+            return self.find_by_id(id).await?.ok_or(RepositoryError::NotFound);
         }
 
         let query_str = format!(
@@ -593,6 +585,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
         Ok((space_types, total))
     }
 }
+
 // =============================================================================
 // Site Repository (Phase 3A)
 // =============================================================================
@@ -660,12 +653,14 @@ impl SiteRepositoryPort for SiteRepository {
                 s.id, s.name,
                 s.city_id, c.name as city_name,
                 st.id as state_id, st.name as state_name, st.code as state_code,
+                co.id as country_id, co.name as country_name, co.code as country_code,
                 s.site_type_id, stype.name as site_type_name,
                 s.address,
                 s.created_at, s.updated_at
              FROM sites s
              INNER JOIN cities c ON s.city_id = c.id
              INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN countries co ON st.country_id = co.id
              INNER JOIN site_types stype ON s.site_type_id = stype.id
              WHERE s.id = $1",
         )
@@ -786,16 +781,20 @@ impl SiteRepositoryPort for SiteRepository {
                 s.id, s.name,
                 s.city_id, c.name as city_name,
                 st.id as state_id, st.name as state_name, st.code as state_code,
+                co.id as country_id, co.name as country_name, co.code as country_code,
                 s.site_type_id, stype.name as site_type_name,
                 s.address,
                 s.created_at, s.updated_at
              FROM sites s
              INNER JOIN cities c ON s.city_id = c.id
              INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN countries co ON st.country_id = co.id
              INNER JOIN site_types stype ON s.site_type_id = stype.id
              {}
              ORDER BY s.name LIMIT ${} OFFSET ${}",
-            where_clause, bind_index, bind_index + 1
+            where_clause,
+            bind_index,
+            bind_index + 1
         );
 
         let mut query = sqlx::query_as::<_, SiteWithRelationsDto>(&query_str);
@@ -815,10 +814,7 @@ impl SiteRepositoryPort for SiteRepository {
         let sites = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
 
         // Count total
-        let count_query_str = format!(
-            "SELECT COUNT(*) FROM sites s {}",
-            where_clause
-        );
+        let count_query_str = format!("SELECT COUNT(*) FROM sites s {}", where_clause);
 
         let mut count_query = sqlx::query_scalar::<_, i64>(&count_query_str);
 
@@ -896,6 +892,7 @@ impl BuildingRepositoryPort for BuildingRepository {
                 b.site_id, s.name as site_name,
                 s.city_id, c.name as city_name,
                 st.id as state_id, st.name as state_name, st.code as state_code,
+                co.id as country_id, co.name as country_name, co.code as country_code,
                 b.building_type_id, bt.name as building_type_name,
                 b.description,
                 b.created_at, b.updated_at
@@ -903,6 +900,7 @@ impl BuildingRepositoryPort for BuildingRepository {
              INNER JOIN sites s ON b.site_id = s.id
              INNER JOIN cities c ON s.city_id = c.id
              INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN countries co ON st.country_id = co.id
              INNER JOIN building_types bt ON b.building_type_id = bt.id
              WHERE b.id = $1",
         )
@@ -1015,6 +1013,7 @@ impl BuildingRepositoryPort for BuildingRepository {
                 b.site_id, s.name as site_name,
                 s.city_id, c.name as city_name,
                 st.id as state_id, st.name as state_name, st.code as state_code,
+                co.id as country_id, co.name as country_name, co.code as country_code,
                 b.building_type_id, bt.name as building_type_name,
                 b.description,
                 b.created_at, b.updated_at
@@ -1022,10 +1021,13 @@ impl BuildingRepositoryPort for BuildingRepository {
              INNER JOIN sites s ON b.site_id = s.id
              INNER JOIN cities c ON s.city_id = c.id
              INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN countries co ON st.country_id = co.id
              INNER JOIN building_types bt ON b.building_type_id = bt.id
              {}
              ORDER BY b.name LIMIT ${} OFFSET ${}",
-            where_clause, bind_index, bind_index + 1
+            where_clause,
+            bind_index,
+            bind_index + 1
         );
 
         let mut query = sqlx::query_as::<_, BuildingWithRelationsDto>(&query_str);
@@ -1045,10 +1047,7 @@ impl BuildingRepositoryPort for BuildingRepository {
         let buildings = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
 
         // Count total
-        let count_query_str = format!(
-            "SELECT COUNT(*) FROM buildings b {}",
-            where_clause
-        );
+        let count_query_str = format!("SELECT COUNT(*) FROM buildings b {}", where_clause);
 
         let mut count_query = sqlx::query_scalar::<_, i64>(&count_query_str);
 
@@ -1127,6 +1126,7 @@ impl FloorRepositoryPort for FloorRepository {
                 s.id as site_id, s.name as site_name,
                 c.id as city_id, c.name as city_name,
                 st.id as state_id, st.name as state_name, st.code as state_code,
+                co.id as country_id, co.name as country_name, co.code as country_code,
                 f.description,
                 f.created_at, f.updated_at
              FROM floors f
@@ -1134,6 +1134,7 @@ impl FloorRepositoryPort for FloorRepository {
              INNER JOIN sites s ON b.site_id = s.id
              INNER JOIN cities c ON s.city_id = c.id
              INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN countries co ON st.country_id = co.id
              WHERE f.id = $1",
         )
         .bind(id)
@@ -1215,7 +1216,10 @@ impl FloorRepositoryPort for FloorRepository {
         let mut bind_index = 1;
 
         if search_pattern.is_some() {
-            conditions.push(format!("CAST(f.floor_number AS TEXT) ILIKE ${}", bind_index));
+            conditions.push(format!(
+                "CAST(f.floor_number AS TEXT) ILIKE ${}",
+                bind_index
+            ));
             bind_index += 1;
         }
         if building_id.is_some() {
@@ -1236,6 +1240,7 @@ impl FloorRepositoryPort for FloorRepository {
                 s.id as site_id, s.name as site_name,
                 c.id as city_id, c.name as city_name,
                 st.id as state_id, st.name as state_name, st.code as state_code,
+                co.id as country_id, co.name as country_name, co.code as country_code,
                 f.description,
                 f.created_at, f.updated_at
              FROM floors f
@@ -1243,9 +1248,12 @@ impl FloorRepositoryPort for FloorRepository {
              INNER JOIN sites s ON b.site_id = s.id
              INNER JOIN cities c ON s.city_id = c.id
              INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN countries co ON st.country_id = co.id
              {}
              ORDER BY b.name, f.floor_number LIMIT ${} OFFSET ${}",
-            where_clause, bind_index, bind_index + 1
+            where_clause,
+            bind_index,
+            bind_index + 1
         );
 
         let mut query = sqlx::query_as::<_, FloorWithRelationsDto>(&query_str);
@@ -1262,10 +1270,7 @@ impl FloorRepositoryPort for FloorRepository {
         let floors = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
 
         // Count total
-        let count_query_str = format!(
-            "SELECT COUNT(*) FROM floors f {}",
-            where_clause
-        );
+        let count_query_str = format!("SELECT COUNT(*) FROM floors f {}", where_clause);
 
         let mut count_query = sqlx::query_scalar::<_, i64>(&count_query_str);
 
@@ -1356,6 +1361,9 @@ impl SpaceRepositoryPort for SpaceRepository {
                 c.state_id,
                 st.name AS state_name,
                 st.code AS state_code,
+                co.id AS country_id,
+                co.name AS country_name,
+                co.code AS country_code,
                 sp.space_type_id,
                 spt.name AS space_type_name,
                 sp.description,
@@ -1367,6 +1375,7 @@ impl SpaceRepositoryPort for SpaceRepository {
             INNER JOIN sites s ON b.site_id = s.id
             INNER JOIN cities c ON s.city_id = c.id
             INNER JOIN states st ON c.state_id = st.id
+            INNER JOIN countries co ON st.country_id = co.id
             INNER JOIN space_types spt ON sp.space_type_id = spt.id
             WHERE sp.id = $1
             "#,
@@ -1495,6 +1504,9 @@ impl SpaceRepositoryPort for SpaceRepository {
                 c.state_id,
                 st.name AS state_name,
                 st.code AS state_code,
+                co.id AS country_id,
+                co.name AS country_name,
+                co.code AS country_code,
                 sp.space_type_id,
                 spt.name AS space_type_name,
                 sp.description,
@@ -1506,11 +1518,14 @@ impl SpaceRepositoryPort for SpaceRepository {
              INNER JOIN sites s ON b.site_id = s.id
              INNER JOIN cities c ON s.city_id = c.id
              INNER JOIN states st ON c.state_id = st.id
+             INNER JOIN countries co ON st.country_id = co.id
              INNER JOIN space_types spt ON sp.space_type_id = spt.id
              {}
              ORDER BY b.name, f.floor_number, sp.name LIMIT ${} OFFSET ${}
             "#,
-            where_clause, bind_index, bind_index + 1
+            where_clause,
+            bind_index,
+            bind_index + 1
         );
 
         let mut query = sqlx::query_as::<_, SpaceWithRelationsDto>(&query_str);

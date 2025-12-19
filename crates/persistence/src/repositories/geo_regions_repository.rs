@@ -83,11 +83,7 @@ impl CountryRepositoryPort for CountryRepository {
         Ok(count > 0)
     }
 
-    async fn create(
-        &self,
-        name: &LocationName,
-        code: &str,
-    ) -> Result<CountryDto, RepositoryError> {
+    async fn create(&self, name: &LocationName, code: &str) -> Result<CountryDto, RepositoryError> {
         sqlx::query_as::<_, CountryDto>(
             "INSERT INTO countries (name, code) VALUES ($1, $2) RETURNING id, name, code, created_at, updated_at",
         )
@@ -104,7 +100,10 @@ impl CountryRepositoryPort for CountryRepository {
         name: Option<&LocationName>,
         code: Option<&str>,
     ) -> Result<CountryDto, RepositoryError> {
-        let current = self.find_by_id(id).await?.ok_or(RepositoryError::NotFound)?;
+        let current = self
+            .find_by_id(id)
+            .await?
+            .ok_or(RepositoryError::NotFound)?;
 
         let new_name = name.unwrap_or(&current.name);
         let new_code = code.unwrap_or(&current.code);
@@ -315,10 +314,7 @@ impl StateRepositoryPort for StateRepository {
 
         if query_parts.is_empty() {
             // If no fields to update, just return the existing state
-            return self
-                .find_by_id(id)
-                .await?
-                .ok_or(RepositoryError::NotFound);
+            return self.find_by_id(id).await?.ok_or(RepositoryError::NotFound);
         }
 
         let query_str = format!(
@@ -365,7 +361,10 @@ impl StateRepositoryPort for StateRepository {
         let mut bind_index = 1;
 
         if search_pattern.is_some() {
-            conditions.push(format!("(s.name ILIKE ${} OR s.code ILIKE ${})", bind_index, bind_index));
+            conditions.push(format!(
+                "(s.name ILIKE ${} OR s.code ILIKE ${})",
+                bind_index, bind_index
+            ));
             bind_index += 1;
         }
         if country_id.is_some() {
@@ -390,7 +389,9 @@ impl StateRepositoryPort for StateRepository {
             {}
             ORDER BY s.name LIMIT ${} OFFSET ${}
             "#,
-            where_clause, bind_index, bind_index + 1
+            where_clause,
+            bind_index,
+            bind_index + 1
         );
 
         let mut query = sqlx::query_as::<_, StateWithCountryDto>(&query_str);
@@ -481,9 +482,11 @@ impl CityRepositoryPort for CityRepository {
             SELECT
                 c.id, c.name, c.state_id,
                 s.name as state_name, s.code as state_code,
+                co.id as country_id, co.name as country_name, co.code as country_code,
                 c.created_at, c.updated_at
             FROM cities c
             INNER JOIN states s ON c.state_id = s.id
+            INNER JOIN countries co ON s.country_id = co.id
             WHERE c.id = $1
             "#,
         )
@@ -530,10 +533,7 @@ impl CityRepositoryPort for CityRepository {
         }
 
         if query_parts.is_empty() {
-            return self
-                .find_by_id(id)
-                .await?
-                .ok_or(RepositoryError::NotFound);
+            return self.find_by_id(id).await?.ok_or(RepositoryError::NotFound);
         }
 
         let query_str = format!(
@@ -574,114 +574,94 @@ impl CityRepositoryPort for CityRepository {
     ) -> Result<(Vec<CityWithStateDto>, i64), RepositoryError> {
         let search_pattern = search.map(|s| format!("%{}%", s));
 
+        // Base query with joins
+        let base_query = r#"
+            SELECT
+                c.id, c.name, c.state_id,
+                s.name as state_name, s.code as state_code,
+                co.id as country_id, co.name as country_name, co.code as country_code,
+                c.created_at, c.updated_at
+            FROM cities c
+            INNER JOIN states s ON c.state_id = s.id
+            INNER JOIN countries co ON s.country_id = co.id
+        "#;
+
+        let count_base = "SELECT COUNT(*) FROM cities c INNER JOIN states s ON c.state_id = s.id";
+
         let cities = match (search_pattern.as_ref(), state_id) {
             (Some(pattern), Some(state)) => {
-                sqlx::query_as::<_, CityWithStateDto>(
-                    r#"
-                    SELECT
-                        c.id, c.name, c.state_id,
-                        s.name as state_name, s.code as state_code,
-                        c.created_at, c.updated_at
-                    FROM cities c
-                    INNER JOIN states s ON c.state_id = s.id
-                    WHERE c.name ILIKE $1 AND c.state_id = $2
-                    ORDER BY c.name LIMIT $3 OFFSET $4
-                    "#,
-                )
-                .bind(pattern)
-                .bind(state)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&self.pool)
-                .await
-                .map_err(Self::map_err)?
+                let q = format!("{} WHERE c.name ILIKE $1 AND c.state_id = $2 ORDER BY c.name LIMIT $3 OFFSET $4", base_query);
+                sqlx::query_as::<_, CityWithStateDto>(&q)
+                    .bind(pattern)
+                    .bind(state)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(Self::map_err)?
             }
             (Some(pattern), None) => {
-                sqlx::query_as::<_, CityWithStateDto>(
-                    r#"
-                    SELECT
-                        c.id, c.name, c.state_id,
-                        s.name as state_name, s.code as state_code,
-                        c.created_at, c.updated_at
-                    FROM cities c
-                    INNER JOIN states s ON c.state_id = s.id
-                    WHERE c.name ILIKE $1
-                    ORDER BY c.name LIMIT $2 OFFSET $3
-                    "#,
-                )
-                .bind(pattern)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&self.pool)
-                .await
-                .map_err(Self::map_err)?
+                let q = format!(
+                    "{} WHERE c.name ILIKE $1 ORDER BY c.name LIMIT $2 OFFSET $3",
+                    base_query
+                );
+                sqlx::query_as::<_, CityWithStateDto>(&q)
+                    .bind(pattern)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(Self::map_err)?
             }
             (None, Some(state)) => {
-                sqlx::query_as::<_, CityWithStateDto>(
-                    r#"
-                    SELECT
-                        c.id, c.name, c.state_id,
-                        s.name as state_name, s.code as state_code,
-                        c.created_at, c.updated_at
-                    FROM cities c
-                    INNER JOIN states s ON c.state_id = s.id
-                    WHERE c.state_id = $1
-                    ORDER BY c.name LIMIT $2 OFFSET $3
-                    "#,
-                )
-                .bind(state)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&self.pool)
-                .await
-                .map_err(Self::map_err)?
+                let q = format!(
+                    "{} WHERE c.state_id = $1 ORDER BY c.name LIMIT $2 OFFSET $3",
+                    base_query
+                );
+                sqlx::query_as::<_, CityWithStateDto>(&q)
+                    .bind(state)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(Self::map_err)?
             }
             (None, None) => {
-                sqlx::query_as::<_, CityWithStateDto>(
-                    r#"
-                    SELECT
-                        c.id, c.name, c.state_id,
-                        s.name as state_name, s.code as state_code,
-                        c.created_at, c.updated_at
-                    FROM cities c
-                    INNER JOIN states s ON c.state_id = s.id
-                    ORDER BY c.name LIMIT $1 OFFSET $2
-                    "#,
-                )
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(&self.pool)
-                .await
-                .map_err(Self::map_err)?
+                let q = format!("{} ORDER BY c.name LIMIT $1 OFFSET $2", base_query);
+                sqlx::query_as::<_, CityWithStateDto>(&q)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(&self.pool)
+                    .await
+                    .map_err(Self::map_err)?
             }
         };
 
         let total: i64 = match (search_pattern.as_ref(), state_id) {
-            (Some(pattern), Some(state)) => {
-                sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM cities WHERE name ILIKE $1 AND state_id = $2",
-                )
-                .bind(pattern)
-                .bind(state)
-                .fetch_one(&self.pool)
-                .await
-                .map_err(Self::map_err)?
-            }
+            (Some(pattern), Some(state)) => sqlx::query_scalar(&format!(
+                "{} WHERE c.name ILIKE $1 AND c.state_id = $2",
+                count_base
+            ))
+            .bind(pattern)
+            .bind(state)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Self::map_err)?,
             (Some(pattern), None) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM cities WHERE name ILIKE $1")
+                sqlx::query_scalar(&format!("{} WHERE c.name ILIKE $1", count_base))
                     .bind(pattern)
                     .fetch_one(&self.pool)
                     .await
                     .map_err(Self::map_err)?
             }
             (None, Some(state)) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM cities WHERE state_id = $1")
+                sqlx::query_scalar(&format!("{} WHERE c.state_id = $1", count_base))
                     .bind(state)
                     .fetch_one(&self.pool)
                     .await
                     .map_err(Self::map_err)?
             }
-            (None, None) => sqlx::query_scalar("SELECT COUNT(*) FROM cities")
+            (None, None) => sqlx::query_scalar(count_base)
                 .fetch_one(&self.pool)
                 .await
                 .map_err(Self::map_err)?,
