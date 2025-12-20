@@ -14,6 +14,8 @@ pub struct SiteTypeDto {
     pub id: Uuid,
     pub name: LocationName,
     pub description: Option<String>,
+    pub icon: Option<String>,
+    pub color: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -56,6 +58,8 @@ pub struct BuildingTypeDto {
     pub id: Uuid,
     pub name: LocationName,
     pub description: Option<String>,
+    pub icon: Option<String>,
+    pub color: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -98,6 +102,8 @@ pub struct SpaceTypeDto {
     pub id: Uuid,
     pub name: LocationName,
     pub description: Option<String>,
+    pub icon: Option<String>,
+    pub color: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -142,6 +148,10 @@ pub struct SiteDto {
     pub city_id: Uuid,
     pub site_type_id: Uuid,
     pub address: Option<String>,
+    pub code: Option<String>,
+    pub bounds: Option<serde_json::Value>,
+    pub center: Option<serde_json::Value>,
+    pub default_zoom: Option<i32>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -162,6 +172,10 @@ pub struct SiteWithRelationsDto {
     pub site_type_id: Uuid,
     pub site_type_name: LocationName,
     pub address: Option<String>,
+    pub code: Option<String>,
+    pub bounds: Option<serde_json::Value>,
+    pub center: Option<serde_json::Value>,
+    pub default_zoom: Option<i32>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -212,6 +226,9 @@ pub struct BuildingDto {
     pub site_id: Uuid,
     pub building_type_id: Uuid,
     pub description: Option<String>,
+    pub code: Option<String>,
+    pub total_floors: Option<i32>,
+    pub coordinates: Option<serde_json::Value>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -234,6 +251,9 @@ pub struct BuildingWithRelationsDto {
     pub building_type_id: Uuid,
     pub building_type_name: LocationName,
     pub description: Option<String>,
+    pub code: Option<String>,
+    pub total_floors: Option<i32>,
+    pub coordinates: Option<serde_json::Value>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -352,6 +372,11 @@ pub struct SpaceDto {
     pub floor_id: Uuid,
     pub space_type_id: Uuid,
     pub description: Option<String>,
+    pub code: Option<String>,
+    pub location_type: Option<String>,
+    pub coordinates: Option<serde_json::Value>,
+    pub capacity: Option<i32>,
+    pub area: Option<f64>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -378,6 +403,11 @@ pub struct SpaceWithRelationsDto {
     pub space_type_id: Uuid,
     pub space_type_name: LocationName,
     pub description: Option<String>,
+    pub code: Option<String>,
+    pub location_type: Option<String>,
+    pub coordinates: Option<serde_json::Value>,
+    pub capacity: Option<i32>,
+    pub area: Option<f64>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
