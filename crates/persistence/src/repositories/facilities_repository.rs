@@ -633,7 +633,11 @@ impl SiteRepository {
 impl SiteRepositoryPort for SiteRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<SiteDto>, RepositoryError> {
         let site = sqlx::query_as::<_, SiteDto>(
-            "SELECT id, name, city_id, site_type_id, address, code, bounds, center, default_zoom, created_at, updated_at
+            "SELECT
+                id, name, city_id, site_type_id, address, code,
+                ST_AsGeoJSON(bounds)::json as bounds,
+                ST_AsGeoJSON(center)::json as center,
+                default_zoom, created_at, updated_at
              FROM sites WHERE id = $1",
         )
         .bind(id)
@@ -655,7 +659,10 @@ impl SiteRepositoryPort for SiteRepository {
                 st.id as state_id, st.name as state_name, st.code as state_code,
                 co.id as country_id, co.name as country_name, co.code as country_code,
                 s.site_type_id, stype.name as site_type_name,
-                s.address, s.code, s.bounds, s.center, s.default_zoom,
+                s.address, s.code,
+                ST_AsGeoJSON(s.bounds)::json as bounds,
+                ST_AsGeoJSON(s.center)::json as center,
+                s.default_zoom,
                 s.created_at, s.updated_at
              FROM sites s
              INNER JOIN cities c ON s.city_id = c.id
@@ -783,7 +790,10 @@ impl SiteRepositoryPort for SiteRepository {
                 st.id as state_id, st.name as state_name, st.code as state_code,
                 co.id as country_id, co.name as country_name, co.code as country_code,
                 s.site_type_id, stype.name as site_type_name,
-                s.address, s.code, s.bounds, s.center, s.default_zoom,
+                s.address, s.code,
+                ST_AsGeoJSON(s.bounds)::json as bounds,
+                ST_AsGeoJSON(s.center)::json as center,
+                s.default_zoom,
                 s.created_at, s.updated_at
              FROM sites s
              INNER JOIN cities c ON s.city_id = c.id
@@ -894,7 +904,8 @@ impl BuildingRepositoryPort for BuildingRepository {
                 st.id as state_id, st.name as state_name, st.code as state_code,
                 co.id as country_id, co.name as country_name, co.code as country_code,
                 b.building_type_id, bt.name as building_type_name,
-                b.description,
+                b.description, b.code, b.total_floors,
+                ST_AsGeoJSON(b.coordinates)::json as coordinates,
                 b.created_at, b.updated_at
              FROM buildings b
              INNER JOIN sites s ON b.site_id = s.id
@@ -1015,7 +1026,8 @@ impl BuildingRepositoryPort for BuildingRepository {
                 st.id as state_id, st.name as state_name, st.code as state_code,
                 co.id as country_id, co.name as country_name, co.code as country_code,
                 b.building_type_id, bt.name as building_type_name,
-                b.description,
+                b.description, b.code, b.total_floors,
+                ST_AsGeoJSON(b.coordinates)::json as coordinates,
                 b.created_at, b.updated_at
              FROM buildings b
              INNER JOIN sites s ON b.site_id = s.id
@@ -1367,6 +1379,11 @@ impl SpaceRepositoryPort for SpaceRepository {
                 sp.space_type_id,
                 spt.name AS space_type_name,
                 sp.description,
+                sp.code,
+                sp.location_type,
+                ST_AsGeoJSON(sp.coordinates)::json as coordinates,
+                sp.capacity,
+                sp.area,
                 sp.created_at,
                 sp.updated_at
             FROM spaces sp
@@ -1510,6 +1527,11 @@ impl SpaceRepositoryPort for SpaceRepository {
                 sp.space_type_id,
                 spt.name AS space_type_name,
                 sp.description,
+                sp.code,
+                sp.location_type,
+                ST_AsGeoJSON(sp.coordinates)::json as coordinates,
+                sp.capacity,
+                sp.area,
                 sp.created_at,
                 sp.updated_at
              FROM spaces sp
