@@ -1,3 +1,4 @@
+use crate::api::locations;
 use crate::handlers::{health_handler, public_handler};
 use crate::{infra::telemetry, state::AppState};
 use axum::{routing::get, Router};
@@ -9,4 +10,6 @@ pub fn router() -> Router<AppState> {
         .route("/health/live", get(health_handler::handler_liveness))
         .route("/health/ready", get(health_handler::handler_ready))
         .route("/metrics", get(telemetry::handler_metrics))
+        // Public locations API (no authentication required)
+        .nest("/api/locations/public", locations::public_router())
 }

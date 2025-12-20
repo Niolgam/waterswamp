@@ -33,6 +33,7 @@
 pub mod departments;
 pub mod facilities;
 pub mod geo_regions;
+pub mod public;
 
 use axum::Router;
 use crate::infra::state::AppState;
@@ -59,7 +60,7 @@ pub use departments::DepartmentCategoryResponse;
 // ROUTER
 // =============================================================================
 
-/// Cria o router principal de gerenciamento de localizações.
+/// Cria o router principal de gerenciamento de localizações (ADMIN).
 ///
 /// Agrega os routers dos três submódulos:
 /// - `/geo_regions/*` - Countries, States, Cities
@@ -69,4 +70,17 @@ pub fn router() -> Router<AppState> {
     geo_regions::router()
         .merge(facilities::router())
         .nest("/department-categories", departments::router())
+}
+
+/// Cria o router público de localizações (SEM AUTENTICAÇÃO).
+///
+/// Este router fornece endpoints públicos para visualização do mapa:
+/// - `/public/sites` - Listar sites
+/// - `/public/buildings` - Obter buildings
+/// - `/public/spaces` - Obter spaces
+/// - `/public/search` - Buscar localizações
+/// - `/public/building-types` - Tipos de building
+/// - `/public/space-types` - Tipos de space
+pub fn public_router() -> Router<AppState> {
+    public::router()
 }
