@@ -43,7 +43,7 @@ impl SiteTypeRepository {
 impl SiteTypeRepositoryPort for SiteTypeRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<SiteTypeDto>, RepositoryError> {
         sqlx::query_as::<_, SiteTypeDto>(
-            "SELECT id, name, description, created_at, updated_at FROM site_types WHERE id = $1",
+            "SELECT id, name, description, icon, color, created_at, updated_at FROM site_types WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -56,7 +56,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
         name: &LocationName,
     ) -> Result<Option<SiteTypeDto>, RepositoryError> {
         sqlx::query_as::<_, SiteTypeDto>(
-            "SELECT id, name, description, created_at, updated_at FROM site_types WHERE name = $1",
+            "SELECT id, name, description, icon, color, created_at, updated_at FROM site_types WHERE name = $1",
         )
         .bind(name.as_str())
         .fetch_optional(&self.pool)
@@ -165,7 +165,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
 
         let site_types = if let Some(ref pattern) = search_pattern {
             sqlx::query_as::<_, SiteTypeDto>(
-                "SELECT id, name, description, created_at, updated_at FROM site_types
+                "SELECT id, name, description, icon, color, created_at, updated_at FROM site_types
                  WHERE name ILIKE $1
                  ORDER BY name LIMIT $2 OFFSET $3",
             )
@@ -177,7 +177,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
             .map_err(Self::map_err)?
         } else {
             sqlx::query_as::<_, SiteTypeDto>(
-                "SELECT id, name, description, created_at, updated_at FROM site_types
+                "SELECT id, name, description, icon, color, created_at, updated_at FROM site_types
                  ORDER BY name LIMIT $1 OFFSET $2",
             )
             .bind(limit)
@@ -234,7 +234,7 @@ impl BuildingTypeRepository {
 impl BuildingTypeRepositoryPort for BuildingTypeRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<BuildingTypeDto>, RepositoryError> {
         sqlx::query_as::<_, BuildingTypeDto>(
-            "SELECT id, name, description, created_at, updated_at FROM building_types WHERE id = $1",
+            "SELECT id, name, description, icon, color, created_at, updated_at FROM building_types WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -247,7 +247,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
         name: &LocationName,
     ) -> Result<Option<BuildingTypeDto>, RepositoryError> {
         sqlx::query_as::<_, BuildingTypeDto>(
-            "SELECT id, name, description, created_at, updated_at FROM building_types WHERE name = $1",
+            "SELECT id, name, description, icon, color, created_at, updated_at FROM building_types WHERE name = $1",
         )
         .bind(name.as_str())
         .fetch_optional(&self.pool)
@@ -356,7 +356,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
 
         let building_types = if let Some(ref pattern) = search_pattern {
             sqlx::query_as::<_, BuildingTypeDto>(
-                "SELECT id, name, description, created_at, updated_at FROM building_types
+                "SELECT id, name, description, icon, color, created_at, updated_at FROM building_types
                  WHERE name ILIKE $1
                  ORDER BY name LIMIT $2 OFFSET $3",
             )
@@ -368,7 +368,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
             .map_err(Self::map_err)?
         } else {
             sqlx::query_as::<_, BuildingTypeDto>(
-                "SELECT id, name, description, created_at, updated_at FROM building_types
+                "SELECT id, name, description, icon, color, created_at, updated_at FROM building_types
                  ORDER BY name LIMIT $1 OFFSET $2",
             )
             .bind(limit)
@@ -425,7 +425,7 @@ impl SpaceTypeRepository {
 impl SpaceTypeRepositoryPort for SpaceTypeRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<SpaceTypeDto>, RepositoryError> {
         sqlx::query_as::<_, SpaceTypeDto>(
-            "SELECT id, name, description, created_at, updated_at FROM space_types WHERE id = $1",
+            "SELECT id, name, description, icon, color, created_at, updated_at FROM space_types WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -438,7 +438,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
         name: &LocationName,
     ) -> Result<Option<SpaceTypeDto>, RepositoryError> {
         sqlx::query_as::<_, SpaceTypeDto>(
-            "SELECT id, name, description, created_at, updated_at FROM space_types WHERE name = $1",
+            "SELECT id, name, description, icon, color, created_at, updated_at FROM space_types WHERE name = $1",
         )
         .bind(name.as_str())
         .fetch_optional(&self.pool)
@@ -547,7 +547,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
 
         let space_types = if let Some(ref pattern) = search_pattern {
             sqlx::query_as::<_, SpaceTypeDto>(
-                "SELECT id, name, description, created_at, updated_at FROM space_types
+                "SELECT id, name, description, icon, color, created_at, updated_at FROM space_types
                  WHERE name ILIKE $1
                  ORDER BY name LIMIT $2 OFFSET $3",
             )
@@ -559,7 +559,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
             .map_err(Self::map_err)?
         } else {
             sqlx::query_as::<_, SpaceTypeDto>(
-                "SELECT id, name, description, created_at, updated_at FROM space_types
+                "SELECT id, name, description, icon, color, created_at, updated_at FROM space_types
                  ORDER BY name LIMIT $1 OFFSET $2",
             )
             .bind(limit)
@@ -633,7 +633,11 @@ impl SiteRepository {
 impl SiteRepositoryPort for SiteRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<SiteDto>, RepositoryError> {
         let site = sqlx::query_as::<_, SiteDto>(
-            "SELECT id, name, city_id, site_type_id, address, created_at, updated_at
+            "SELECT
+                id, name, city_id, site_type_id, address, code,
+                ST_AsGeoJSON(bounds)::json as bounds,
+                ST_AsGeoJSON(center)::json as center,
+                default_zoom, created_at, updated_at
              FROM sites WHERE id = $1",
         )
         .bind(id)
@@ -655,7 +659,10 @@ impl SiteRepositoryPort for SiteRepository {
                 st.id as state_id, st.name as state_name, st.code as state_code,
                 co.id as country_id, co.name as country_name, co.code as country_code,
                 s.site_type_id, stype.name as site_type_name,
-                s.address,
+                s.address, s.code,
+                ST_AsGeoJSON(s.bounds)::json as bounds,
+                ST_AsGeoJSON(s.center)::json as center,
+                s.default_zoom,
                 s.created_at, s.updated_at
              FROM sites s
              INNER JOIN cities c ON s.city_id = c.id
@@ -682,7 +689,7 @@ impl SiteRepositoryPort for SiteRepository {
         let site = sqlx::query_as::<_, SiteDto>(
             "INSERT INTO sites (name, city_id, site_type_id, address)
              VALUES ($1, $2, $3, $4)
-             RETURNING id, name, city_id, site_type_id, address, created_at, updated_at",
+             RETURNING id, name, city_id, site_type_id, address, code, bounds, center, default_zoom, created_at, updated_at",
         )
         .bind(name.as_str())
         .bind(city_id)
@@ -719,7 +726,7 @@ impl SiteRepositoryPort for SiteRepository {
             "UPDATE sites
              SET name = $1, city_id = $2, site_type_id = $3, address = $4, updated_at = NOW()
              WHERE id = $5
-             RETURNING id, name, city_id, site_type_id, address, created_at, updated_at",
+             RETURNING id, name, city_id, site_type_id, address, code, bounds, center, default_zoom, created_at, updated_at",
         )
         .bind(final_name.as_str())
         .bind(final_city_id)
@@ -783,7 +790,10 @@ impl SiteRepositoryPort for SiteRepository {
                 st.id as state_id, st.name as state_name, st.code as state_code,
                 co.id as country_id, co.name as country_name, co.code as country_code,
                 s.site_type_id, stype.name as site_type_name,
-                s.address,
+                s.address, s.code,
+                ST_AsGeoJSON(s.bounds)::json as bounds,
+                ST_AsGeoJSON(s.center)::json as center,
+                s.default_zoom,
                 s.created_at, s.updated_at
              FROM sites s
              INNER JOIN cities c ON s.city_id = c.id
@@ -894,7 +904,8 @@ impl BuildingRepositoryPort for BuildingRepository {
                 st.id as state_id, st.name as state_name, st.code as state_code,
                 co.id as country_id, co.name as country_name, co.code as country_code,
                 b.building_type_id, bt.name as building_type_name,
-                b.description,
+                b.description, b.code, b.total_floors,
+                ST_AsGeoJSON(b.coordinates)::json as coordinates,
                 b.created_at, b.updated_at
              FROM buildings b
              INNER JOIN sites s ON b.site_id = s.id
@@ -1015,7 +1026,8 @@ impl BuildingRepositoryPort for BuildingRepository {
                 st.id as state_id, st.name as state_name, st.code as state_code,
                 co.id as country_id, co.name as country_name, co.code as country_code,
                 b.building_type_id, bt.name as building_type_name,
-                b.description,
+                b.description, b.code, b.total_floors,
+                ST_AsGeoJSON(b.coordinates)::json as coordinates,
                 b.created_at, b.updated_at
              FROM buildings b
              INNER JOIN sites s ON b.site_id = s.id
@@ -1367,6 +1379,11 @@ impl SpaceRepositoryPort for SpaceRepository {
                 sp.space_type_id,
                 spt.name AS space_type_name,
                 sp.description,
+                sp.code,
+                sp.location_type,
+                ST_AsGeoJSON(sp.coordinates)::json as coordinates,
+                sp.capacity,
+                sp.area,
                 sp.created_at,
                 sp.updated_at
             FROM spaces sp
@@ -1510,6 +1527,11 @@ impl SpaceRepositoryPort for SpaceRepository {
                 sp.space_type_id,
                 spt.name AS space_type_name,
                 sp.description,
+                sp.code,
+                sp.location_type,
+                ST_AsGeoJSON(sp.coordinates)::json as coordinates,
+                sp.capacity,
+                sp.area,
                 sp.created_at,
                 sp.updated_at
              FROM spaces sp
