@@ -17,7 +17,7 @@ use domain::ports::{
     SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
 };
 
-use super::public_contracts::*;
+use super::contracts::*;
 
 // =============================================================================
 // QUERY PARAMETERS
@@ -130,8 +130,7 @@ pub async fn list_public_sites(
     // Query all sites with relations
     let (sites, _total) = site_repo
         .list(1000, 0, None, None, None)
-        .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .await?;
 
     let mut results = Vec::new();
 
@@ -140,8 +139,7 @@ pub async fn list_public_sites(
         let (buildings, _) = state
             .building_repository
             .list(10000, 0, None, Some(site.id), None)
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
 
         let building_count = buildings.len() as i64;
 
@@ -151,15 +149,13 @@ pub async fn list_public_sites(
             let (floors, _) = state
                 .floor_repository
                 .list(10000, 0, None, Some(building.id))
-                .await
-                .map_err(|e| AppError::Database(e.to_string()))?;
+                .await?;
 
             for floor in floors {
                 let (spaces, _) = state
                     .space_repository
                     .list(10000, 0, None, Some(floor.id), None)
-                    .await
-                    .map_err(|e| AppError::Database(e.to_string()))?;
+                    .await?;
                 space_count += spaces.len() as i64;
             }
         }
@@ -218,7 +214,7 @@ pub async fn get_public_site(
     let site = site_repo
         .find_with_relations_by_id(id)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        ?
         .ok_or_else(|| AppError::NotFound(format!("Site {} not found", id)))?;
 
     // Count buildings and spaces
@@ -226,7 +222,7 @@ pub async fn get_public_site(
         .building_repository
         .list(10000, 0, None, Some(site.id), None)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        ?;
 
     let building_count = buildings.len() as i64;
 
@@ -236,14 +232,14 @@ pub async fn get_public_site(
             .floor_repository
             .list(10000, 0, None, Some(building.id))
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            ?;
 
         for floor in floors {
             let (spaces, _) = state
                 .space_repository
                 .list(10000, 0, None, Some(floor.id), None)
                 .await
-                .map_err(|e| AppError::Database(e.to_string()))?;
+                ?;
             space_count += spaces.len() as i64;
         }
     }
@@ -306,7 +302,7 @@ pub async fn list_site_buildings(
         .building_repository
         .list(1000, 0, None, Some(site_id), None)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        ?;
 
     let mut results = Vec::new();
 
@@ -316,7 +312,7 @@ pub async fn list_site_buildings(
             .building_type_repository
             .find_by_id(building.building_type_id)
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?
+            ?
             .ok_or_else(|| {
                 AppError::NotFound(format!("Building type {} not found", building.building_type_id))
             })?;
@@ -326,9 +322,9 @@ pub async fn list_site_buildings(
             .floor_repository
             .list(10000, 0, None, Some(building.id))
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            ?;
 
-        let floor_count = floors.len() as i32;
+        let floor_count = floors.len() as i64;
 
         let mut space_count = 0i64;
         for floor in &floors {
@@ -336,7 +332,7 @@ pub async fn list_site_buildings(
                 .space_repository
                 .list(10000, 0, None, Some(floor.id), None)
                 .await
-                .map_err(|e| AppError::Database(e.to_string()))?;
+                ?;
             space_count += spaces.len() as i64;
         }
 
@@ -400,7 +396,7 @@ pub async fn get_public_building(
         .building_repository
         .find_with_relations_by_id(id)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        ?
         .ok_or_else(|| AppError::NotFound(format!("Building {} not found", id)))?;
 
     // Get building type info
@@ -408,7 +404,7 @@ pub async fn get_public_building(
         .building_type_repository
         .find_by_id(building.building_type_id)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        ?
         .ok_or_else(|| {
             AppError::NotFound(format!("Building type {} not found", building.building_type_id))
         })?;
@@ -418,9 +414,9 @@ pub async fn get_public_building(
         .floor_repository
         .list(10000, 0, None, Some(building.id))
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        ?;
 
-    let floor_count = floors.len() as i32;
+    let floor_count = floors.len() as i64;
     let mut total_space_count = 0i64;
 
     let mut floor_infos = Vec::new();
@@ -429,7 +425,7 @@ pub async fn get_public_building(
             .space_repository
             .list(10000, 0, None, Some(floor.id), None)
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            ?;
 
         let space_count = spaces.len() as i64;
         total_space_count += space_count;
@@ -501,7 +497,7 @@ pub async fn list_site_spaces(
         .building_repository
         .list(10000, 0, None, Some(site_id), None)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        ?;
 
     let mut results = Vec::new();
     let mut total_count = 0i64;
@@ -511,14 +507,14 @@ pub async fn list_site_spaces(
             .floor_repository
             .list(10000, 0, None, Some(building.id))
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            ?;
 
         for floor in floors {
             let (spaces, _) = state
                 .space_repository
                 .list(10000, 0, None, Some(floor.id), None)
                 .await
-                .map_err(|e| AppError::Database(e.to_string()))?;
+                ?;
 
             total_count += spaces.len() as i64;
 
@@ -528,7 +524,7 @@ pub async fn list_site_spaces(
                     .space_type_repository
                     .find_by_id(space.space_type_id)
                     .await
-                    .map_err(|e| AppError::Database(e.to_string()))?
+                    ?
                     .ok_or_else(|| {
                         AppError::NotFound(format!("Space type {} not found", space.space_type_id))
                     })?;
@@ -599,7 +595,7 @@ pub async fn get_public_space(
         .space_repository
         .find_with_relations_by_id(id)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        ?
         .ok_or_else(|| AppError::NotFound(format!("Space {} not found", id)))?;
 
     // Get space type
@@ -607,7 +603,7 @@ pub async fn get_public_space(
         .space_type_repository
         .find_by_id(space.space_type_id)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?
+        ?
         .ok_or_else(|| {
             AppError::NotFound(format!("Space type {} not found", space.space_type_id))
         })?;
@@ -647,7 +643,7 @@ pub async fn get_public_space(
                 building_id: space.building_id,
                 building: Some(SpaceBuildingInfo {
                     id: space.building_id,
-                    name: space.building_name.clone(),
+                    name: space.building_name.to_string(),
                     site_id: space.site_id,
                 }),
             },
@@ -676,7 +672,7 @@ pub async fn search_locations(
         .building_repository
         .list(50, 0, Some(params.q.clone()), params.site_id, None)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        ?;
 
     for building in buildings {
         // Get building type
@@ -684,7 +680,7 @@ pub async fn search_locations(
             .building_type_repository
             .find_by_id(building.building_type_id)
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?
+            ?
             .ok_or_else(|| {
                 AppError::NotFound(format!("Building type {} not found", building.building_type_id))
             })?;
@@ -728,7 +724,7 @@ pub async fn search_locations(
             .space_repository
             .list(space_limit, 0, Some(params.q.clone()), None, None)
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            ?;
 
         for space in spaces {
             // Filter by site_id if provided
@@ -743,7 +739,7 @@ pub async fn search_locations(
                 .space_type_repository
                 .find_by_id(space.space_type_id)
                 .await
-                .map_err(|e| AppError::Database(e.to_string()))?
+                ?
                 .ok_or_else(|| {
                     AppError::NotFound(format!("Space type {} not found", space.space_type_id))
                 })?;
@@ -807,7 +803,7 @@ pub async fn list_public_building_types(
         .building_type_repository
         .list(1000, 0, None)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        ?;
 
     let mut results = Vec::new();
 
@@ -817,7 +813,7 @@ pub async fn list_public_building_types(
             .building_repository
             .list(1, 0, None, None, Some(building_type.id))
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            ?;
 
         results.push(PublicBuildingTypeResponse {
             id: building_type.id,
@@ -846,7 +842,7 @@ pub async fn list_public_space_types(
         .space_type_repository
         .list(1000, 0, None)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        ?;
 
     let mut results = Vec::new();
 
@@ -856,7 +852,7 @@ pub async fn list_public_space_types(
             .space_repository
             .list(1, 0, None, None, Some(space_type.id))
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            ?;
 
         results.push(PublicSpaceTypeResponse {
             id: space_type.id,
