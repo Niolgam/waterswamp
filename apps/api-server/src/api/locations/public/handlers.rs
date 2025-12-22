@@ -8,9 +8,14 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 use crate::infra::{errors::AppError, state::AppState};
+use domain::ports::{
+    BuildingRepositoryPort, BuildingTypeRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
+    SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
+};
 
 use super::public_contracts::*;
 
@@ -26,6 +31,91 @@ pub struct SearchQuery {
 }
 
 // =============================================================================
+// HELPER FUNCTIONS FOR GeoJSON PARSING
+// =============================================================================
+
+/// Parse GeoJSON Point: {"type": "Point", "coordinates": [lng, lat]}
+fn parse_geojson_point(json: &JsonValue) -> Option<Coordinates> {
+    if let Some(coords) = json.get("coordinates").and_then(|c| c.as_array()) {
+        if coords.len() >= 2 {
+            let lng = coords[0].as_f64()?;
+            let lat = coords[1].as_f64()?;
+            return Some(Coordinates { lng, lat });
+        }
+    }
+    None
+}
+
+/// Parse GeoJSON Polygon and extract bounds
+fn parse_geojson_polygon_bounds(json: &JsonValue) -> Option<Bounds> {
+    if let Some(coords) = json
+        .get("coordinates")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|ring| ring.as_array())
+    {
+        let mut min_lng = f64::MAX;
+        let mut min_lat = f64::MAX;
+        let mut max_lng = f64::MIN;
+        let mut max_lat = f64::MIN;
+
+        for point in coords {
+            if let Some(point_arr) = point.as_array() {
+                if point_arr.len() >= 2 {
+                    let lng = point_arr[0].as_f64()?;
+                    let lat = point_arr[1].as_f64()?;
+
+                    min_lng = min_lng.min(lng);
+                    min_lat = min_lat.min(lat);
+                    max_lng = max_lng.max(lng);
+                    max_lat = max_lat.max(lat);
+                }
+            }
+        }
+
+        return Some(Bounds {
+            min_lng,
+            min_lat,
+            max_lng,
+            max_lat,
+        });
+    }
+    None
+}
+
+/// Parse GeoJSON Polygon to coordinate array [[lng, lat], ...]
+fn parse_geojson_polygon_coordinates(json: &JsonValue) -> Option<Vec<Vec<f64>>> {
+    if let Some(coords) = json
+        .get("coordinates")
+        .and_then(|c| c.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|ring| ring.as_array())
+    {
+        let mut result = Vec::new();
+        for point in coords {
+            if let Some(point_arr) = point.as_array() {
+                if point_arr.len() >= 2 {
+                    let lng = point_arr[0].as_f64()?;
+                    let lat = point_arr[1].as_f64()?;
+                    result.push(vec![lng, lat]);
+                }
+            }
+        }
+        return Some(result);
+    }
+    None
+}
+
+/// Parse GeoJSON to SpaceCoordinates (Point or Polygon)
+fn parse_space_coordinates(json: &JsonValue, location_type: &str) -> Option<SpaceCoordinates> {
+    match location_type {
+        "point" => parse_geojson_point(json).map(|c| SpaceCoordinates::Point(vec![c.lng, c.lat])),
+        "polygon" => parse_geojson_polygon_coordinates(json).map(SpaceCoordinates::Polygon),
+        _ => None,
+    }
+}
+
+// =============================================================================
 // SITE ENDPOINTS
 // =============================================================================
 
@@ -33,57 +123,85 @@ pub struct SearchQuery {
 ///
 /// Lists all available sites for the map
 pub async fn list_public_sites(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<PublicSiteListResponse>>>, AppError> {
-    // TODO: Implement actual database query
-    // For now, return mock data matching the documentation format
+    let site_repo = &state.site_repository;
 
-    let sites = vec![
-        PublicSiteListResponse {
-            id: Uuid::new_v4(),
-            name: "Campus Downtown".to_string(),
-            description: Some("Main downtown campus with administrative buildings".to_string()),
-            address: Some("123 Main Street, Downtown".to_string()),
-            code: Some("DOWNTOWN".to_string()),
-            building_count: 15,
-            space_count: 450,
-            bounds: Bounds {
+    // Query all sites with relations
+    let (sites, _total) = site_repo
+        .list(1000, 0, None, None, None)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+    let mut results = Vec::new();
+
+    for site in sites {
+        // Count buildings and spaces for this site
+        let (buildings, _) = state
+            .building_repository
+            .list(10000, 0, None, Some(site.id), None)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        let building_count = buildings.len() as i64;
+
+        // Count spaces across all buildings
+        let mut space_count = 0i64;
+        for building in &buildings {
+            let (floors, _) = state
+                .floor_repository
+                .list(10000, 0, None, Some(building.id))
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+
+            for floor in floors {
+                let (spaces, _) = state
+                    .space_repository
+                    .list(10000, 0, None, Some(floor.id), None)
+                    .await
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+                space_count += spaces.len() as i64;
+            }
+        }
+
+        // Parse geographic fields
+        let center = site
+            .center
+            .as_ref()
+            .and_then(parse_geojson_point)
+            .unwrap_or(Coordinates {
+                lng: -122.4194,
+                lat: 37.7749,
+            });
+
+        let bounds = site
+            .bounds
+            .as_ref()
+            .and_then(parse_geojson_polygon_bounds)
+            .unwrap_or(Bounds {
                 min_lng: -122.4194,
                 min_lat: 37.7749,
                 max_lng: -122.4000,
                 max_lat: 37.7900,
-            },
-            center: Coordinates {
-                lng: -122.4097,
-                lat: 37.7825,
-            },
-            default_zoom: 15,
-        },
-        PublicSiteListResponse {
-            id: Uuid::new_v4(),
-            name: "Medical District".to_string(),
-            description: Some("Medical facilities and research centers".to_string()),
-            address: Some("456 Health Ave, Medical District".to_string()),
-            code: Some("MEDICAL".to_string()),
-            building_count: 8,
-            space_count: 320,
-            bounds: Bounds {
-                min_lng: -122.4300,
-                min_lat: 37.7650,
-                max_lng: -122.4100,
-                max_lat: 37.7800,
-            },
-            center: Coordinates {
-                lng: -122.4200,
-                lat: 37.7725,
-            },
-            default_zoom: 16,
-        },
-    ];
+            });
+
+        results.push(PublicSiteListResponse {
+            id: site.id,
+            name: site.name.to_string(),
+            description: None,
+            address: site.address.clone(),
+            code: site.code.clone(),
+            building_count,
+            space_count,
+            bounds,
+            center,
+            default_zoom: site.default_zoom.unwrap_or(15),
+        });
+    }
 
     Ok(Json(ApiResponse {
         success: true,
-        data: sites,
+        data: results,
         timestamp: chrono::Utc::now(),
     }))
 }
@@ -92,39 +210,83 @@ pub async fn list_public_sites(
 ///
 /// Get detailed information about a specific site
 pub async fn get_public_site(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<PublicSiteDetailResponse>>, AppError> {
-    // TODO: Implement actual database query
+    let site_repo = &state.site_repository;
 
-    let site = PublicSiteDetailResponse {
-        id,
-        name: "Campus Downtown".to_string(),
-        description: Some("Main downtown campus".to_string()),
-        address: Some("123 Main Street".to_string()),
-        code: Some("DOWNTOWN".to_string()),
-        city_id: Uuid::new_v4(),
-        site_type_id: Uuid::new_v4(),
-        building_count: 15,
-        space_count: 450,
-        bounds: Bounds {
+    let site = site_repo
+        .find_with_relations_by_id(id)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound(format!("Site {} not found", id)))?;
+
+    // Count buildings and spaces
+    let (buildings, _) = state
+        .building_repository
+        .list(10000, 0, None, Some(site.id), None)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+    let building_count = buildings.len() as i64;
+
+    let mut space_count = 0i64;
+    for building in &buildings {
+        let (floors, _) = state
+            .floor_repository
+            .list(10000, 0, None, Some(building.id))
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        for floor in floors {
+            let (spaces, _) = state
+                .space_repository
+                .list(10000, 0, None, Some(floor.id), None)
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            space_count += spaces.len() as i64;
+        }
+    }
+
+    // Parse geographic fields
+    let center = site
+        .center
+        .as_ref()
+        .and_then(parse_geojson_point)
+        .unwrap_or(Coordinates {
+            lng: -122.4194,
+            lat: 37.7749,
+        });
+
+    let bounds = site
+        .bounds
+        .as_ref()
+        .and_then(parse_geojson_polygon_bounds)
+        .unwrap_or(Bounds {
             min_lng: -122.4194,
             min_lat: 37.7749,
             max_lng: -122.4000,
             max_lat: 37.7900,
-        },
-        center: Coordinates {
-            lng: -122.4097,
-            lat: 37.7825,
-        },
-        default_zoom: 15,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    };
+        });
 
     Ok(Json(ApiResponse {
         success: true,
-        data: site,
+        data: PublicSiteDetailResponse {
+            id: site.id,
+            name: site.name.to_string(),
+            description: None,
+            address: site.address.clone(),
+            code: site.code.clone(),
+            city_id: site.city_id,
+            site_type_id: site.site_type_id,
+            building_count,
+            space_count,
+            bounds,
+            center,
+            default_zoom: site.default_zoom.unwrap_or(15),
+            created_at: site.created_at,
+            updated_at: site.updated_at,
+        },
         timestamp: chrono::Utc::now(),
     }))
 }
@@ -137,75 +299,92 @@ pub async fn get_public_site(
 ///
 /// Lists all buildings for a specific site
 pub async fn list_site_buildings(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(site_id): Path<Uuid>,
 ) -> Result<Json<PaginatedApiResponse<PublicBuildingResponse>>, AppError> {
-    // TODO: Implement actual database query
+    let (buildings, total) = state
+        .building_repository
+        .list(1000, 0, None, Some(site_id), None)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
-    let buildings = vec![
-        PublicBuildingResponse {
-            id: Uuid::new_v4(),
-            name: "Administration Building".to_string(),
-            code: Some("ADMIN-001".to_string()),
-            site_id,
-            building_type_id: Uuid::new_v4(),
+    let mut results = Vec::new();
+
+    for building in buildings {
+        // Get building type info
+        let building_type = state
+            .building_type_repository
+            .find_by_id(building.building_type_id)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?
+            .ok_or_else(|| {
+                AppError::NotFound(format!("Building type {} not found", building.building_type_id))
+            })?;
+
+        // Count floors and spaces
+        let (floors, _) = state
+            .floor_repository
+            .list(10000, 0, None, Some(building.id))
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        let floor_count = floors.len() as i32;
+
+        let mut space_count = 0i64;
+        for floor in &floors {
+            let (spaces, _) = state
+                .space_repository
+                .list(10000, 0, None, Some(floor.id), None)
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+            space_count += spaces.len() as i64;
+        }
+
+        // Parse coordinates
+        let coordinates = building
+            .coordinates
+            .as_ref()
+            .and_then(parse_geojson_polygon_coordinates)
+            .unwrap_or_else(|| {
+                vec![
+                    vec![-122.4100, 37.7800],
+                    vec![-122.4090, 37.7800],
+                    vec![-122.4090, 37.7790],
+                    vec![-122.4100, 37.7790],
+                    vec![-122.4100, 37.7800],
+                ]
+            });
+
+        results.push(PublicBuildingResponse {
+            id: building.id,
+            name: building.name.to_string(),
+            code: building.code.clone(),
+            site_id: building.site_id,
+            building_type_id: building.building_type_id,
             building_type: BuildingTypeInfo {
-                id: Uuid::new_v4(),
-                name: "Administrative".to_string(),
-                icon: "ki-outline ki-building".to_string(),
-                color: "#FF9955".to_string(),
-                description: Some("Administrative buildings".to_string()),
+                id: building_type.id,
+                name: building_type.name.to_string(),
+                icon: building_type.icon.unwrap_or_else(|| "ki-outline ki-building".to_string()),
+                color: building_type.color.unwrap_or_else(|| "#FF9955".to_string()),
+                description: building_type.description,
             },
-            total_floors: Some(5),
-            floor_count: 5,
-            space_count: 120,
-            address: Some("Building A, 123 Main St".to_string()),
-            coordinates: vec![
-                vec![-122.4100, 37.7800],
-                vec![-122.4090, 37.7800],
-                vec![-122.4090, 37.7790],
-                vec![-122.4100, 37.7790],
-                vec![-122.4100, 37.7800],
-            ],
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        },
-        PublicBuildingResponse {
-            id: Uuid::new_v4(),
-            name: "Library Building".to_string(),
-            code: Some("LIB-001".to_string()),
-            site_id,
-            building_type_id: Uuid::new_v4(),
-            building_type: BuildingTypeInfo {
-                id: Uuid::new_v4(),
-                name: "Library".to_string(),
-                icon: "ki-outline ki-book".to_string(),
-                color: "#88CC88".to_string(),
-                description: Some("Library and study buildings".to_string()),
-            },
-            total_floors: Some(3),
-            floor_count: 3,
-            space_count: 45,
-            address: Some("Building B, 123 Main St".to_string()),
-            coordinates: vec![
-                vec![-122.4120, 37.7810],
-                vec![-122.4110, 37.7810],
-                vec![-122.4110, 37.7800],
-                vec![-122.4120, 37.7800],
-                vec![-122.4120, 37.7810],
-            ],
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        },
-    ];
+            total_floors: building.total_floors,
+            floor_count,
+            space_count,
+            address: None,
+            coordinates,
+            created_at: building.created_at,
+            updated_at: building.updated_at,
+        });
+    }
 
     Ok(Json(PaginatedApiResponse {
         success: true,
-        data: buildings,
+        data: results,
         meta: PaginationMeta {
-            total: 15,
+            total,
             page: 1,
-            limit: 50,
+            limit: 1000,
         },
     }))
 }
@@ -214,56 +393,94 @@ pub async fn list_site_buildings(
 ///
 /// Get detailed information about a specific building
 pub async fn get_public_building(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<PublicBuildingDetailResponse>>, AppError> {
-    // TODO: Implement actual database query
+    let building = state
+        .building_repository
+        .find_with_relations_by_id(id)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound(format!("Building {} not found", id)))?;
 
-    let building = PublicBuildingDetailResponse {
-        id,
-        name: "Administration Building".to_string(),
-        code: Some("ADMIN-001".to_string()),
-        site_id: Uuid::new_v4(),
-        building_type_id: Uuid::new_v4(),
-        building_type: BuildingTypeInfo {
-            id: Uuid::new_v4(),
-            name: "Administrative".to_string(),
-            icon: "ki-outline ki-building".to_string(),
-            color: "#FF9955".to_string(),
-            description: Some("Administrative buildings".to_string()),
-        },
-        total_floors: Some(5),
-        floor_count: 5,
-        space_count: 120,
-        address: Some("Building A, 123 Main St".to_string()),
-        coordinates: vec![
-            vec![-122.4100, 37.7800],
-            vec![-122.4090, 37.7800],
-            vec![-122.4090, 37.7790],
-            vec![-122.4100, 37.7790],
-            vec![-122.4100, 37.7800],
-        ],
-        floors: vec![
-            FloorInfo {
-                id: Uuid::new_v4(),
-                name: "Ground Floor".to_string(),
-                floor_number: 0,
-                space_count: 25,
-            },
-            FloorInfo {
-                id: Uuid::new_v4(),
-                name: "First Floor".to_string(),
-                floor_number: 1,
-                space_count: 24,
-            },
-        ],
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    };
+    // Get building type info
+    let building_type = state
+        .building_type_repository
+        .find_by_id(building.building_type_id)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("Building type {} not found", building.building_type_id))
+        })?;
+
+    // Get floors with space counts
+    let (floors, _) = state
+        .floor_repository
+        .list(10000, 0, None, Some(building.id))
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+    let floor_count = floors.len() as i32;
+    let mut total_space_count = 0i64;
+
+    let mut floor_infos = Vec::new();
+    for floor in floors {
+        let (spaces, _) = state
+            .space_repository
+            .list(10000, 0, None, Some(floor.id), None)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        let space_count = spaces.len() as i64;
+        total_space_count += space_count;
+
+        floor_infos.push(FloorInfo {
+            id: floor.id,
+            name: format!("Floor {}", floor.floor_number),
+            floor_number: floor.floor_number,
+            space_count,
+        });
+    }
+
+    // Parse coordinates
+    let coordinates = building
+        .coordinates
+        .as_ref()
+        .and_then(parse_geojson_polygon_coordinates)
+        .unwrap_or_else(|| {
+            vec![
+                vec![-122.4100, 37.7800],
+                vec![-122.4090, 37.7800],
+                vec![-122.4090, 37.7790],
+                vec![-122.4100, 37.7790],
+                vec![-122.4100, 37.7800],
+            ]
+        });
 
     Ok(Json(ApiResponse {
         success: true,
-        data: building,
+        data: PublicBuildingDetailResponse {
+            id: building.id,
+            name: building.name.to_string(),
+            code: building.code.clone(),
+            site_id: building.site_id,
+            building_type_id: building.building_type_id,
+            building_type: BuildingTypeInfo {
+                id: building_type.id,
+                name: building_type.name.to_string(),
+                icon: building_type.icon.unwrap_or_else(|| "ki-outline ki-building".to_string()),
+                color: building_type.color.unwrap_or_else(|| "#FF9955".to_string()),
+                description: building_type.description,
+            },
+            total_floors: building.total_floors,
+            floor_count,
+            space_count: total_space_count,
+            address: None,
+            coordinates,
+            floors: floor_infos,
+            created_at: building.created_at,
+            updated_at: building.updated_at,
+        },
         timestamp: chrono::Utc::now(),
     }))
 }
@@ -276,87 +493,97 @@ pub async fn get_public_building(
 ///
 /// Lists all spaces for a specific site
 pub async fn list_site_spaces(
-    State(_state): State<AppState>,
-    Path(_site_id): Path<Uuid>,
+    State(state): State<AppState>,
+    Path(site_id): Path<Uuid>,
 ) -> Result<Json<PaginatedApiResponse<PublicSpaceResponse>>, AppError> {
-    // TODO: Implement actual database query
+    // First get all buildings for this site
+    let (buildings, _) = state
+        .building_repository
+        .list(10000, 0, None, Some(site_id), None)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
-    let spaces = vec![
-        PublicSpaceResponse {
-            id: Uuid::new_v4(),
-            name: "Room 101".to_string(),
-            code: Some("A-101".to_string()),
-            floor_id: Uuid::new_v4(),
-            space_type_id: Uuid::new_v4(),
-            space_type: SpaceTypeInfo {
-                id: Uuid::new_v4(),
-                name: "Office".to_string(),
-                icon: "ki-outline ki-briefcase".to_string(),
-                color: "#3B82F6".to_string(),
-                description: Some("Office spaces".to_string()),
-            },
-            location_type: "point".to_string(),
-            coordinates: SpaceCoordinates::Point(vec![-122.4095, 37.7795]),
-            capacity: Some(4),
-            area: Some(25.5),
-            description: Some("Small office with 4 workstations".to_string()),
-            floor: SpaceFloorInfo {
-                id: Uuid::new_v4(),
-                name: "Ground Floor".to_string(),
-                floor_number: 0,
-                building_id: Uuid::new_v4(),
-                building: Some(SpaceBuildingInfo {
-                    id: Uuid::new_v4(),
-                    name: "Administration Building".to_string(),
-                    site_id: Uuid::new_v4(),
-                }),
-            },
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        },
-        PublicSpaceResponse {
-            id: Uuid::new_v4(),
-            name: "Conference Room A".to_string(),
-            code: Some("A-CONF-A".to_string()),
-            floor_id: Uuid::new_v4(),
-            space_type_id: Uuid::new_v4(),
-            space_type: SpaceTypeInfo {
-                id: Uuid::new_v4(),
-                name: "Meeting Room".to_string(),
-                icon: "ki-outline ki-people".to_string(),
-                color: "#F59E0B".to_string(),
-                description: Some("Meeting and conference rooms".to_string()),
-            },
-            location_type: "polygon".to_string(),
-            coordinates: SpaceCoordinates::Polygon(vec![
-                vec![-122.4098, 37.7796],
-                vec![-122.4096, 37.7796],
-                vec![-122.4096, 37.7794],
-                vec![-122.4098, 37.7794],
-                vec![-122.4098, 37.7796],
-            ]),
-            capacity: Some(20),
-            area: Some(45.0),
-            description: Some("Large conference room with AV equipment".to_string()),
-            floor: SpaceFloorInfo {
-                id: Uuid::new_v4(),
-                name: "Ground Floor".to_string(),
-                floor_number: 0,
-                building_id: Uuid::new_v4(),
-                building: None,
-            },
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        },
-    ];
+    let mut results = Vec::new();
+    let mut total_count = 0i64;
+
+    for building in buildings {
+        let (floors, _) = state
+            .floor_repository
+            .list(10000, 0, None, Some(building.id))
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        for floor in floors {
+            let (spaces, _) = state
+                .space_repository
+                .list(10000, 0, None, Some(floor.id), None)
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+
+            total_count += spaces.len() as i64;
+
+            for space in spaces {
+                // Get space type
+                let space_type = state
+                    .space_type_repository
+                    .find_by_id(space.space_type_id)
+                    .await
+                    .map_err(|e| AppError::Database(e.to_string()))?
+                    .ok_or_else(|| {
+                        AppError::NotFound(format!("Space type {} not found", space.space_type_id))
+                    })?;
+
+                // Parse coordinates
+                let location_type = space.location_type.clone().unwrap_or_else(|| "point".to_string());
+                let coordinates = space
+                    .coordinates
+                    .as_ref()
+                    .and_then(|c| parse_space_coordinates(c, &location_type))
+                    .unwrap_or_else(|| SpaceCoordinates::Point(vec![-122.4095, 37.7795]));
+
+                results.push(PublicSpaceResponse {
+                    id: space.id,
+                    name: space.name.to_string(),
+                    code: space.code.clone(),
+                    floor_id: space.floor_id,
+                    space_type_id: space.space_type_id,
+                    space_type: SpaceTypeInfo {
+                        id: space_type.id,
+                        name: space_type.name.to_string(),
+                        icon: space_type.icon.unwrap_or_else(|| "ki-outline ki-briefcase".to_string()),
+                        color: space_type.color.unwrap_or_else(|| "#3B82F6".to_string()),
+                        description: space_type.description,
+                    },
+                    location_type,
+                    coordinates,
+                    capacity: space.capacity,
+                    area: space.area,
+                    description: space.description.clone(),
+                    floor: SpaceFloorInfo {
+                        id: floor.id,
+                        name: format!("Floor {}", floor.floor_number),
+                        floor_number: floor.floor_number,
+                        building_id: building.id,
+                        building: Some(SpaceBuildingInfo {
+                            id: building.id,
+                            name: building.name.to_string(),
+                            site_id: building.site_id,
+                        }),
+                    },
+                    created_at: space.created_at,
+                    updated_at: space.updated_at,
+                });
+            }
+        }
+    }
 
     Ok(Json(PaginatedApiResponse {
         success: true,
-        data: spaces,
+        data: results,
         meta: PaginationMeta {
-            total: 450,
+            total: total_count,
             page: 1,
-            limit: 100,
+            limit: 10000,
         },
     }))
 }
@@ -365,47 +592,68 @@ pub async fn list_site_spaces(
 ///
 /// Get detailed information about a specific space
 pub async fn get_public_space(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<PublicSpaceResponse>>, AppError> {
-    // TODO: Implement actual database query
+    let space = state
+        .space_repository
+        .find_with_relations_by_id(id)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound(format!("Space {} not found", id)))?;
 
-    let space = PublicSpaceResponse {
-        id,
-        name: "Room 101".to_string(),
-        code: Some("A-101".to_string()),
-        floor_id: Uuid::new_v4(),
-        space_type_id: Uuid::new_v4(),
-        space_type: SpaceTypeInfo {
-            id: Uuid::new_v4(),
-            name: "Office".to_string(),
-            icon: "ki-outline ki-briefcase".to_string(),
-            color: "#3B82F6".to_string(),
-            description: Some("Office spaces".to_string()),
-        },
-        location_type: "point".to_string(),
-        coordinates: SpaceCoordinates::Point(vec![-122.4095, 37.7795]),
-        capacity: Some(4),
-        area: Some(25.5),
-        description: Some("Small office with 4 workstations".to_string()),
-        floor: SpaceFloorInfo {
-            id: Uuid::new_v4(),
-            name: "Ground Floor".to_string(),
-            floor_number: 0,
-            building_id: Uuid::new_v4(),
-            building: Some(SpaceBuildingInfo {
-                id: Uuid::new_v4(),
-                name: "Administration Building".to_string(),
-                site_id: Uuid::new_v4(),
-            }),
-        },
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    };
+    // Get space type
+    let space_type = state
+        .space_type_repository
+        .find_by_id(space.space_type_id)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("Space type {} not found", space.space_type_id))
+        })?;
+
+    // Parse coordinates
+    let location_type = space.location_type.clone().unwrap_or_else(|| "point".to_string());
+    let coordinates = space
+        .coordinates
+        .as_ref()
+        .and_then(|c| parse_space_coordinates(c, &location_type))
+        .unwrap_or_else(|| SpaceCoordinates::Point(vec![-122.4095, 37.7795]));
 
     Ok(Json(ApiResponse {
         success: true,
-        data: space,
+        data: PublicSpaceResponse {
+            id: space.id,
+            name: space.name.to_string(),
+            code: space.code.clone(),
+            floor_id: space.floor_id,
+            space_type_id: space.space_type_id,
+            space_type: SpaceTypeInfo {
+                id: space_type.id,
+                name: space_type.name.to_string(),
+                icon: space_type.icon.unwrap_or_else(|| "ki-outline ki-briefcase".to_string()),
+                color: space_type.color.unwrap_or_else(|| "#3B82F6".to_string()),
+                description: space_type.description,
+            },
+            location_type,
+            coordinates,
+            capacity: space.capacity,
+            area: space.area,
+            description: space.description.clone(),
+            floor: SpaceFloorInfo {
+                id: space.floor_id,
+                name: format!("Floor {}", space.floor_number),
+                floor_number: space.floor_number,
+                building_id: space.building_id,
+                building: Some(SpaceBuildingInfo {
+                    id: space.building_id,
+                    name: space.building_name.clone(),
+                    site_id: space.site_id,
+                }),
+            },
+            created_at: space.created_at,
+            updated_at: space.updated_at,
+        },
         timestamp: chrono::Utc::now(),
     }))
 }
@@ -418,59 +666,121 @@ pub async fn get_public_space(
 ///
 /// Search for buildings and spaces by name or code
 pub async fn search_locations(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Query(params): Query<SearchQuery>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // TODO: Implement actual database search
+    let mut results = Vec::new();
 
-    let results = vec![
-        SearchResultItem::Building {
-            id: Uuid::new_v4(),
-            name: "Administration Building".to_string(),
-            code: Some("ADMIN-001".to_string()),
-            site_id: Uuid::new_v4(),
-            building_type_id: Uuid::new_v4(),
+    // Search buildings
+    let (buildings, _) = state
+        .building_repository
+        .list(50, 0, Some(params.q.clone()), params.site_id, None)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+    for building in buildings {
+        // Get building type
+        let building_type = state
+            .building_type_repository
+            .find_by_id(building.building_type_id)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?
+            .ok_or_else(|| {
+                AppError::NotFound(format!("Building type {} not found", building.building_type_id))
+            })?;
+
+        let coordinates = building
+            .coordinates
+            .as_ref()
+            .and_then(parse_geojson_polygon_coordinates)
+            .unwrap_or_else(|| {
+                vec![
+                    vec![-122.4100, 37.7800],
+                    vec![-122.4090, 37.7800],
+                    vec![-122.4090, 37.7790],
+                    vec![-122.4100, 37.7790],
+                    vec![-122.4100, 37.7800],
+                ]
+            });
+
+        results.push(SearchResultItem::Building {
+            id: building.id,
+            name: building.name.to_string(),
+            code: building.code.clone(),
+            site_id: building.site_id,
+            building_type_id: building.building_type_id,
             building_type: BuildingTypeInfo {
-                id: Uuid::new_v4(),
-                name: "Administrative".to_string(),
-                icon: "ki-outline ki-building".to_string(),
-                color: "#FF9955".to_string(),
-                description: Some("Administrative buildings".to_string()),
+                id: building_type.id,
+                name: building_type.name.to_string(),
+                icon: building_type.icon.unwrap_or_else(|| "ki-outline ki-building".to_string()),
+                color: building_type.color.unwrap_or_else(|| "#FF9955".to_string()),
+                description: building_type.description,
             },
-            coordinates: vec![
-                vec![-122.4100, 37.7800],
-                vec![-122.4090, 37.7800],
-                vec![-122.4090, 37.7790],
-                vec![-122.4100, 37.7790],
-                vec![-122.4100, 37.7800],
-            ],
+            coordinates,
             match_type: "name".to_string(),
-        },
-        SearchResultItem::Space {
-            id: Uuid::new_v4(),
-            name: "Admin Office".to_string(),
-            code: Some("B-ADMIN".to_string()),
-            floor_id: Uuid::new_v4(),
-            space_type_id: Uuid::new_v4(),
-            space_type: SpaceTypeInfo {
-                id: Uuid::new_v4(),
-                name: "Office".to_string(),
-                icon: "ki-outline ki-briefcase".to_string(),
-                color: "#3B82F6".to_string(),
-                description: Some("Office spaces".to_string()),
-            },
-            location_type: "point".to_string(),
-            coordinates: SpaceCoordinates::Point(vec![-122.4115, 37.7805]),
-            floor: SpaceFloorInfo {
-                id: Uuid::new_v4(),
-                name: "First Floor".to_string(),
-                floor_number: 1,
-                building_id: Uuid::new_v4(),
-                building: None,
-            },
-            match_type: "name".to_string(),
-        },
-    ];
+        });
+    }
+
+    // Search spaces (limit to first 50 - params.site_id results)
+    let space_limit = 50 - results.len() as i64;
+    if space_limit > 0 {
+        let (spaces, _) = state
+            .space_repository
+            .list(space_limit, 0, Some(params.q.clone()), None, None)
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        for space in spaces {
+            // Filter by site_id if provided
+            if let Some(site_id) = params.site_id {
+                if space.site_id != site_id {
+                    continue;
+                }
+            }
+
+            // Get space type
+            let space_type = state
+                .space_type_repository
+                .find_by_id(space.space_type_id)
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?
+                .ok_or_else(|| {
+                    AppError::NotFound(format!("Space type {} not found", space.space_type_id))
+                })?;
+
+            let location_type = space.location_type.clone().unwrap_or_else(|| "point".to_string());
+            let coordinates = space
+                .coordinates
+                .as_ref()
+                .and_then(|c| parse_space_coordinates(c, &location_type))
+                .unwrap_or_else(|| SpaceCoordinates::Point(vec![-122.4095, 37.7795]));
+
+            results.push(SearchResultItem::Space {
+                id: space.id,
+                name: space.name.to_string(),
+                code: space.code.clone(),
+                floor_id: space.floor_id,
+                space_type_id: space.space_type_id,
+                space_type: SpaceTypeInfo {
+                    id: space_type.id,
+                    name: space_type.name.to_string(),
+                    icon: space_type.icon.unwrap_or_else(|| "ki-outline ki-briefcase".to_string()),
+                    color: space_type.color.unwrap_or_else(|| "#3B82F6".to_string()),
+                    description: space_type.description,
+                },
+                location_type,
+                coordinates,
+                floor: SpaceFloorInfo {
+                    id: space.floor_id,
+                    name: format!("Floor {}", space.floor_number),
+                    floor_number: space.floor_number,
+                    building_id: space.building_id,
+                    building: None,
+                },
+                match_type: "name".to_string(),
+            });
+        }
+    }
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -491,40 +801,37 @@ pub async fn search_locations(
 ///
 /// Lists all building types with counts
 pub async fn list_public_building_types(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<PublicBuildingTypeResponse>>>, AppError> {
-    // TODO: Implement actual database query
+    let (building_types, _) = state
+        .building_type_repository
+        .list(1000, 0, None)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
-    let types = vec![
-        PublicBuildingTypeResponse {
-            id: Uuid::new_v4(),
-            name: "Administrative".to_string(),
-            icon: "ki-outline ki-building".to_string(),
-            color: "#FF9955".to_string(),
-            description: Some("Administrative buildings".to_string()),
-            count: 5,
-        },
-        PublicBuildingTypeResponse {
-            id: Uuid::new_v4(),
-            name: "Library".to_string(),
-            icon: "ki-outline ki-book".to_string(),
-            color: "#88CC88".to_string(),
-            description: Some("Library buildings".to_string()),
-            count: 2,
-        },
-        PublicBuildingTypeResponse {
-            id: Uuid::new_v4(),
-            name: "Laboratory".to_string(),
-            icon: "ki-outline ki-flask".to_string(),
-            color: "#AA88CC".to_string(),
-            description: Some("Laboratory buildings".to_string()),
-            count: 8,
-        },
-    ];
+    let mut results = Vec::new();
+
+    for building_type in building_types {
+        // Count buildings of this type
+        let (buildings, total) = state
+            .building_repository
+            .list(1, 0, None, None, Some(building_type.id))
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        results.push(PublicBuildingTypeResponse {
+            id: building_type.id,
+            name: building_type.name.to_string(),
+            icon: building_type.icon.unwrap_or_else(|| "ki-outline ki-building".to_string()),
+            color: building_type.color.unwrap_or_else(|| "#FF9955".to_string()),
+            description: building_type.description,
+            count: total,
+        });
+    }
 
     Ok(Json(ApiResponse {
         success: true,
-        data: types,
+        data: results,
         timestamp: chrono::Utc::now(),
     }))
 }
@@ -533,40 +840,37 @@ pub async fn list_public_building_types(
 ///
 /// Lists all space types with counts
 pub async fn list_public_space_types(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<PublicSpaceTypeResponse>>>, AppError> {
-    // TODO: Implement actual database query
+    let (space_types, _) = state
+        .space_type_repository
+        .list(1000, 0, None)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
-    let types = vec![
-        PublicSpaceTypeResponse {
-            id: Uuid::new_v4(),
-            name: "Office".to_string(),
-            icon: "ki-outline ki-briefcase".to_string(),
-            color: "#3B82F6".to_string(),
-            description: Some("Office spaces".to_string()),
-            count: 120,
-        },
-        PublicSpaceTypeResponse {
-            id: Uuid::new_v4(),
-            name: "Meeting Room".to_string(),
-            icon: "ki-outline ki-people".to_string(),
-            color: "#F59E0B".to_string(),
-            description: Some("Meeting rooms".to_string()),
-            count: 45,
-        },
-        PublicSpaceTypeResponse {
-            id: Uuid::new_v4(),
-            name: "Laboratory".to_string(),
-            icon: "ki-outline ki-flask".to_string(),
-            color: "#8B5CF6".to_string(),
-            description: Some("Laboratory spaces".to_string()),
-            count: 80,
-        },
-    ];
+    let mut results = Vec::new();
+
+    for space_type in space_types {
+        // Count spaces of this type
+        let (spaces, total) = state
+            .space_repository
+            .list(1, 0, None, None, Some(space_type.id))
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        results.push(PublicSpaceTypeResponse {
+            id: space_type.id,
+            name: space_type.name.to_string(),
+            icon: space_type.icon.unwrap_or_else(|| "ki-outline ki-briefcase".to_string()),
+            color: space_type.color.unwrap_or_else(|| "#3B82F6".to_string()),
+            description: space_type.description,
+            count: total,
+        });
+    }
 
     Ok(Json(ApiResponse {
         success: true,
-        data: types,
+        data: results,
         timestamp: chrono::Utc::now(),
     }))
 }
