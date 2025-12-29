@@ -1,15 +1,16 @@
 use async_trait::async_trait;
 use domain::errors::RepositoryError;
 use domain::models::{
-    MaterialDto, MaterialGroupDto, MaterialWithGroupDto, MovementType, RequisitionDto,
+    MaterialConsumptionReportDto, MaterialDto, MaterialGroupDto, MaterialWithGroupDto,
+    MostRequestedMaterialsReportDto, MovementAnalysisReportDto, MovementType, RequisitionDto,
     RequisitionItemDto, RequisitionStatus, RequisitionWithDetailsDto, StockMovementDto,
-    StockMovementWithDetailsDto, WarehouseDto, WarehouseStockDto, WarehouseStockWithDetailsDto,
-    WarehouseWithCityDto,
+    StockMovementWithDetailsDto, StockValueDetailDto, StockValueReportDto, WarehouseDto,
+    WarehouseStockDto, WarehouseStockWithDetailsDto, WarehouseWithCityDto,
 };
 use domain::ports::{
     MaterialGroupRepositoryPort, MaterialRepositoryPort, RequisitionItemRepositoryPort,
-    RequisitionRepositoryPort, StockMovementRepositoryPort, WarehouseRepositoryPort,
-    WarehouseStockRepositoryPort,
+    RequisitionRepositoryPort, StockMovementRepositoryPort, WarehouseReportsPort,
+    WarehouseRepositoryPort, WarehouseStockRepositoryPort,
 };
 use domain::value_objects::{CatmatCode, MaterialCode, UnitOfMeasure};
 use sqlx::PgPool;
@@ -1879,15 +1880,265 @@ impl RequisitionItemRepositoryPort for RequisitionItemRepository {
         requisition_id: Uuid,
     ) -> Result<Vec<RequisitionItemDto>, RepositoryError> {
         sqlx::query_as::<_, RequisitionItemDto>(
-            "SELECT id, requisition_id, material_id, requested_quantity, fulfilled_quantity,
-                    unit_value, total_value, created_at
-             FROM requisition_items
-             WHERE requisition_id = $1
-             ORDER BY created_at",
+            "SELECT ri.id, ri.requisition_id, ri.material_id,
+                    m.name as material_name, m.unit_of_measure,
+                    ri.requested_quantity, ri.fulfilled_quantity,
+                    ri.unit_value, ri.total_value, ri.created_at
+             FROM requisition_items ri
+             JOIN materials m ON ri.material_id = m.id
+             WHERE ri.requisition_id = $1
+             ORDER BY ri.created_at",
         )
         .bind(requisition_id)
         .fetch_all(&self.pool)
         .await
         .map_err(Self::map_err)
+    }
+}
+
+// ============================
+// Warehouse Reports Repository Implementation
+// ============================
+
+#[derive(Clone)]
+pub struct WarehouseReportsRepository {
+    pool: PgPool,
+}
+
+impl WarehouseReportsRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(err: sqlx::Error) -> RepositoryError {
+        match err {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            sqlx::Error::Database(db_err) => RepositoryError::Database(db_err.to_string()),
+            _ => RepositoryError::Database(err.to_string()),
+        }
+    }
+}
+
+#[async_trait]
+impl WarehouseReportsPort for WarehouseReportsRepository {
+    async fn get_stock_value_report(
+        &self,
+        warehouse_id: Option<Uuid>,
+    ) -> Result<Vec<StockValueReportDto>, RepositoryError> {
+        let mut query_str = String::from(
+            "SELECT ws.warehouse_id,
+                    w.name as warehouse_name,
+                    c.name as city_name,
+                    COUNT(ws.id) as total_items,
+                    COALESCE(SUM(ws.quantity), 0) as total_quantity,
+                    COALESCE(SUM(ws.quantity * ws.average_unit_value), 0) as total_value
+             FROM warehouse_stocks ws
+             JOIN warehouses w ON ws.warehouse_id = w.id
+             JOIN cities c ON w.city_id = c.id
+             WHERE ws.quantity > 0"
+        );
+
+        if warehouse_id.is_some() {
+            query_str.push_str(" AND ws.warehouse_id = $1");
+        }
+
+        query_str.push_str(" GROUP BY ws.warehouse_id, w.name, c.name ORDER BY total_value DESC");
+
+        let mut query = sqlx::query_as::<_, StockValueReportDto>(&query_str);
+
+        if let Some(wh_id) = warehouse_id {
+            query = query.bind(wh_id);
+        }
+
+        query.fetch_all(&self.pool).await.map_err(Self::map_err)
+    }
+
+    async fn get_stock_value_detail(
+        &self,
+        warehouse_id: Uuid,
+        material_group_id: Option<Uuid>,
+    ) -> Result<Vec<StockValueDetailDto>, RepositoryError> {
+        let mut query_str = String::from(
+            "SELECT m.id as material_id,
+                    m.code as material_code,
+                    m.name as material_name,
+                    mg.name as material_group_name,
+                    ws.quantity,
+                    ws.average_unit_value,
+                    (ws.quantity * ws.average_unit_value) as total_value,
+                    m.unit_of_measure
+             FROM warehouse_stocks ws
+             JOIN materials m ON ws.material_id = m.id
+             JOIN material_groups mg ON m.material_group_id = mg.id
+             WHERE ws.warehouse_id = $1 AND ws.quantity > 0"
+        );
+
+        if material_group_id.is_some() {
+            query_str.push_str(" AND m.material_group_id = $2");
+        }
+
+        query_str.push_str(" ORDER BY total_value DESC");
+
+        let mut query = sqlx::query_as::<_, StockValueDetailDto>(&query_str).bind(warehouse_id);
+
+        if let Some(mg_id) = material_group_id {
+            query = query.bind(mg_id);
+        }
+
+        query.fetch_all(&self.pool).await.map_err(Self::map_err)
+    }
+
+    async fn get_material_consumption_report(
+        &self,
+        warehouse_id: Option<Uuid>,
+        start_date: chrono::DateTime<chrono::Utc>,
+        end_date: chrono::DateTime<chrono::Utc>,
+        limit: i64,
+    ) -> Result<Vec<MaterialConsumptionReportDto>, RepositoryError> {
+        let mut query_str = String::from(
+            "SELECT m.id as material_id,
+                    m.code as material_code,
+                    m.name as material_name,
+                    mg.name as material_group_name,
+                    COALESCE(SUM(sm.quantity), 0) as total_exits,
+                    COUNT(sm.id) as exit_count,
+                    m.unit_of_measure
+             FROM stock_movements sm
+             JOIN warehouse_stocks ws ON sm.warehouse_stock_id = ws.id
+             JOIN materials m ON ws.material_id = m.id
+             JOIN material_groups mg ON m.material_group_id = mg.id
+             WHERE sm.movement_type = 'SAIDA'
+               AND sm.movement_date >= $1
+               AND sm.movement_date <= $2"
+        );
+
+        let mut param_count = 3;
+        if warehouse_id.is_some() {
+            query_str.push_str(&format!(" AND ws.warehouse_id = ${}", param_count));
+            param_count += 1;
+        }
+
+        query_str.push_str(&format!(
+            " GROUP BY m.id, m.code, m.name, mg.name, m.unit_of_measure
+             ORDER BY total_exits DESC
+             LIMIT ${}",
+            param_count
+        ));
+
+        let mut query = sqlx::query_as::<_, MaterialConsumptionReportDto>(&query_str)
+            .bind(start_date)
+            .bind(end_date);
+
+        if let Some(wh_id) = warehouse_id {
+            query = query.bind(wh_id);
+        }
+
+        query = query.bind(limit);
+
+        query.fetch_all(&self.pool).await.map_err(Self::map_err)
+    }
+
+    async fn get_most_requested_materials(
+        &self,
+        warehouse_id: Option<Uuid>,
+        start_date: Option<chrono::DateTime<chrono::Utc>>,
+        end_date: Option<chrono::DateTime<chrono::Utc>>,
+        limit: i64,
+    ) -> Result<Vec<MostRequestedMaterialsReportDto>, RepositoryError> {
+        let mut query_str = String::from(
+            "SELECT m.id as material_id,
+                    m.code as material_code,
+                    m.name as material_name,
+                    mg.name as material_group_name,
+                    COUNT(DISTINCT r.id) as requisition_count,
+                    COALESCE(SUM(ri.requested_quantity), 0) as total_requested_quantity,
+                    COALESCE(SUM(ri.fulfilled_quantity), 0) as total_fulfilled_quantity,
+                    CASE
+                        WHEN SUM(ri.requested_quantity) > 0 THEN
+                            (SUM(COALESCE(ri.fulfilled_quantity, 0)) / SUM(ri.requested_quantity)) * 100
+                        ELSE 0
+                    END as fulfillment_rate,
+                    m.unit_of_measure
+             FROM requisition_items ri
+             JOIN requisitions r ON ri.requisition_id = r.id
+             JOIN materials m ON ri.material_id = m.id
+             JOIN material_groups mg ON m.material_group_id = mg.id
+             WHERE r.status IN ('APROVADA', 'ATENDIDA', 'PARCIALMENTE_ATENDIDA')"
+        );
+
+        let mut param_count = 1;
+        if warehouse_id.is_some() {
+            query_str.push_str(&format!(" AND r.warehouse_id = ${}", param_count));
+            param_count += 1;
+        }
+        if start_date.is_some() {
+            query_str.push_str(&format!(" AND r.request_date >= ${}", param_count));
+            param_count += 1;
+        }
+        if end_date.is_some() {
+            query_str.push_str(&format!(" AND r.request_date <= ${}", param_count));
+            param_count += 1;
+        }
+
+        query_str.push_str(&format!(
+            " GROUP BY m.id, m.code, m.name, mg.name, m.unit_of_measure
+             ORDER BY requisition_count DESC, total_requested_quantity DESC
+             LIMIT ${}",
+            param_count
+        ));
+
+        let mut query = sqlx::query_as::<_, MostRequestedMaterialsReportDto>(&query_str);
+
+        if let Some(wh_id) = warehouse_id {
+            query = query.bind(wh_id);
+        }
+        if let Some(start) = start_date {
+            query = query.bind(start);
+        }
+        if let Some(end) = end_date {
+            query = query.bind(end);
+        }
+        query = query.bind(limit);
+
+        query.fetch_all(&self.pool).await.map_err(Self::map_err)
+    }
+
+    async fn get_movement_analysis(
+        &self,
+        warehouse_id: Option<Uuid>,
+        start_date: chrono::DateTime<chrono::Utc>,
+        end_date: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<MovementAnalysisReportDto>, RepositoryError> {
+        let mut query_str = String::from(
+            "SELECT ws.warehouse_id,
+                    w.name as warehouse_name,
+                    sm.movement_type,
+                    COUNT(sm.id) as movement_count,
+                    COALESCE(SUM(sm.quantity), 0) as total_quantity
+             FROM stock_movements sm
+             JOIN warehouse_stocks ws ON sm.warehouse_stock_id = ws.id
+             JOIN warehouses w ON ws.warehouse_id = w.id
+             WHERE sm.movement_date >= $1
+               AND sm.movement_date <= $2"
+        );
+
+        if warehouse_id.is_some() {
+            query_str.push_str(" AND ws.warehouse_id = $3");
+        }
+
+        query_str.push_str(
+            " GROUP BY ws.warehouse_id, w.name, sm.movement_type
+             ORDER BY ws.warehouse_id, sm.movement_type"
+        );
+
+        let mut query = sqlx::query_as::<_, MovementAnalysisReportDto>(&query_str)
+            .bind(start_date)
+            .bind(end_date);
+
+        if let Some(wh_id) = warehouse_id {
+            query = query.bind(wh_id);
+        }
+
+        query.fetch_all(&self.pool).await.map_err(Self::map_err)
     }
 }

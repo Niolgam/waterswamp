@@ -1,9 +1,10 @@
 use crate::errors::RepositoryError;
 use crate::models::{
-    MaterialDto, MaterialGroupDto, MaterialWithGroupDto, MovementType, RequisitionDto,
+    MaterialConsumptionReportDto, MaterialDto, MaterialGroupDto, MaterialWithGroupDto,
+    MostRequestedMaterialsReportDto, MovementAnalysisReportDto, MovementType, RequisitionDto,
     RequisitionItemDto, RequisitionStatus, RequisitionWithDetailsDto, StockMovementDto,
-    StockMovementWithDetailsDto, WarehouseDto, WarehouseStockDto, WarehouseStockWithDetailsDto,
-    WarehouseWithCityDto,
+    StockMovementWithDetailsDto, StockValueDetailDto, StockValueReportDto, WarehouseDto,
+    WarehouseStockDto, WarehouseStockWithDetailsDto, WarehouseWithCityDto,
 };
 use crate::value_objects::{CatmatCode, MaterialCode, UnitOfMeasure};
 use async_trait::async_trait;
@@ -366,4 +367,50 @@ pub trait RequisitionItemRepositoryPort: Send + Sync {
         &self,
         requisition_id: Uuid,
     ) -> Result<Vec<RequisitionItemDto>, RepositoryError>;
+}
+
+// ============================
+// Warehouse Reports Port
+// ============================
+
+#[async_trait]
+pub trait WarehouseReportsPort: Send + Sync {
+    /// Relatório de valor total de estoque por almoxarifado
+    async fn get_stock_value_report(
+        &self,
+        warehouse_id: Option<Uuid>,
+    ) -> Result<Vec<StockValueReportDto>, RepositoryError>;
+
+    /// Relatório detalhado de valor de estoque por material em um almoxarifado
+    async fn get_stock_value_detail(
+        &self,
+        warehouse_id: Uuid,
+        material_group_id: Option<Uuid>,
+    ) -> Result<Vec<StockValueDetailDto>, RepositoryError>;
+
+    /// Relatório de consumo de materiais por período
+    async fn get_material_consumption_report(
+        &self,
+        warehouse_id: Option<Uuid>,
+        start_date: chrono::DateTime<chrono::Utc>,
+        end_date: chrono::DateTime<chrono::Utc>,
+        limit: i64,
+    ) -> Result<Vec<MaterialConsumptionReportDto>, RepositoryError>;
+
+    /// Relatório de materiais mais requisitados
+    async fn get_most_requested_materials(
+        &self,
+        warehouse_id: Option<Uuid>,
+        start_date: Option<chrono::DateTime<chrono::Utc>>,
+        end_date: Option<chrono::DateTime<chrono::Utc>>,
+        limit: i64,
+    ) -> Result<Vec<MostRequestedMaterialsReportDto>, RepositoryError>;
+
+    /// Análise de movimentações por tipo e período
+    async fn get_movement_analysis(
+        &self,
+        warehouse_id: Option<Uuid>,
+        start_date: chrono::DateTime<chrono::Utc>,
+        end_date: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<MovementAnalysisReportDto>, RepositoryError>;
 }

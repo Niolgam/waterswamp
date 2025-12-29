@@ -5,7 +5,7 @@ use axum::{
 
 use crate::infra::state::AppState;
 
-use super::handlers;
+use super::{handlers, reports_handlers};
 
 pub fn warehouse_routes() -> Router<AppState> {
     Router::new()
@@ -46,4 +46,10 @@ pub fn warehouse_routes() -> Router<AppState> {
         .route("/stock/exit", post(handlers::register_stock_exit))
         .route("/stock/adjustment", post(handlers::register_stock_adjustment))
         .route("/stock/:id", get(handlers::get_warehouse_stock))
+        // Reports
+        .route("/reports/stock-value", get(reports_handlers::get_stock_value_report))
+        .route("/reports/stock-value/detail", get(reports_handlers::get_stock_value_detail))
+        .route("/reports/consumption", get(reports_handlers::get_consumption_report))
+        .route("/reports/most-requested", get(reports_handlers::get_most_requested_materials))
+        .route("/reports/movement-analysis", get(reports_handlers::get_movement_analysis))
 }

@@ -14,7 +14,7 @@ use tracing::info;
 use application::services::{
     auth_service::AuthService, location_service::LocationService, mfa_service::MfaService,
     requisition_workflow_service::RequisitionWorkflowService, user_service::UserService,
-    warehouse_service::WarehouseService,
+    warehouse_reports_service::WarehouseReportsService, warehouse_service::WarehouseService,
 };
 use domain::ports::{
     AuthRepositoryPort, BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
@@ -22,7 +22,7 @@ use domain::ports::{
     MaterialGroupRepositoryPort, MaterialRepositoryPort, MfaRepositoryPort,
     RequisitionItemRepositoryPort, RequisitionRepositoryPort, SiteRepositoryPort,
     SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
-    StockMovementRepositoryPort, UserRepositoryPort, WarehouseRepositoryPort,
+    StockMovementRepositoryPort, UserRepositoryPort, WarehouseReportsPort, WarehouseRepositoryPort,
     WarehouseStockRepositoryPort,
 };
 use persistence::repositories::{
@@ -37,8 +37,8 @@ use persistence::repositories::{
     user_repository::UserRepository,
     warehouse_repository::{
         MaterialGroupRepository, MaterialRepository, RequisitionItemRepository,
-        RequisitionRepository, StockMovementRepository, WarehouseRepository,
-        WarehouseStockRepository,
+        RequisitionRepository, StockMovementRepository, WarehouseReportsRepository,
+        WarehouseRepository, WarehouseStockRepository,
     },
 };
 
@@ -171,6 +171,13 @@ pub fn build_application_state(
         material_repo_port,
     ));
 
+    let warehouse_reports_repo_port: Arc<dyn WarehouseReportsPort> =
+        Arc::new(WarehouseReportsRepository::new(pool_auth.clone()));
+
+    let warehouse_reports_service = Arc::new(WarehouseReportsService::new(
+        warehouse_reports_repo_port,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -190,6 +197,7 @@ pub fn build_application_state(
         mfa_service,
         location_service,
         warehouse_service,
+        warehouse_reports_service,
         requisition_workflow_service,
         config,
     }

@@ -594,3 +594,67 @@ pub struct FulfillRequisitionItemPayload {
     pub requisition_item_id: Uuid,
     pub fulfilled_quantity: rust_decimal::Decimal, // Validated in service layer (>= 0)
 }
+
+// ============================
+// Report DTOs
+// ============================
+
+/// Relatório de valor de estoque por almoxarifado
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct StockValueReportDto {
+    pub warehouse_id: Uuid,
+    pub warehouse_name: String,
+    pub city_name: String,
+    pub total_items: i64,
+    pub total_quantity: rust_decimal::Decimal,
+    pub total_value: rust_decimal::Decimal,
+}
+
+/// Relatório de valor de estoque detalhado por material em um almoxarifado
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct StockValueDetailDto {
+    pub material_id: Uuid,
+    pub material_code: MaterialCode,
+    pub material_name: String,
+    pub material_group_name: String,
+    pub quantity: rust_decimal::Decimal,
+    pub average_unit_value: rust_decimal::Decimal,
+    pub total_value: rust_decimal::Decimal,
+    pub unit_of_measure: UnitOfMeasure,
+}
+
+/// Relatório de consumo de materiais por período
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct MaterialConsumptionReportDto {
+    pub material_id: Uuid,
+    pub material_code: MaterialCode,
+    pub material_name: String,
+    pub material_group_name: String,
+    pub total_exits: rust_decimal::Decimal,
+    pub exit_count: i64,
+    pub unit_of_measure: UnitOfMeasure,
+}
+
+/// Relatório de materiais mais requisitados
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct MostRequestedMaterialsReportDto {
+    pub material_id: Uuid,
+    pub material_code: MaterialCode,
+    pub material_name: String,
+    pub material_group_name: String,
+    pub requisition_count: i64,
+    pub total_requested_quantity: rust_decimal::Decimal,
+    pub total_fulfilled_quantity: rust_decimal::Decimal,
+    pub fulfillment_rate: rust_decimal::Decimal,
+    pub unit_of_measure: UnitOfMeasure,
+}
+
+/// Relatório de movimentações por período
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct MovementAnalysisReportDto {
+    pub warehouse_id: Uuid,
+    pub warehouse_name: String,
+    pub movement_type: MovementType,
+    pub movement_count: i64,
+    pub total_quantity: rust_decimal::Decimal,
+}

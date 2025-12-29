@@ -1,4 +1,5 @@
 pub mod handlers;
+pub mod reports_handlers;
 pub mod routes;
 
 use crate::infra::state::AppState;
