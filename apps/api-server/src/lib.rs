@@ -13,14 +13,17 @@ use tracing::info;
 // Imports de Portas e Serviços
 use application::services::{
     auth_service::AuthService, location_service::LocationService, mfa_service::MfaService,
-    user_service::UserService, warehouse_service::WarehouseService,
+    requisition_workflow_service::RequisitionWorkflowService, user_service::UserService,
+    warehouse_service::WarehouseService,
 };
 use domain::ports::{
     AuthRepositoryPort, BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
     CountryRepositoryPort, DepartmentCategoryRepositoryPort, EmailServicePort, FloorRepositoryPort,
-    MaterialGroupRepositoryPort, MaterialRepositoryPort, MfaRepositoryPort, SiteRepositoryPort,
+    MaterialGroupRepositoryPort, MaterialRepositoryPort, MfaRepositoryPort,
+    RequisitionItemRepositoryPort, RequisitionRepositoryPort, SiteRepositoryPort,
     SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
-    UserRepositoryPort,
+    StockMovementRepositoryPort, UserRepositoryPort, WarehouseRepositoryPort,
+    WarehouseStockRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
@@ -32,7 +35,11 @@ use persistence::repositories::{
     geo_regions_repository::{CityRepository, CountryRepository, StateRepository},
     mfa_repository::MfaRepository,
     user_repository::UserRepository,
-    warehouse_repository::{MaterialGroupRepository, MaterialRepository},
+    warehouse_repository::{
+        MaterialGroupRepository, MaterialRepository, RequisitionItemRepository,
+        RequisitionRepository, StockMovementRepository, WarehouseRepository,
+        WarehouseStockRepository,
+    },
 };
 
 // Core & Infra
@@ -133,14 +140,34 @@ pub fn build_application_state(
         space_repo_port,
     ));
 
-    // Warehouse repositories and service
+    // Warehouse repositories and services
     let material_group_repo_port: Arc<dyn MaterialGroupRepositoryPort> =
         Arc::new(MaterialGroupRepository::new(pool_auth.clone()));
     let material_repo_port: Arc<dyn MaterialRepositoryPort> =
         Arc::new(MaterialRepository::new(pool_auth.clone()));
+    let warehouse_repo_port: Arc<dyn WarehouseRepositoryPort> =
+        Arc::new(WarehouseRepository::new(pool_auth.clone()));
+    let warehouse_stock_repo_port: Arc<dyn WarehouseStockRepositoryPort> =
+        Arc::new(WarehouseStockRepository::new(pool_auth.clone()));
+    let stock_movement_repo_port: Arc<dyn StockMovementRepositoryPort> =
+        Arc::new(StockMovementRepository::new(pool_auth.clone()));
+    let requisition_repo_port: Arc<dyn RequisitionRepositoryPort> =
+        Arc::new(RequisitionRepository::new(pool_auth.clone()));
+    let requisition_item_repo_port: Arc<dyn RequisitionItemRepositoryPort> =
+        Arc::new(RequisitionItemRepository::new(pool_auth.clone()));
 
     let warehouse_service = Arc::new(WarehouseService::new(
-        material_group_repo_port,
+        material_group_repo_port.clone(),
+        material_repo_port.clone(),
+        warehouse_repo_port.clone(),
+        warehouse_stock_repo_port.clone(),
+        stock_movement_repo_port.clone(),
+    ));
+
+    let requisition_workflow_service = Arc::new(RequisitionWorkflowService::new(
+        requisition_repo_port,
+        requisition_item_repo_port,
+        warehouse_repo_port,
         material_repo_port,
     ));
 
@@ -163,6 +190,7 @@ pub fn build_application_state(
         mfa_service,
         location_service,
         warehouse_service,
+        requisition_workflow_service,
         config,
     }
 }
