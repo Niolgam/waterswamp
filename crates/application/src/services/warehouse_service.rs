@@ -649,3 +649,7 @@ impl WarehouseService {
             .ok_or(ServiceError::NotFound("Estoque não encontrado".to_string()))
     }
 }
+
+#[cfg(test)]
+#[path = "warehouse_service_tests.rs"]
+mod tests;
