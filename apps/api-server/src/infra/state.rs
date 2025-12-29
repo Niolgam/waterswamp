@@ -4,6 +4,7 @@ use application::services::auth_service::AuthService;
 use application::services::location_service::LocationService;
 use application::services::mfa_service::MfaService;
 use application::services::user_service::UserService;
+use application::services::warehouse_service::WarehouseService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use email_service::EmailSender;
@@ -28,5 +29,6 @@ pub struct AppState {
     pub user_service: Arc<UserService>,
     pub mfa_service: Arc<MfaService>,
     pub location_service: Arc<LocationService>,
+    pub warehouse_service: Arc<WarehouseService>,
     pub config: Arc<Config>,
 }

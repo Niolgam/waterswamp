@@ -13,13 +13,14 @@ use tracing::info;
 // Imports de Portas e Serviços
 use application::services::{
     auth_service::AuthService, location_service::LocationService, mfa_service::MfaService,
-    user_service::UserService,
+    user_service::UserService, warehouse_service::WarehouseService,
 };
 use domain::ports::{
     AuthRepositoryPort, BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
     CountryRepositoryPort, DepartmentCategoryRepositoryPort, EmailServicePort, FloorRepositoryPort,
-    MfaRepositoryPort, SiteRepositoryPort, SiteTypeRepositoryPort, SpaceRepositoryPort,
-    SpaceTypeRepositoryPort, StateRepositoryPort, UserRepositoryPort,
+    MaterialGroupRepositoryPort, MaterialRepositoryPort, MfaRepositoryPort, SiteRepositoryPort,
+    SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    UserRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
@@ -31,6 +32,7 @@ use persistence::repositories::{
     geo_regions_repository::{CityRepository, CountryRepository, StateRepository},
     mfa_repository::MfaRepository,
     user_repository::UserRepository,
+    warehouse_repository::{MaterialGroupRepository, MaterialRepository},
 };
 
 // Core & Infra
@@ -131,6 +133,17 @@ pub fn build_application_state(
         space_repo_port,
     ));
 
+    // Warehouse repositories and service
+    let material_group_repo_port: Arc<dyn MaterialGroupRepositoryPort> =
+        Arc::new(MaterialGroupRepository::new(pool_auth.clone()));
+    let material_repo_port: Arc<dyn MaterialRepositoryPort> =
+        Arc::new(MaterialRepository::new(pool_auth.clone()));
+
+    let warehouse_service = Arc::new(WarehouseService::new(
+        material_group_repo_port,
+        material_repo_port,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -149,6 +162,7 @@ pub fn build_application_state(
         user_service,
         mfa_service,
         location_service,
+        warehouse_service,
         config,
     }
 }

@@ -3,7 +3,7 @@ pub mod policies;
 pub mod users;
 
 use crate::{
-    api::locations,
+    api::{locations, warehouse},
     infra::state::AppState,
     middleware::rate_limit::admin_rate_limiter, // Certifique-se que existe ou use api_rate_limiter
 };
@@ -17,5 +17,6 @@ pub fn router() -> Router<AppState> {
         .merge(policies::router())
         .merge(audit::router())
         .nest("/locations", locations::router())
+        .nest("/warehouse", warehouse::router())
         .layer(admin_rate_limiter())
 }
