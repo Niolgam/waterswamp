@@ -149,7 +149,7 @@ pub struct MaterialDto {
 }
 
 /// DTO com informações do grupo de material incluídas
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct MaterialWithGroupDto {
     pub id: Uuid,
     pub material_group_id: Uuid,
@@ -192,8 +192,7 @@ pub struct CreateMaterialPayload {
     pub material_group_id: Uuid,
     #[validate(length(min = 3, max = 200, message = "Denominação deve ter entre 3 e 200 caracteres"))]
     pub name: String,
-    #[validate(range(min = 0.0, message = "Valor estimado deve ser maior ou igual a zero"))]
-    pub estimated_value: rust_decimal::Decimal,
+    pub estimated_value: rust_decimal::Decimal, // Validated in service layer
     pub unit_of_measure: UnitOfMeasure,
     #[validate(length(min = 10, max = 2000, message = "Especificação deve ter entre 10 e 2000 caracteres"))]
     pub specification: String,
@@ -210,8 +209,7 @@ pub struct UpdateMaterialPayload {
     pub material_group_id: Option<Uuid>,
     #[validate(length(min = 3, max = 200, message = "Denominação deve ter entre 3 e 200 caracteres"))]
     pub name: Option<String>,
-    #[validate(range(min = 0.0, message = "Valor estimado deve ser maior ou igual a zero"))]
-    pub estimated_value: Option<rust_decimal::Decimal>,
+    pub estimated_value: Option<rust_decimal::Decimal>, // Validated in service layer
     pub unit_of_measure: Option<UnitOfMeasure>,
     #[validate(length(min = 10, max = 2000, message = "Especificação deve ter entre 10 e 2000 caracteres"))]
     pub specification: Option<String>,
@@ -244,7 +242,7 @@ pub struct WarehouseDto {
 }
 
 /// DTO do Almoxarifado com informações da cidade
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct WarehouseWithCityDto {
     pub id: Uuid,
     pub name: String,
@@ -332,7 +330,7 @@ pub struct WarehouseStockDto {
 }
 
 /// DTO com informações completas (warehouse + material)
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct WarehouseStockWithDetailsDto {
     pub id: Uuid,
     pub warehouse_id: Uuid,
@@ -373,10 +371,8 @@ pub struct ListWarehouseStocksQuery {
 pub struct CreateWarehouseStockPayload {
     pub warehouse_id: Uuid,
     pub material_id: Uuid,
-    #[validate(range(min = 0.0, message = "Quantidade deve ser maior ou igual a zero"))]
-    pub quantity: rust_decimal::Decimal,
-    #[validate(range(min = 0.0, message = "Valor médio deve ser maior ou igual a zero"))]
-    pub average_unit_value: rust_decimal::Decimal,
+    pub quantity: rust_decimal::Decimal, // Validated in service layer (>= 0)
+    pub average_unit_value: rust_decimal::Decimal, // Validated in service layer (>= 0)
     pub min_stock: Option<rust_decimal::Decimal>,
     pub max_stock: Option<rust_decimal::Decimal>,
     #[validate(length(max = 100, message = "Localização deve ter no máximo 100 caracteres"))]
@@ -417,7 +413,7 @@ pub struct StockMovementDto {
 }
 
 /// DTO com informações completas
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct StockMovementWithDetailsDto {
     pub id: Uuid,
     pub warehouse_stock_id: Uuid,
@@ -466,8 +462,7 @@ pub struct CreateStockMovementPayload {
     pub material_id: Uuid,
     pub movement_type: MovementType,
     pub quantity: rust_decimal::Decimal,
-    #[validate(range(min = 0.0, message = "Valor unitário deve ser maior ou igual a zero"))]
-    pub unit_value: rust_decimal::Decimal,
+    pub unit_value: rust_decimal::Decimal, // Validated in service layer (>= 0)
     pub movement_date: Option<chrono::DateTime<chrono::Utc>>,
     #[validate(length(max = 100, message = "Número do documento deve ter no máximo 100 caracteres"))]
     pub document_number: Option<String>,
@@ -588,16 +583,14 @@ pub struct RequisitionItemDto {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Validate, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
 pub struct CreateRequisitionItemPayload {
     pub material_id: Uuid,
-    #[validate(range(min = 0.001, message = "Quantidade deve ser maior que zero"))]
-    pub requested_quantity: rust_decimal::Decimal,
+    pub requested_quantity: rust_decimal::Decimal, // Validated in service layer (> 0)
 }
 
 #[derive(Debug, Validate, Deserialize)]
 pub struct FulfillRequisitionItemPayload {
     pub requisition_item_id: Uuid,
-    #[validate(range(min = 0.0, message = "Quantidade atendida deve ser maior ou igual a zero"))]
-    pub fulfilled_quantity: rust_decimal::Decimal,
+    pub fulfilled_quantity: rust_decimal::Decimal, // Validated in service layer (>= 0)
 }

@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 use domain::errors::RepositoryError;
 use domain::models::{
-    MaterialDto, MaterialGroupDto, MaterialWithGroupDto, WarehouseDto, WarehouseStockDto,
-    WarehouseStockWithDetailsDto, WarehouseWithCityDto,
+    MaterialDto, MaterialGroupDto, MaterialWithGroupDto, MovementType, StockMovementDto,
+    StockMovementWithDetailsDto, WarehouseDto, WarehouseStockDto, WarehouseStockWithDetailsDto,
+    WarehouseWithCityDto,
 };
 use domain::ports::{
-    MaterialGroupRepositoryPort, MaterialRepositoryPort, WarehouseRepositoryPort,
-    WarehouseStockRepositoryPort,
+    MaterialGroupRepositoryPort, MaterialRepositoryPort, StockMovementRepositoryPort,
+    WarehouseRepositoryPort, WarehouseStockRepositoryPort,
 };
 use domain::value_objects::{CatmatCode, MaterialCode, UnitOfMeasure};
 use sqlx::PgPool;
@@ -210,13 +211,13 @@ impl MaterialGroupRepositoryPort for MaterialGroupRepository {
         let search_pattern = search.map(|s| format!("%{}%", s));
 
         // Build the WHERE clause dynamically
-        let mut where_clauses = vec![];
+        let mut where_clauses: Vec<String> = vec![];
         if search_pattern.is_some() {
-            where_clauses.push("(name ILIKE $1 OR code ILIKE $1)");
+            where_clauses.push("(name ILIKE $1 OR code ILIKE $1)".to_string());
         }
         if is_personnel_exclusive.is_some() {
             let idx = if search_pattern.is_some() { 2 } else { 1 };
-            where_clauses.push(&format!("is_personnel_exclusive = ${}", idx));
+            where_clauses.push(format!("is_personnel_exclusive = ${}", idx));
         }
         if is_active.is_some() {
             let idx = match (search_pattern.is_some(), is_personnel_exclusive.is_some()) {
@@ -224,7 +225,7 @@ impl MaterialGroupRepositoryPort for MaterialGroupRepository {
                 (true, false) | (false, true) => 2,
                 (false, false) => 1,
             };
-            where_clauses.push(&format!("is_active = ${}", idx));
+            where_clauses.push(format!("is_active = ${}", idx));
         }
 
         let where_clause = if where_clauses.is_empty() {
@@ -306,7 +307,7 @@ impl MaterialRepository {
                 if code == "23505" {
                     return RepositoryError::Duplicate(db_err.message().to_string());
                 } else if code == "23503" {
-                    return RepositoryError::ForeignKeyViolation(db_err.message().to_string());
+                    return RepositoryError::Database(db_err.message().to_string());
                 }
             }
         }
@@ -534,13 +535,13 @@ impl MaterialRepositoryPort for MaterialRepository {
         let search_pattern = search.map(|s| format!("%{}%", s));
 
         // Build the WHERE clause dynamically
-        let mut where_clauses = vec![];
+        let mut where_clauses: Vec<String> = vec![];
         if search_pattern.is_some() {
-            where_clauses.push("m.name ILIKE $1");
+            where_clauses.push("m.name ILIKE $1".to_string());
         }
         if material_group_id.is_some() {
             let idx = if search_pattern.is_some() { 2 } else { 1 };
-            where_clauses.push(&format!("m.material_group_id = ${}", idx));
+            where_clauses.push(format!("m.material_group_id = ${}", idx));
         }
         if is_active.is_some() {
             let idx = match (search_pattern.is_some(), material_group_id.is_some()) {
@@ -548,7 +549,7 @@ impl MaterialRepositoryPort for MaterialRepository {
                 (true, false) | (false, true) => 2,
                 (false, false) => 1,
             };
-            where_clauses.push(&format!("m.is_active = ${}", idx));
+            where_clauses.push(format!("m.is_active = ${}", idx));
         }
 
         let where_clause = if where_clauses.is_empty() {
@@ -638,7 +639,7 @@ impl WarehouseRepository {
                 if code == "23505" {
                     return RepositoryError::Duplicate(db_err.message().to_string());
                 } else if code == "23503" {
-                    return RepositoryError::ForeignKeyViolation(db_err.message().to_string());
+                    return RepositoryError::Database(db_err.message().to_string());
                 }
             }
         }
@@ -840,13 +841,13 @@ impl WarehouseRepositoryPort for WarehouseRepository {
     ) -> Result<(Vec<WarehouseWithCityDto>, i64), RepositoryError> {
         let search_pattern = search.map(|s| format!("%{}%", s));
 
-        let mut where_clauses = vec![];
+        let mut where_clauses: Vec<String> = vec![];
         if search_pattern.is_some() {
-            where_clauses.push("(w.name ILIKE $1 OR w.code ILIKE $1)");
+            where_clauses.push("(w.name ILIKE $1 OR w.code ILIKE $1)".to_string());
         }
         if city_id.is_some() {
             let idx = if search_pattern.is_some() { 2 } else { 1 };
-            where_clauses.push(&format!("w.city_id = ${}", idx));
+            where_clauses.push(format!("w.city_id = ${}", idx));
         }
         if is_active.is_some() {
             let idx = match (search_pattern.is_some(), city_id.is_some()) {
@@ -854,7 +855,7 @@ impl WarehouseRepositoryPort for WarehouseRepository {
                 (true, false) | (false, true) => 2,
                 (false, false) => 1,
             };
-            where_clauses.push(&format!("w.is_active = ${}", idx));
+            where_clauses.push(format!("w.is_active = ${}", idx));
         }
 
         let where_clause = if where_clauses.is_empty() {
@@ -936,7 +937,7 @@ impl WarehouseStockRepository {
                 if code == "23505" {
                     return RepositoryError::Duplicate(db_err.message().to_string());
                 } else if code == "23503" {
-                    return RepositoryError::ForeignKeyViolation(db_err.message().to_string());
+                    return RepositoryError::Database(db_err.message().to_string());
                 }
             }
         }
@@ -1187,5 +1188,240 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
         let total: i64 = count_query.fetch_one(&self.pool).await.map_err(Self::map_err)?;
 
         Ok((stocks, total))
+    }
+}
+
+// ============================
+// Stock Movement Repository Implementation
+// ============================
+
+#[derive(Clone)]
+pub struct StockMovementRepository {
+    pool: PgPool,
+}
+
+impl StockMovementRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(err: sqlx::Error) -> RepositoryError {
+        match err {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            sqlx::Error::Database(db_err) => {
+                if let Some(constraint) = db_err.constraint() {
+                    RepositoryError::Duplicate(constraint.to_string())
+                } else {
+                    RepositoryError::Database(db_err.to_string())
+                }
+            }
+            _ => RepositoryError::Database(err.to_string()),
+        }
+    }
+}
+
+#[async_trait]
+impl StockMovementRepositoryPort for StockMovementRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<StockMovementDto>, RepositoryError> {
+        sqlx::query_as::<_, StockMovementDto>(
+            "SELECT id, warehouse_stock_id, movement_type, quantity, unit_value, total_value,
+                    balance_before, balance_after, average_before, average_after,
+                    movement_date, document_number, requisition_id, user_id, notes, created_at
+             FROM stock_movements
+             WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_with_details_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<StockMovementWithDetailsDto>, RepositoryError> {
+        sqlx::query_as::<_, StockMovementWithDetailsDto>(
+            "SELECT sm.id, sm.warehouse_stock_id,
+                    ws.warehouse_id, w.name as warehouse_name,
+                    ws.material_id, m.name as material_name, mg.name as material_group_name,
+                    m.unit_of_measure,
+                    sm.movement_type, sm.quantity, sm.unit_value, sm.total_value,
+                    sm.balance_before, sm.balance_after, sm.average_before, sm.average_after,
+                    sm.movement_date, sm.document_number, sm.requisition_id,
+                    sm.user_id, u.username as user_username,
+                    sm.notes, sm.created_at
+             FROM stock_movements sm
+             INNER JOIN warehouse_stocks ws ON sm.warehouse_stock_id = ws.id
+             INNER JOIN warehouses w ON ws.warehouse_id = w.id
+             INNER JOIN materials m ON ws.material_id = m.id
+             INNER JOIN material_groups mg ON m.material_group_id = mg.id
+             INNER JOIN users u ON sm.user_id = u.id
+             WHERE sm.id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn create(
+        &self,
+        warehouse_stock_id: Uuid,
+        movement_type: MovementType,
+        quantity: rust_decimal::Decimal,
+        unit_value: rust_decimal::Decimal,
+        total_value: rust_decimal::Decimal,
+        balance_before: rust_decimal::Decimal,
+        balance_after: rust_decimal::Decimal,
+        average_before: rust_decimal::Decimal,
+        average_after: rust_decimal::Decimal,
+        movement_date: chrono::DateTime<chrono::Utc>,
+        document_number: Option<&str>,
+        requisition_id: Option<Uuid>,
+        user_id: Uuid,
+        notes: Option<&str>,
+    ) -> Result<StockMovementDto, RepositoryError> {
+        sqlx::query_as::<_, StockMovementDto>(
+            "INSERT INTO stock_movements (
+                warehouse_stock_id, movement_type, quantity, unit_value, total_value,
+                balance_before, balance_after, average_before, average_after,
+                movement_date, document_number, requisition_id, user_id, notes
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             RETURNING id, warehouse_stock_id, movement_type, quantity, unit_value, total_value,
+                       balance_before, balance_after, average_before, average_after,
+                       movement_date, document_number, requisition_id, user_id, notes, created_at",
+        )
+        .bind(warehouse_stock_id)
+        .bind(movement_type)
+        .bind(quantity)
+        .bind(unit_value)
+        .bind(total_value)
+        .bind(balance_before)
+        .bind(balance_after)
+        .bind(average_before)
+        .bind(average_after)
+        .bind(movement_date)
+        .bind(document_number)
+        .bind(requisition_id)
+        .bind(user_id)
+        .bind(notes)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        warehouse_id: Option<Uuid>,
+        material_id: Option<Uuid>,
+        movement_type: Option<MovementType>,
+        start_date: Option<chrono::DateTime<chrono::Utc>>,
+        end_date: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<(Vec<StockMovementWithDetailsDto>, i64), RepositoryError> {
+        // Build dynamic WHERE clause
+        let mut where_clauses: Vec<String> = vec![];
+        let mut param_idx = 1;
+
+        if warehouse_id.is_some() {
+            where_clauses.push(format!("ws.warehouse_id = ${}", param_idx));
+            param_idx += 1;
+        }
+        if material_id.is_some() {
+            where_clauses.push(format!("ws.material_id = ${}", param_idx));
+            param_idx += 1;
+        }
+        if movement_type.is_some() {
+            where_clauses.push(format!("sm.movement_type = ${}", param_idx));
+            param_idx += 1;
+        }
+        if start_date.is_some() {
+            where_clauses.push(format!("sm.movement_date >= ${}", param_idx));
+            param_idx += 1;
+        }
+        if end_date.is_some() {
+            where_clauses.push(format!("sm.movement_date <= ${}", param_idx));
+            param_idx += 1;
+        }
+
+        let where_clause = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_clauses.join(" AND "))
+        };
+
+        // Main query
+        let query_str = format!(
+            "SELECT sm.id, sm.warehouse_stock_id,
+                    ws.warehouse_id, w.name as warehouse_name,
+                    ws.material_id, m.name as material_name, mg.name as material_group_name,
+                    m.unit_of_measure,
+                    sm.movement_type, sm.quantity, sm.unit_value, sm.total_value,
+                    sm.balance_before, sm.balance_after, sm.average_before, sm.average_after,
+                    sm.movement_date, sm.document_number, sm.requisition_id,
+                    sm.user_id, u.username as user_username,
+                    sm.notes, sm.created_at
+             FROM stock_movements sm
+             INNER JOIN warehouse_stocks ws ON sm.warehouse_stock_id = ws.id
+             INNER JOIN warehouses w ON ws.warehouse_id = w.id
+             INNER JOIN materials m ON ws.material_id = m.id
+             INNER JOIN material_groups mg ON m.material_group_id = mg.id
+             INNER JOIN users u ON sm.user_id = u.id
+             {} ORDER BY sm.movement_date DESC, sm.created_at DESC LIMIT ${} OFFSET ${}",
+            where_clause, param_idx, param_idx + 1
+        );
+
+        let mut query = sqlx::query_as::<_, StockMovementWithDetailsDto>(&query_str);
+
+        if let Some(ref wh_id) = warehouse_id {
+            query = query.bind(wh_id);
+        }
+        if let Some(ref mat_id) = material_id {
+            query = query.bind(mat_id);
+        }
+        if let Some(ref mv_type) = movement_type {
+            query = query.bind(mv_type);
+        }
+        if let Some(ref start) = start_date {
+            query = query.bind(start);
+        }
+        if let Some(ref end) = end_date {
+            query = query.bind(end);
+        }
+        query = query.bind(limit).bind(offset);
+
+        let movements = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+
+        // Count query
+        let count_query_str = format!(
+            "SELECT COUNT(*) FROM stock_movements sm
+             INNER JOIN warehouse_stocks ws ON sm.warehouse_stock_id = ws.id
+             {}",
+            where_clause
+        );
+
+        let mut count_query = sqlx::query_scalar(&count_query_str);
+
+        if let Some(ref wh_id) = warehouse_id {
+            count_query = count_query.bind(wh_id);
+        }
+        if let Some(ref mat_id) = material_id {
+            count_query = count_query.bind(mat_id);
+        }
+        if let Some(ref mv_type) = movement_type {
+            count_query = count_query.bind(mv_type);
+        }
+        if let Some(ref start) = start_date {
+            count_query = count_query.bind(start);
+        }
+        if let Some(ref end) = end_date {
+            count_query = count_query.bind(end);
+        }
+
+        let total: i64 = count_query.fetch_one(&self.pool).await.map_err(Self::map_err)?;
+
+        Ok((movements, total))
     }
 }
