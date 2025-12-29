@@ -95,6 +95,7 @@ dependencies = [
  "core_services",
  "domain",
  "mockall",
+ "rust_decimal",
  "serde_json",
  "sha2",
  "sqlx",
