@@ -1,13 +1,15 @@
 use async_trait::async_trait;
 use domain::errors::RepositoryError;
 use domain::models::{
-    MaterialDto, MaterialGroupDto, MaterialWithGroupDto, MovementType, StockMovementDto,
+    MaterialDto, MaterialGroupDto, MaterialWithGroupDto, MovementType, RequisitionDto,
+    RequisitionItemDto, RequisitionStatus, RequisitionWithDetailsDto, StockMovementDto,
     StockMovementWithDetailsDto, WarehouseDto, WarehouseStockDto, WarehouseStockWithDetailsDto,
     WarehouseWithCityDto,
 };
 use domain::ports::{
-    MaterialGroupRepositoryPort, MaterialRepositoryPort, StockMovementRepositoryPort,
-    WarehouseRepositoryPort, WarehouseStockRepositoryPort,
+    MaterialGroupRepositoryPort, MaterialRepositoryPort, RequisitionItemRepositoryPort,
+    RequisitionRepositoryPort, StockMovementRepositoryPort, WarehouseRepositoryPort,
+    WarehouseStockRepositoryPort,
 };
 use domain::value_objects::{CatmatCode, MaterialCode, UnitOfMeasure};
 use sqlx::PgPool;
@@ -1423,5 +1425,469 @@ impl StockMovementRepositoryPort for StockMovementRepository {
         let total: i64 = count_query.fetch_one(&self.pool).await.map_err(Self::map_err)?;
 
         Ok((movements, total))
+    }
+}
+
+// ============================
+// Requisition Repository Implementation
+// ============================
+
+#[derive(Clone)]
+pub struct RequisitionRepository {
+    pool: PgPool,
+}
+
+impl RequisitionRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(err: sqlx::Error) -> RepositoryError {
+        match err {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            sqlx::Error::Database(db_err) => {
+                if let Some(constraint) = db_err.constraint() {
+                    RepositoryError::Duplicate(constraint.to_string())
+                } else {
+                    RepositoryError::Database(db_err.to_string())
+                }
+            }
+            _ => RepositoryError::Database(err.to_string()),
+        }
+    }
+}
+
+#[async_trait]
+impl RequisitionRepositoryPort for RequisitionRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<RequisitionDto>, RepositoryError> {
+        sqlx::query_as::<_, RequisitionDto>(
+            "SELECT id, warehouse_id, requester_id, status, total_value, request_date,
+                    approved_by, approved_at, fulfilled_by, fulfilled_at, rejection_reason,
+                    notes, created_at, updated_at
+             FROM requisitions
+             WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_with_details_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<RequisitionWithDetailsDto>, RepositoryError> {
+        #[derive(sqlx::FromRow)]
+        struct RequisitionRow {
+            id: Uuid,
+            warehouse_id: Uuid,
+            warehouse_name: String,
+            requester_id: Uuid,
+            requester_username: String,
+            status: RequisitionStatus,
+            total_value: rust_decimal::Decimal,
+            request_date: chrono::DateTime<chrono::Utc>,
+            approved_by: Option<Uuid>,
+            approved_by_username: Option<String>,
+            approved_at: Option<chrono::DateTime<chrono::Utc>>,
+            fulfilled_by: Option<Uuid>,
+            fulfilled_by_username: Option<String>,
+            fulfilled_at: Option<chrono::DateTime<chrono::Utc>>,
+            rejection_reason: Option<String>,
+            notes: Option<String>,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        let row = sqlx::query_as::<_, RequisitionRow>(
+            "SELECT r.id, r.warehouse_id, w.name as warehouse_name,
+                    r.requester_id, u1.username as requester_username,
+                    r.status, r.total_value, r.request_date,
+                    r.approved_by, u2.username as approved_by_username, r.approved_at,
+                    r.fulfilled_by, u3.username as fulfilled_by_username, r.fulfilled_at,
+                    r.rejection_reason, r.notes, r.created_at, r.updated_at
+             FROM requisitions r
+             INNER JOIN warehouses w ON r.warehouse_id = w.id
+             INNER JOIN users u1 ON r.requester_id = u1.id
+             LEFT JOIN users u2 ON r.approved_by = u2.id
+             LEFT JOIN users u3 ON r.fulfilled_by = u3.id
+             WHERE r.id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+
+        Ok(row.map(|r| RequisitionWithDetailsDto {
+            id: r.id,
+            warehouse_id: r.warehouse_id,
+            warehouse_name: r.warehouse_name,
+            requester_id: r.requester_id,
+            requester_username: r.requester_username,
+            status: r.status,
+            total_value: r.total_value,
+            request_date: r.request_date,
+            approved_by: r.approved_by,
+            approved_by_username: r.approved_by_username,
+            approved_at: r.approved_at,
+            fulfilled_by: r.fulfilled_by,
+            fulfilled_by_username: r.fulfilled_by_username,
+            fulfilled_at: r.fulfilled_at,
+            rejection_reason: r.rejection_reason,
+            notes: r.notes,
+            items: vec![], // Items will be fetched separately by service layer
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }))
+    }
+
+    async fn create(
+        &self,
+        warehouse_id: Uuid,
+        requester_id: Uuid,
+        total_value: rust_decimal::Decimal,
+        notes: Option<&str>,
+    ) -> Result<RequisitionDto, RepositoryError> {
+        sqlx::query_as::<_, RequisitionDto>(
+            "INSERT INTO requisitions (warehouse_id, requester_id, total_value, notes)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, warehouse_id, requester_id, status, total_value, request_date,
+                       approved_by, approved_at, fulfilled_by, fulfilled_at, rejection_reason,
+                       notes, created_at, updated_at",
+        )
+        .bind(warehouse_id)
+        .bind(requester_id)
+        .bind(total_value)
+        .bind(notes)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn update_status(
+        &self,
+        id: Uuid,
+        status: RequisitionStatus,
+    ) -> Result<RequisitionDto, RepositoryError> {
+        sqlx::query_as::<_, RequisitionDto>(
+            "UPDATE requisitions SET status = $1
+             WHERE id = $2
+             RETURNING id, warehouse_id, requester_id, status, total_value, request_date,
+                       approved_by, approved_at, fulfilled_by, fulfilled_at, rejection_reason,
+                       notes, created_at, updated_at",
+        )
+        .bind(status)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn approve(
+        &self,
+        id: Uuid,
+        approved_by: Uuid,
+        notes: Option<&str>,
+    ) -> Result<RequisitionDto, RepositoryError> {
+        sqlx::query_as::<_, RequisitionDto>(
+            "UPDATE requisitions
+             SET status = 'APROVADA', approved_by = $1, approved_at = NOW(), notes = COALESCE($2, notes)
+             WHERE id = $3
+             RETURNING id, warehouse_id, requester_id, status, total_value, request_date,
+                       approved_by, approved_at, fulfilled_by, fulfilled_at, rejection_reason,
+                       notes, created_at, updated_at",
+        )
+        .bind(approved_by)
+        .bind(notes)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn reject(
+        &self,
+        id: Uuid,
+        rejection_reason: &str,
+    ) -> Result<RequisitionDto, RepositoryError> {
+        sqlx::query_as::<_, RequisitionDto>(
+            "UPDATE requisitions
+             SET status = 'REJEITADA', rejection_reason = $1
+             WHERE id = $2
+             RETURNING id, warehouse_id, requester_id, status, total_value, request_date,
+                       approved_by, approved_at, fulfilled_by, fulfilled_at, rejection_reason,
+                       notes, created_at, updated_at",
+        )
+        .bind(rejection_reason)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn fulfill(
+        &self,
+        id: Uuid,
+        fulfilled_by: Uuid,
+        notes: Option<&str>,
+    ) -> Result<RequisitionDto, RepositoryError> {
+        sqlx::query_as::<_, RequisitionDto>(
+            "UPDATE requisitions
+             SET status = 'ATENDIDA', fulfilled_by = $1, fulfilled_at = NOW(), notes = COALESCE($2, notes)
+             WHERE id = $3
+             RETURNING id, warehouse_id, requester_id, status, total_value, request_date,
+                       approved_by, approved_at, fulfilled_by, fulfilled_at, rejection_reason,
+                       notes, created_at, updated_at",
+        )
+        .bind(fulfilled_by)
+        .bind(notes)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        warehouse_id: Option<Uuid>,
+        requester_id: Option<Uuid>,
+        status: Option<RequisitionStatus>,
+        start_date: Option<chrono::DateTime<chrono::Utc>>,
+        end_date: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<(Vec<RequisitionWithDetailsDto>, i64), RepositoryError> {
+        // Build dynamic WHERE clause
+        let mut where_clauses: Vec<String> = vec![];
+        let mut param_idx = 1;
+
+        if warehouse_id.is_some() {
+            where_clauses.push(format!("r.warehouse_id = ${}", param_idx));
+            param_idx += 1;
+        }
+        if requester_id.is_some() {
+            where_clauses.push(format!("r.requester_id = ${}", param_idx));
+            param_idx += 1;
+        }
+        if status.is_some() {
+            where_clauses.push(format!("r.status = ${}", param_idx));
+            param_idx += 1;
+        }
+        if start_date.is_some() {
+            where_clauses.push(format!("r.request_date >= ${}", param_idx));
+            param_idx += 1;
+        }
+        if end_date.is_some() {
+            where_clauses.push(format!("r.request_date <= ${}", param_idx));
+            param_idx += 1;
+        }
+
+        let where_clause = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_clauses.join(" AND "))
+        };
+
+        // Reuse the same row struct from find_with_details_by_id
+        #[derive(sqlx::FromRow)]
+        struct RequisitionRow {
+            id: Uuid,
+            warehouse_id: Uuid,
+            warehouse_name: String,
+            requester_id: Uuid,
+            requester_username: String,
+            status: RequisitionStatus,
+            total_value: rust_decimal::Decimal,
+            request_date: chrono::DateTime<chrono::Utc>,
+            approved_by: Option<Uuid>,
+            approved_by_username: Option<String>,
+            approved_at: Option<chrono::DateTime<chrono::Utc>>,
+            fulfilled_by: Option<Uuid>,
+            fulfilled_by_username: Option<String>,
+            fulfilled_at: Option<chrono::DateTime<chrono::Utc>>,
+            rejection_reason: Option<String>,
+            notes: Option<String>,
+            created_at: chrono::DateTime<chrono::Utc>,
+            updated_at: chrono::DateTime<chrono::Utc>,
+        }
+
+        // Main query
+        let query_str = format!(
+            "SELECT r.id, r.warehouse_id, w.name as warehouse_name,
+                    r.requester_id, u1.username as requester_username,
+                    r.status, r.total_value, r.request_date,
+                    r.approved_by, u2.username as approved_by_username, r.approved_at,
+                    r.fulfilled_by, u3.username as fulfilled_by_username, r.fulfilled_at,
+                    r.rejection_reason, r.notes, r.created_at, r.updated_at
+             FROM requisitions r
+             INNER JOIN warehouses w ON r.warehouse_id = w.id
+             INNER JOIN users u1 ON r.requester_id = u1.id
+             LEFT JOIN users u2 ON r.approved_by = u2.id
+             LEFT JOIN users u3 ON r.fulfilled_by = u3.id
+             {} ORDER BY r.request_date DESC, r.created_at DESC LIMIT ${} OFFSET ${}",
+            where_clause, param_idx, param_idx + 1
+        );
+
+        let mut query = sqlx::query_as::<_, RequisitionRow>(&query_str);
+
+        if let Some(ref wh_id) = warehouse_id {
+            query = query.bind(wh_id);
+        }
+        if let Some(ref req_id) = requester_id {
+            query = query.bind(req_id);
+        }
+        if let Some(ref st) = status {
+            query = query.bind(st);
+        }
+        if let Some(ref start) = start_date {
+            query = query.bind(start);
+        }
+        if let Some(ref end) = end_date {
+            query = query.bind(end);
+        }
+        query = query.bind(limit).bind(offset);
+
+        let rows = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+
+        let requisitions: Vec<RequisitionWithDetailsDto> = rows.into_iter().map(|r| RequisitionWithDetailsDto {
+            id: r.id,
+            warehouse_id: r.warehouse_id,
+            warehouse_name: r.warehouse_name,
+            requester_id: r.requester_id,
+            requester_username: r.requester_username,
+            status: r.status,
+            total_value: r.total_value,
+            request_date: r.request_date,
+            approved_by: r.approved_by,
+            approved_by_username: r.approved_by_username,
+            approved_at: r.approved_at,
+            fulfilled_by: r.fulfilled_by,
+            fulfilled_by_username: r.fulfilled_by_username,
+            fulfilled_at: r.fulfilled_at,
+            rejection_reason: r.rejection_reason,
+            notes: r.notes,
+            items: vec![], // Items will be fetched separately by service layer
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }).collect();
+
+        // Count query
+        let count_query_str = format!(
+            "SELECT COUNT(*) FROM requisitions r {}",
+            where_clause
+        );
+
+        let mut count_query = sqlx::query_scalar(&count_query_str);
+
+        if let Some(ref wh_id) = warehouse_id {
+            count_query = count_query.bind(wh_id);
+        }
+        if let Some(ref req_id) = requester_id {
+            count_query = count_query.bind(req_id);
+        }
+        if let Some(ref st) = status {
+            count_query = count_query.bind(st);
+        }
+        if let Some(ref start) = start_date {
+            count_query = count_query.bind(start);
+        }
+        if let Some(ref end) = end_date {
+            count_query = count_query.bind(end);
+        }
+
+        let total: i64 = count_query.fetch_one(&self.pool).await.map_err(Self::map_err)?;
+
+        Ok((requisitions, total))
+    }
+}
+
+// ============================
+// Requisition Item Repository Implementation
+// ============================
+
+#[derive(Clone)]
+pub struct RequisitionItemRepository {
+    pool: PgPool,
+}
+
+impl RequisitionItemRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_err(err: sqlx::Error) -> RepositoryError {
+        match err {
+            sqlx::Error::RowNotFound => RepositoryError::NotFound,
+            sqlx::Error::Database(db_err) => {
+                if let Some(constraint) = db_err.constraint() {
+                    RepositoryError::Duplicate(constraint.to_string())
+                } else {
+                    RepositoryError::Database(db_err.to_string())
+                }
+            }
+            _ => RepositoryError::Database(err.to_string()),
+        }
+    }
+}
+
+#[async_trait]
+impl RequisitionItemRepositoryPort for RequisitionItemRepository {
+    async fn create(
+        &self,
+        requisition_id: Uuid,
+        material_id: Uuid,
+        requested_quantity: rust_decimal::Decimal,
+        unit_value: rust_decimal::Decimal,
+        total_value: rust_decimal::Decimal,
+    ) -> Result<RequisitionItemDto, RepositoryError> {
+        sqlx::query_as::<_, RequisitionItemDto>(
+            "INSERT INTO requisition_items (requisition_id, material_id, requested_quantity, unit_value, total_value)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, requisition_id, material_id, requested_quantity, fulfilled_quantity,
+                       unit_value, total_value, created_at",
+        )
+        .bind(requisition_id)
+        .bind(material_id)
+        .bind(requested_quantity)
+        .bind(unit_value)
+        .bind(total_value)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn update_fulfilled_quantity(
+        &self,
+        id: Uuid,
+        fulfilled_quantity: rust_decimal::Decimal,
+    ) -> Result<RequisitionItemDto, RepositoryError> {
+        sqlx::query_as::<_, RequisitionItemDto>(
+            "UPDATE requisition_items SET fulfilled_quantity = $1
+             WHERE id = $2
+             RETURNING id, requisition_id, material_id, requested_quantity, fulfilled_quantity,
+                       unit_value, total_value, created_at",
+        )
+        .bind(fulfilled_quantity)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn find_by_requisition_id(
+        &self,
+        requisition_id: Uuid,
+    ) -> Result<Vec<RequisitionItemDto>, RepositoryError> {
+        sqlx::query_as::<_, RequisitionItemDto>(
+            "SELECT id, requisition_id, material_id, requested_quantity, fulfilled_quantity,
+                    unit_value, total_value, created_at
+             FROM requisition_items
+             WHERE requisition_id = $1
+             ORDER BY created_at",
+        )
+        .bind(requisition_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Self::map_err)
     }
 }
