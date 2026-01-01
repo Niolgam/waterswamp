@@ -240,6 +240,27 @@ pub trait WarehouseStockRepositoryPort: Send + Sync {
         search: Option<String>,
         low_stock: Option<bool>,
     ) -> Result<(Vec<WarehouseStockWithDetailsDto>, i64), RepositoryError>;
+
+    // Manutenção de estoque
+    async fn update_stock_maintenance(
+        &self,
+        id: Uuid,
+        min_stock: Option<rust_decimal::Decimal>,
+        max_stock: Option<rust_decimal::Decimal>,
+        location: Option<&str>,
+        resupply_days: Option<i32>,
+    ) -> Result<WarehouseStockDto, RepositoryError>;
+
+    // Bloqueio de material
+    async fn block_material(
+        &self,
+        id: Uuid,
+        reason: &str,
+        blocked_by: Uuid,
+    ) -> Result<WarehouseStockDto, RepositoryError>;
+
+    // Desbloqueio de material
+    async fn unblock_material(&self, id: Uuid) -> Result<WarehouseStockDto, RepositoryError>;
 }
 
 // ============================

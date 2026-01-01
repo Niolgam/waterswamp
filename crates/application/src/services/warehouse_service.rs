@@ -1,11 +1,12 @@
 use crate::errors::ServiceError;
 use domain::models::{
-    CreateMaterialGroupPayload, CreateMaterialPayload, CreateStockMovementPayload,
-    CreateWarehousePayload, CreateWarehouseStockPayload, MaterialDto, MaterialGroupDto,
-    MaterialWithGroupDto, MovementType, PaginatedMaterialGroups, PaginatedMaterials,
-    StockMovementDto, StockMovementWithDetailsDto, UpdateMaterialGroupPayload,
-    UpdateMaterialPayload, UpdateWarehousePayload, UpdateWarehouseStockPayload, WarehouseDto,
-    WarehouseStockDto, WarehouseStockWithDetailsDto, WarehouseWithCityDto,
+    BlockMaterialPayload, CreateMaterialGroupPayload, CreateMaterialPayload,
+    CreateStockMovementPayload, CreateWarehousePayload, CreateWarehouseStockPayload,
+    MaterialDto, MaterialGroupDto, MaterialWithGroupDto, MovementType, PaginatedMaterialGroups,
+    PaginatedMaterials, StockMovementDto, StockMovementWithDetailsDto, TransferStockPayload,
+    UpdateMaterialGroupPayload, UpdateMaterialPayload, UpdateStockMaintenancePayload,
+    UpdateWarehousePayload, UpdateWarehouseStockPayload, WarehouseDto, WarehouseStockDto,
+    WarehouseStockWithDetailsDto, WarehouseWithCityDto,
 };
 use domain::ports::{
     MaterialGroupRepositoryPort, MaterialRepositoryPort, StockMovementRepositoryPort,
@@ -647,6 +648,304 @@ impl WarehouseService {
             .find_with_details_by_id(id)
             .await?
             .ok_or(ServiceError::NotFound("Estoque não encontrado".to_string()))
+    }
+
+    // ============================
+    // Stock Maintenance Operations
+    // ============================
+
+    /// Atualiza parâmetros de manutenção do estoque (estoque mínimo, prazo de ressuprimento, localização)
+    pub async fn update_stock_maintenance(
+        &self,
+        stock_id: Uuid,
+        payload: UpdateStockMaintenancePayload,
+    ) -> Result<WarehouseStockDto, ServiceError> {
+        // Verificar se o estoque existe
+        let _stock = self
+            .warehouse_stock_repo
+            .find_by_id(stock_id)
+            .await?
+            .ok_or(ServiceError::NotFound("Estoque não encontrado".to_string()))?;
+
+        // Validar que estoque mínimo não seja maior que estoque máximo
+        if let (Some(min), Some(max)) = (payload.min_stock, payload.max_stock) {
+            if min > max {
+                return Err(ServiceError::BadRequest(
+                    "Estoque mínimo não pode ser maior que estoque máximo".to_string(),
+                ));
+            }
+        }
+
+        // Atualizar manutenção do estoque
+        let updated_stock = self
+            .warehouse_stock_repo
+            .update_stock_maintenance(
+                stock_id,
+                payload.min_stock,
+                payload.max_stock,
+                payload.location.as_deref(),
+                payload.resupply_days,
+            )
+            .await?;
+
+        Ok(updated_stock)
+    }
+
+    /// Bloqueia um material no almoxarifado, impedindo requisições
+    pub async fn block_material(
+        &self,
+        stock_id: Uuid,
+        payload: BlockMaterialPayload,
+        blocked_by: Uuid,
+    ) -> Result<WarehouseStockDto, ServiceError> {
+        // Verificar se o estoque existe
+        let stock = self
+            .warehouse_stock_repo
+            .find_by_id(stock_id)
+            .await?
+            .ok_or(ServiceError::NotFound("Estoque não encontrado".to_string()))?;
+
+        // Verificar se já está bloqueado
+        if stock.is_blocked {
+            return Err(ServiceError::BadRequest(
+                "Material já está bloqueado".to_string(),
+            ));
+        }
+
+        // Bloquear material
+        let blocked_stock = self
+            .warehouse_stock_repo
+            .block_material(stock_id, &payload.reason, blocked_by)
+            .await?;
+
+        Ok(blocked_stock)
+    }
+
+    /// Desbloqueia um material no almoxarifado, permitindo requisições novamente
+    pub async fn unblock_material(&self, stock_id: Uuid) -> Result<WarehouseStockDto, ServiceError> {
+        // Verificar se o estoque existe
+        let stock = self
+            .warehouse_stock_repo
+            .find_by_id(stock_id)
+            .await?
+            .ok_or(ServiceError::NotFound("Estoque não encontrado".to_string()))?;
+
+        // Verificar se está bloqueado
+        if !stock.is_blocked {
+            return Err(ServiceError::BadRequest(
+                "Material não está bloqueado".to_string(),
+            ));
+        }
+
+        // Desbloquear material
+        let unblocked_stock = self.warehouse_stock_repo.unblock_material(stock_id).await?;
+
+        Ok(unblocked_stock)
+    }
+
+    /// Transfere estoque de um material para outro dentro do mesmo grupo de materiais
+    ///
+    /// Esta operação:
+    /// 1. Valida que ambos os materiais existem e pertencem ao mesmo grupo
+    /// 2. Valida que existe estoque suficiente do material de origem
+    /// 3. Reduz o estoque do material de origem (saída)
+    /// 4. Aumenta o estoque do material de destino (entrada com média ponderada)
+    /// 5. Registra movimentações para ambos os materiais
+    pub async fn transfer_stock(
+        &self,
+        payload: TransferStockPayload,
+        user_id: Uuid,
+    ) -> Result<(StockMovementDto, StockMovementDto), ServiceError> {
+        // Validar quantidade positiva
+        if payload.quantity <= Decimal::ZERO {
+            return Err(ServiceError::BadRequest(
+                "Quantidade deve ser maior que zero".to_string(),
+            ));
+        }
+
+        // Validar que os materiais são diferentes
+        if payload.from_material_id == payload.to_material_id {
+            return Err(ServiceError::BadRequest(
+                "Material de origem e destino devem ser diferentes".to_string(),
+            ));
+        }
+
+        // Buscar materiais com grupo
+        let from_material = self
+            .material_repo
+            .find_with_group_by_id(payload.from_material_id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Material de origem não encontrado".to_string(),
+            ))?;
+
+        let to_material = self
+            .material_repo
+            .find_with_group_by_id(payload.to_material_id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Material de destino não encontrado".to_string(),
+            ))?;
+
+        // Validar que ambos pertencem ao mesmo grupo de materiais
+        if from_material.material_group_id != to_material.material_group_id {
+            return Err(ServiceError::BadRequest(format!(
+                "Materiais devem pertencer ao mesmo grupo. Origem: '{}', Destino: '{}'",
+                from_material.material_group_name, to_material.material_group_name
+            )));
+        }
+
+        // Validar que o almoxarifado existe
+        let _warehouse = self
+            .warehouse_repo
+            .find_by_id(payload.warehouse_id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
+
+        // Buscar estoque do material de origem
+        let from_stock = self
+            .warehouse_stock_repo
+            .find_by_warehouse_and_material(payload.warehouse_id, payload.from_material_id)
+            .await?
+            .ok_or(ServiceError::NotFound(
+                "Estoque do material de origem não encontrado".to_string(),
+            ))?;
+
+        // Validar estoque suficiente
+        if from_stock.quantity < payload.quantity {
+            return Err(ServiceError::BadRequest(format!(
+                "Estoque insuficiente do material de origem. Disponível: {}, Solicitado: {}",
+                from_stock.quantity, payload.quantity
+            )));
+        }
+
+        // Validar que o material de origem não está bloqueado
+        if from_stock.is_blocked {
+            return Err(ServiceError::BadRequest(
+                "Material de origem está bloqueado e não pode ser transferido".to_string(),
+            ));
+        }
+
+        // Calcular valores para a saída do material de origem
+        let from_balance_before = from_stock.quantity;
+        let from_average = from_stock.average_unit_value;
+        let from_new_quantity = from_stock.quantity - payload.quantity;
+        let transfer_value = payload.quantity * from_average;
+
+        // Atualizar estoque do material de origem (reduzir)
+        let _updated_from_stock = self
+            .warehouse_stock_repo
+            .update_stock_and_average(from_stock.id, from_new_quantity, from_average)
+            .await?;
+
+        // Criar movimento de saída do material de origem
+        let notes = payload
+            .notes
+            .as_ref()
+            .map(|n| {
+                format!(
+                    "Transferência para material '{}' (ID: {}). {}",
+                    to_material.name, to_material.id, n
+                )
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "Transferência para material '{}' (ID: {})",
+                    to_material.name, to_material.id
+                )
+            });
+
+        let from_movement = self
+            .stock_movement_repo
+            .create(
+                from_stock.id,
+                MovementType::TransferOut,
+                payload.quantity,
+                from_average,
+                transfer_value,
+                from_balance_before,
+                from_new_quantity,
+                from_average,
+                from_average,
+                chrono::Utc::now(),
+                None,
+                None,
+                user_id,
+                Some(&notes),
+            )
+            .await?;
+
+        // Buscar ou criar estoque do material de destino
+        let to_stock = match self
+            .warehouse_stock_repo
+            .find_by_warehouse_and_material(payload.warehouse_id, payload.to_material_id)
+            .await?
+        {
+            Some(s) => s,
+            None => {
+                // Criar registro inicial de estoque
+                self.warehouse_stock_repo
+                    .create(
+                        payload.warehouse_id,
+                        payload.to_material_id,
+                        Decimal::ZERO,
+                        Decimal::ZERO,
+                        None,
+                        None,
+                        None,
+                    )
+                    .await?
+            }
+        };
+
+        // Calcular nova média ponderada para o material de destino
+        let to_balance_before = to_stock.quantity;
+        let to_average_before = to_stock.average_unit_value;
+        let current_total_value = to_stock.quantity * to_stock.average_unit_value;
+        let to_new_quantity = to_stock.quantity + payload.quantity;
+        let to_new_average = if to_new_quantity > Decimal::ZERO {
+            (current_total_value + transfer_value) / to_new_quantity
+        } else {
+            Decimal::ZERO
+        };
+
+        // Atualizar estoque do material de destino (aumentar com nova média)
+        let _updated_to_stock = self
+            .warehouse_stock_repo
+            .update_stock_and_average(to_stock.id, to_new_quantity, to_new_average)
+            .await?;
+
+        // Criar movimento de entrada do material de destino
+        let to_notes = format!(
+            "Transferência do material '{}' (ID: {}). {}",
+            from_material.name,
+            from_material.id,
+            payload.notes.as_deref().unwrap_or("")
+        );
+
+        let to_movement = self
+            .stock_movement_repo
+            .create(
+                to_stock.id,
+                MovementType::TransferIn,
+                payload.quantity,
+                from_average, // Valor unitário da transferência
+                transfer_value,
+                to_balance_before,
+                to_new_quantity,
+                to_average_before,
+                to_new_average,
+                chrono::Utc::now(),
+                None,
+                None,
+                user_id,
+                Some(&to_notes),
+            )
+            .await?;
+
+        Ok((from_movement, to_movement))
     }
 }
 

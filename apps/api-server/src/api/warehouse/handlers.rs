@@ -4,8 +4,9 @@ use axum::{
     Json,
 };
 use domain::models::{
-    CreateMaterialGroupPayload, CreateMaterialPayload, CreateWarehousePayload,
-    UpdateMaterialGroupPayload, UpdateMaterialPayload, UpdateWarehousePayload,
+    BlockMaterialPayload, CreateMaterialGroupPayload, CreateMaterialPayload,
+    CreateWarehousePayload, TransferStockPayload, UpdateMaterialGroupPayload,
+    UpdateMaterialPayload, UpdateStockMaintenancePayload, UpdateWarehousePayload,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -341,4 +342,87 @@ pub async fn get_warehouse_stock(
 ) -> Result<Json<Value>, AppError> {
     let stock = state.warehouse_service.get_warehouse_stock(id).await?;
     Ok(Json(json!(stock)))
+}
+
+// ============================
+// Stock Maintenance Handlers
+// ============================
+
+/// PUT /api/warehouse/stock/:id/maintenance
+/// Atualiza parâmetros de manutenção do estoque (min stock, resupply days, location)
+pub async fn update_stock_maintenance(
+    State(state): State<AppState>,
+    Path(stock_id): Path<Uuid>,
+    Json(payload): Json<UpdateStockMaintenancePayload>,
+) -> Result<Json<Value>, AppError> {
+    payload.validate()?;
+
+    let updated_stock = state
+        .warehouse_service
+        .update_stock_maintenance(stock_id, payload)
+        .await?;
+
+    Ok(Json(json!({
+        "stock": updated_stock,
+        "message": "Manutenção de estoque atualizada com sucesso"
+    })))
+}
+
+/// POST /api/warehouse/stock/:id/block
+/// Bloqueia um material, impedindo requisições
+pub async fn block_material(
+    State(state): State<AppState>,
+    Path(stock_id): Path<Uuid>,
+    user: CurrentUser,
+    Json(payload): Json<BlockMaterialPayload>,
+) -> Result<Json<Value>, AppError> {
+    payload.validate()?;
+
+    let blocked_stock = state
+        .warehouse_service
+        .block_material(stock_id, payload, user.id)
+        .await?;
+
+    Ok(Json(json!({
+        "stock": blocked_stock,
+        "message": "Material bloqueado com sucesso"
+    })))
+}
+
+/// DELETE /api/warehouse/stock/:id/block
+/// Desbloqueia um material, permitindo requisições novamente
+pub async fn unblock_material(
+    State(state): State<AppState>,
+    Path(stock_id): Path<Uuid>,
+) -> Result<Json<Value>, AppError> {
+    let unblocked_stock = state.warehouse_service.unblock_material(stock_id).await?;
+
+    Ok(Json(json!({
+        "stock": unblocked_stock,
+        "message": "Material desbloqueado com sucesso"
+    })))
+}
+
+/// POST /api/warehouse/stock/transfer
+/// Transfere estoque de um material para outro dentro do mesmo grupo
+pub async fn transfer_stock(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Json(payload): Json<TransferStockPayload>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    payload.validate()?;
+
+    let (from_movement, to_movement) = state
+        .warehouse_service
+        .transfer_stock(payload, user.id)
+        .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "from_movement": from_movement,
+            "to_movement": to_movement,
+            "message": "Transferência de estoque realizada com sucesso"
+        })),
+    ))
 }

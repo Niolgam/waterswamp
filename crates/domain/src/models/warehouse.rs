@@ -325,6 +325,11 @@ pub struct WarehouseStockDto {
     pub min_stock: Option<rust_decimal::Decimal>,
     pub max_stock: Option<rust_decimal::Decimal>,
     pub location: Option<String>,
+    pub resupply_days: Option<i32>,
+    pub is_blocked: bool,
+    pub block_reason: Option<String>,
+    pub blocked_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub blocked_by: Option<Uuid>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -345,6 +350,11 @@ pub struct WarehouseStockWithDetailsDto {
     pub min_stock: Option<rust_decimal::Decimal>,
     pub max_stock: Option<rust_decimal::Decimal>,
     pub location: Option<String>,
+    pub resupply_days: Option<i32>,
+    pub is_blocked: bool,
+    pub block_reason: Option<String>,
+    pub blocked_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub blocked_by: Option<Uuid>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -385,6 +395,35 @@ pub struct UpdateWarehouseStockPayload {
     pub max_stock: Option<rust_decimal::Decimal>,
     #[validate(length(max = 100, message = "Localização deve ter no máximo 100 caracteres"))]
     pub location: Option<String>,
+}
+
+/// Payload para manutenção de estoque (estoque mínimo, prazo ressuprimento, localização)
+#[derive(Debug, Validate, Deserialize)]
+pub struct UpdateStockMaintenancePayload {
+    pub min_stock: Option<rust_decimal::Decimal>,
+    pub max_stock: Option<rust_decimal::Decimal>,
+    #[validate(length(max = 100, message = "Localização deve ter no máximo 100 caracteres"))]
+    pub location: Option<String>,
+    #[validate(range(min = 1, max = 365, message = "Prazo de ressuprimento deve estar entre 1 e 365 dias"))]
+    pub resupply_days: Option<i32>,
+}
+
+/// Payload para transferência de estoque entre materiais
+#[derive(Debug, Validate, Deserialize)]
+pub struct TransferStockPayload {
+    pub from_material_id: Uuid,
+    pub to_material_id: Uuid,
+    pub warehouse_id: Uuid,
+    pub quantity: rust_decimal::Decimal, // Validated in service layer (> 0)
+    #[validate(length(max = 500, message = "Observações devem ter no máximo 500 caracteres"))]
+    pub notes: Option<String>,
+}
+
+/// Payload para bloqueio de material
+#[derive(Debug, Validate, Deserialize)]
+pub struct BlockMaterialPayload {
+    #[validate(length(min = 10, max = 500, message = "Justificativa deve ter entre 10 e 500 caracteres"))]
+    pub reason: String,
 }
 
 // ============================

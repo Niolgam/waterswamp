@@ -45,7 +45,10 @@ pub fn warehouse_routes() -> Router<AppState> {
         .route("/stock/entry", post(handlers::register_stock_entry))
         .route("/stock/exit", post(handlers::register_stock_exit))
         .route("/stock/adjustment", post(handlers::register_stock_adjustment))
+        .route("/stock/transfer", post(handlers::transfer_stock))
         .route("/stock/:id", get(handlers::get_warehouse_stock))
+        .route("/stock/:id/maintenance", put(handlers::update_stock_maintenance))
+        .route("/stock/:id/block", post(handlers::block_material).delete(handlers::unblock_material))
         // Reports
         .route("/reports/stock-value", get(reports_handlers::get_stock_value_report))
         .route("/reports/stock-value/detail", get(reports_handlers::get_stock_value_detail))

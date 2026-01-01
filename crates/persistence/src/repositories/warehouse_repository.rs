@@ -952,7 +952,8 @@ impl WarehouseStockRepository {
 impl WarehouseStockRepositoryPort for WarehouseStockRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<WarehouseStockDto>, RepositoryError> {
         sqlx::query_as::<_, WarehouseStockDto>(
-            "SELECT id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location, created_at, updated_at
+            "SELECT id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location,
+                    resupply_days, is_blocked, block_reason, blocked_at, blocked_by, created_at, updated_at
              FROM warehouse_stocks WHERE id = $1",
         )
         .bind(id)
@@ -970,7 +971,9 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
                     ws.material_id, m.name as material_name, mg.name as material_group_name,
                     m.unit_of_measure, ws.quantity, ws.average_unit_value,
                     (ws.quantity * ws.average_unit_value) as total_value,
-                    ws.min_stock, ws.max_stock, ws.location, ws.created_at, ws.updated_at
+                    ws.min_stock, ws.max_stock, ws.location,
+                    ws.resupply_days, ws.is_blocked, ws.block_reason, ws.blocked_at, ws.blocked_by,
+                    ws.created_at, ws.updated_at
              FROM warehouse_stocks ws
              INNER JOIN warehouses w ON ws.warehouse_id = w.id
              INNER JOIN materials m ON ws.material_id = m.id
@@ -989,7 +992,8 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
         material_id: Uuid,
     ) -> Result<Option<WarehouseStockDto>, RepositoryError> {
         sqlx::query_as::<_, WarehouseStockDto>(
-            "SELECT id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location, created_at, updated_at
+            "SELECT id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location,
+                    resupply_days, is_blocked, block_reason, blocked_at, blocked_by, created_at, updated_at
              FROM warehouse_stocks WHERE warehouse_id = $1 AND material_id = $2",
         )
         .bind(warehouse_id)
@@ -1012,7 +1016,8 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
         sqlx::query_as::<_, WarehouseStockDto>(
             "INSERT INTO warehouse_stocks (warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
-             RETURNING id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location, created_at, updated_at",
+             RETURNING id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location,
+                       resupply_days, is_blocked, block_reason, blocked_at, blocked_by, created_at, updated_at",
         )
         .bind(warehouse_id)
         .bind(material_id)
@@ -1055,7 +1060,8 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
 
         let query_str = format!(
             "UPDATE warehouse_stocks SET {} WHERE id = ${}
-             RETURNING id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location, created_at, updated_at",
+             RETURNING id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location,
+                       resupply_days, is_blocked, block_reason, blocked_at, blocked_by, created_at, updated_at",
             query_parts.join(", "),
             bind_index
         );
@@ -1086,7 +1092,8 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
         sqlx::query_as::<_, WarehouseStockDto>(
             "UPDATE warehouse_stocks SET quantity = $1, average_unit_value = $2
              WHERE id = $3
-             RETURNING id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location, created_at, updated_at",
+             RETURNING id, warehouse_id, material_id, quantity, average_unit_value, min_stock, max_stock, location,
+                       resupply_days, is_blocked, block_reason, blocked_at, blocked_by, created_at, updated_at",
         )
         .bind(new_quantity)
         .bind(new_average)
@@ -1147,7 +1154,9 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
                     ws.material_id, m.name as material_name, mg.name as material_group_name,
                     m.unit_of_measure, ws.quantity, ws.average_unit_value,
                     (ws.quantity * ws.average_unit_value) as total_value,
-                    ws.min_stock, ws.max_stock, ws.location, ws.created_at, ws.updated_at
+                    ws.min_stock, ws.max_stock, ws.location,
+                    ws.resupply_days, ws.is_blocked, ws.block_reason, ws.blocked_at, ws.blocked_by,
+                    ws.created_at, ws.updated_at
              FROM warehouse_stocks ws
              INNER JOIN warehouses w ON ws.warehouse_id = w.id
              INNER JOIN materials m ON ws.material_id = m.id
@@ -1191,6 +1200,84 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
         let total: i64 = count_query.fetch_one(&self.pool).await.map_err(Self::map_err)?;
 
         Ok((stocks, total))
+    }
+
+    async fn update_stock_maintenance(
+        &self,
+        id: Uuid,
+        min_stock: Option<rust_decimal::Decimal>,
+        max_stock: Option<rust_decimal::Decimal>,
+        location: Option<&str>,
+        resupply_days: Option<i32>,
+    ) -> Result<WarehouseStockDto, RepositoryError> {
+        sqlx::query_as::<_, WarehouseStockDto>(
+            "UPDATE warehouse_stocks
+             SET min_stock = COALESCE($1, min_stock),
+                 max_stock = COALESCE($2, max_stock),
+                 location = COALESCE($3, location),
+                 resupply_days = COALESCE($4, resupply_days),
+                 updated_at = NOW()
+             WHERE id = $5
+             RETURNING id, warehouse_id, material_id, quantity, average_unit_value,
+                       min_stock, max_stock, location, resupply_days,
+                       is_blocked, block_reason, blocked_at, blocked_by,
+                       created_at, updated_at",
+        )
+        .bind(min_stock)
+        .bind(max_stock)
+        .bind(location)
+        .bind(resupply_days)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn block_material(
+        &self,
+        id: Uuid,
+        reason: &str,
+        blocked_by: Uuid,
+    ) -> Result<WarehouseStockDto, RepositoryError> {
+        sqlx::query_as::<_, WarehouseStockDto>(
+            "UPDATE warehouse_stocks
+             SET is_blocked = TRUE,
+                 block_reason = $1,
+                 blocked_by = $2,
+                 blocked_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $3
+             RETURNING id, warehouse_id, material_id, quantity, average_unit_value,
+                       min_stock, max_stock, location, resupply_days,
+                       is_blocked, block_reason, blocked_at, blocked_by,
+                       created_at, updated_at",
+        )
+        .bind(reason)
+        .bind(blocked_by)
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
+    }
+
+    async fn unblock_material(&self, id: Uuid) -> Result<WarehouseStockDto, RepositoryError> {
+        sqlx::query_as::<_, WarehouseStockDto>(
+            "UPDATE warehouse_stocks
+             SET is_blocked = FALSE,
+                 block_reason = NULL,
+                 blocked_by = NULL,
+                 blocked_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, warehouse_id, material_id, quantity, average_unit_value,
+                       min_stock, max_stock, location, resupply_days,
+                       is_blocked, block_reason, blocked_at, blocked_by,
+                       created_at, updated_at",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Self::map_err)
     }
 }
 
