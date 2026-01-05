@@ -121,14 +121,14 @@ pub fn build_application_state(
         country_repo_port,
         state_repo_port,
         city_repo_port,
-        site_type_repo_port,
-        building_type_repo_port,
-        space_type_repo_port,
+        site_type_repo_port.clone(),
+        building_type_repo_port.clone(),
+        space_type_repo_port.clone(),
         department_category_repo_port,
-        site_repo_port,
-        building_repo_port,
-        floor_repo_port,
-        space_repo_port,
+        site_repo_port.clone(),
+        building_repo_port.clone(),
+        floor_repo_port.clone(),
+        space_repo_port.clone(),
     ));
 
     // Cache com TTL e tamanho máximo para políticas do Casbin
@@ -150,6 +150,12 @@ pub fn build_application_state(
         mfa_service,
         location_service,
         config,
+        site_repository: site_repo_port,
+        building_repository: building_repo_port,
+        floor_repository: floor_repo_port,
+        space_repository: space_repo_port,
+        building_type_repository: building_type_repo_port,
+        space_type_repository: space_type_repo_port,
     }
 }
 
