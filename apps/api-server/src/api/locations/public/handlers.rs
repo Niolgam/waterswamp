@@ -12,10 +12,6 @@ use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 use crate::infra::{errors::AppError, state::AppState};
-use domain::ports::{
-    BuildingRepositoryPort, BuildingTypeRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
-    SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
-};
 
 use super::contracts::*;
 
