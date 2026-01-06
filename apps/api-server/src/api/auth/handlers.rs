@@ -95,6 +95,18 @@ fn generate_mfa_challenge_token(state: &AppState, user_id: Uuid) -> anyhow::Resu
 ///
 /// Autentica um usuário e retorna tokens JWT.
 /// Se MFA estiver habilitado, retorna um token de desafio MFA.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    tag = "Auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login realizado com sucesso", body = LoginResponse),
+        (status = 200, description = "MFA requerido", body = MfaRequiredResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Credenciais inválidas")
+    )
+)]
 pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
@@ -161,6 +173,17 @@ pub async fn login(
 /// POST /register
 ///
 /// Registra um novo usuário e envia email de verificação.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    tag = "Auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "Usuário registrado com sucesso", body = RegisterResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 409, description = "Username ou email já está em uso")
+    )
+)]
 pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequest>,
@@ -229,6 +252,17 @@ pub async fn register(
 ///
 /// Renova o access token usando um refresh token válido.
 /// Implementa rotação de tokens para segurança.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh-token",
+    tag = "Auth",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "Token atualizado com sucesso", body = RefreshTokenResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Refresh token inválido ou expirado")
+    )
+)]
 pub async fn refresh_token(
     State(state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
@@ -352,6 +386,17 @@ pub async fn refresh_token(
 /// POST /logout
 ///
 /// Revoga o refresh token, invalidando a sessão.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    tag = "Auth",
+    request_body = LogoutRequest,
+    responses(
+        (status = 200, description = "Logout realizado com sucesso", body = LogoutResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Token não encontrado ou já revogado")
+    )
+)]
 pub async fn logout(
     State(state): State<AppState>,
     Json(payload): Json<LogoutRequest>,
@@ -381,6 +426,16 @@ pub async fn logout(
 ///
 /// Solicita reset de senha. Envia email se o endereço existir.
 /// Sempre retorna sucesso para evitar enumeração de usuários.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/forgot-password",
+    tag = "Auth",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 200, description = "Email de recuperação enviado (se o email existir)", body = ForgotPasswordResponse),
+        (status = 400, description = "Dados inválidos")
+    )
+)]
 pub async fn forgot_password(
     State(state): State<AppState>,
     Json(payload): Json<ForgotPasswordRequest>,
@@ -431,6 +486,17 @@ pub async fn forgot_password(
 ///
 /// Redefine a senha usando um token válido.
 /// Revoga todas as sessões existentes do usuário.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/reset-password",
+    tag = "Auth",
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 200, description = "Senha redefinida com sucesso", body = ResetPasswordResponse),
+        (status = 400, description = "Dados inválidos ou senha fraca"),
+        (status = 401, description = "Token inválido ou expirado")
+    )
+)]
 pub async fn reset_password(
     State(state): State<AppState>,
     Json(payload): Json<ResetPasswordRequest>,

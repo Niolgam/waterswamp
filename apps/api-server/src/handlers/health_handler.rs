@@ -3,27 +3,37 @@ use casbin::{CoreApi, MgmtApi};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::time::{SystemTime, UNIX_EPOCH};
+use utoipa::ToSchema;
 
 use crate::state::AppState;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct HealthResponse {
+    /// Status geral do serviço
     pub status: String,
+    /// Saúde dos bancos de dados
     pub database: DatabaseHealth,
+    /// Saúde do Casbin
     pub casbin: CasbinHealth,
+    /// Versão da aplicação
     pub version: String,
+    /// Tempo de atividade em segundos
     pub uptime_seconds: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct DatabaseHealth {
+    /// Banco de autenticação está saudável
     pub auth_db: bool,
+    /// Banco de logs está saudável
     pub logs_db: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, ToSchema)]
 pub struct CasbinHealth {
+    /// Casbin está operacional
     pub operational: bool,
+    /// Número de políticas carregadas
     pub policy_count: Option<usize>,
 }
 
@@ -62,6 +72,15 @@ fn get_uptime_seconds() -> u64 {
 /// GET /health
 /// Retorna 200 OK se o servidor está saudável
 /// Retorna 503 Service Unavailable se houver problemas críticos
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "Health",
+    responses(
+        (status = 200, description = "Serviço está saudável", body = HealthResponse),
+        (status = 503, description = "Serviço não está saudável")
+    )
+)]
 pub async fn handler_health(
     State(state): State<AppState>,
 ) -> Result<Json<HealthResponse>, StatusCode> {
@@ -149,6 +168,14 @@ async fn check_casbin(state: &AppState) -> (bool, Option<usize>) {
 /// Endpoint mais leve - verifica se o servidor está pronto para receber tráfego
 /// Não verifica o banco de dados (mais rápido)
 /// Usado pelo Kubernetes para saber quando começar a enviar tráfego
+#[utoipa::path(
+    get,
+    path = "/health/ready",
+    tag = "Health",
+    responses(
+        (status = 200, description = "Servidor está pronto para receber tráfego")
+    )
+)]
 pub async fn handler_ready() -> StatusCode {
     StatusCode::OK
 }
@@ -156,6 +183,14 @@ pub async fn handler_ready() -> StatusCode {
 /// GET /health/live
 /// Endpoint de liveness - verifica se o servidor está vivo
 /// Kubernetes pode usar isso para decidir se reinicia o pod
+#[utoipa::path(
+    get,
+    path = "/health/live",
+    tag = "Health",
+    responses(
+        (status = 200, description = "Servidor está vivo")
+    )
+)]
 pub async fn handler_liveness() -> StatusCode {
     StatusCode::OK
 }
