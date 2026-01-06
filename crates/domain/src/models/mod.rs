@@ -7,6 +7,7 @@ pub mod geo_regions;
 pub mod mfa;
 pub mod policy;
 pub mod user;
+pub mod warehouse;
 
 pub use audit::*;
 pub use auth::*;
@@ -17,3 +18,4 @@ pub use geo_regions::*;
 pub use mfa::*;
 pub use policy::*;
 pub use user::*;
+pub use warehouse::*;

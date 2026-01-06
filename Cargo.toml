@@ -57,9 +57,4 @@ mockall = "0.14.0"
 futures = "0.3.31"
 totp-rs = { version = "5.7", features = ["qr", "gen_secret",  "otpauth" ] }
 moka = { version = "0.12", features = ["future"] }
-
-[profile.release]
-lto = true
-codegen-units = 1
-panic = 'abort'
-strip = true
+rust_decimal = { version = "1.36", features = ["serde", "db-postgres"] }

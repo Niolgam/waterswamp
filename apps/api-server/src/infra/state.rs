@@ -3,7 +3,10 @@ use application::services::audit_services::AuditService;
 use application::services::auth_service::AuthService;
 use application::services::location_service::LocationService;
 use application::services::mfa_service::MfaService;
+use application::services::requisition_workflow_service::RequisitionWorkflowService;
 use application::services::user_service::UserService;
+use application::services::warehouse_reports_service::WarehouseReportsService;
+use application::services::warehouse_service::WarehouseService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use domain::ports::{
@@ -32,6 +35,9 @@ pub struct AppState {
     pub user_service: Arc<UserService>,
     pub mfa_service: Arc<MfaService>,
     pub location_service: Arc<LocationService>,
+    pub warehouse_service: Arc<WarehouseService>,
+    pub warehouse_reports_service: Arc<WarehouseReportsService>,
+    pub requisition_workflow_service: Arc<RequisitionWorkflowService>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,

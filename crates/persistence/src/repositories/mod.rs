@@ -6,3 +6,4 @@ pub mod facilities_repository;
 pub mod geo_regions_repository;
 pub mod mfa_repository;
 pub mod user_repository;
+pub mod warehouse_repository;
