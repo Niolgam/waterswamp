@@ -58,5 +58,6 @@ totp-rs = { workspace = true }
 rand = { workspace = true }
 futures = { workspace = true }
 moka = { workspace = true }
+rust_decimal = { workspace = true }
 
 [dev-dependencies]

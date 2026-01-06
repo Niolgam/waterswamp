@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::{extractors::current_user::CurrentUser, infra::state::AppState, utils::AppError};
+use crate::{extractors::current_user::CurrentUser, infra::{errors::AppError, state::AppState}};
 
 // ============================
 // Request/Query Contracts
@@ -62,7 +62,7 @@ fn default_limit() -> i64 {
 /// Relatório de valor total de estoque por almoxarifado
 pub async fn get_stock_value_report(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Query(query): Query<StockValueReportQuery>,
 ) -> Result<Json<Value>, AppError> {
     let report = state
@@ -80,7 +80,7 @@ pub async fn get_stock_value_report(
 /// Relatório detalhado de valor de estoque por material
 pub async fn get_stock_value_detail(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Query(query): Query<StockValueDetailQuery>,
 ) -> Result<Json<Value>, AppError> {
     let report = state
@@ -98,7 +98,7 @@ pub async fn get_stock_value_detail(
 /// Relatório de consumo de materiais por período
 pub async fn get_consumption_report(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Query(query): Query<ConsumptionReportQuery>,
 ) -> Result<Json<Value>, AppError> {
     let report = state
@@ -125,7 +125,7 @@ pub async fn get_consumption_report(
 /// Relatório de materiais mais requisitados
 pub async fn get_most_requested_materials(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Query(query): Query<MostRequestedQuery>,
 ) -> Result<Json<Value>, AppError> {
     let report = state
@@ -152,7 +152,7 @@ pub async fn get_most_requested_materials(
 /// Análise de movimentações por tipo e período
 pub async fn get_movement_analysis(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Query(query): Query<MovementAnalysisQuery>,
 ) -> Result<Json<Value>, AppError> {
     let report = state
