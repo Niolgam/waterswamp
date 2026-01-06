@@ -236,6 +236,7 @@ fn extract_user_agent(headers: &HeaderMap) -> Option<String> {
 
 /// More selective middleware that only logs specific routes
 /// Use this if the full middleware is too verbose
+#[allow(dead_code)]
 pub async fn selective_audit_middleware(
     State(state): State<AppState>,
     req: Request,

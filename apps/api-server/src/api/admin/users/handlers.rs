@@ -4,7 +4,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use casbin::{Adapter, CoreApi, MgmtApi};
+use casbin::{CoreApi, MgmtApi};
 use core_services::security::hash_password;
 use domain::models::{ListUsersQuery, UserDetailDto, UserDto, UserDtoExtended};
 use domain::ports::AuthRepositoryPort;
@@ -14,9 +14,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 use validator::Validate;
 
-use super::contracts::{
-    AdminCreateUserRequest, AdminUpdateUserRequest, AdminUserListResponse, UserActionResponse,
-};
+use super::contracts::{AdminCreateUserRequest, AdminUpdateUserRequest, UserActionResponse};
 use crate::{
     extractors::current_user::CurrentUser,
     infra::{errors::AppError, state::AppState},

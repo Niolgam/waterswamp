@@ -1,8 +1,7 @@
 use crate::errors::ServiceError;
 use domain::models::{
-    CreateRequisitionItemPayload, CreateRequisitionPayload, FulfillRequisitionItemPayload,
-    FulfillRequisitionPayload, RequisitionDto, RequisitionItemDto, RequisitionStatus,
-    RequisitionWithDetailsDto,
+    CreateRequisitionItemPayload, FulfillRequisitionItemPayload, RequisitionDto,
+    RequisitionItemDto, RequisitionStatus, RequisitionWithDetailsDto,
 };
 use domain::ports::{
     MaterialRepositoryPort, RequisitionItemRepositoryPort, RequisitionRepositoryPort,

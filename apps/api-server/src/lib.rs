@@ -1,13 +1,11 @@
 use anyhow::{Context, Result};
 use application::services::audit_services::AuditService;
-use axum::Router;
 use moka::future::Cache;
 use sqlx::PgPool;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::RwLock;
 use tracing::info;
 
 // Imports de Portas e Serviços

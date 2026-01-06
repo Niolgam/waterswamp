@@ -1,12 +1,11 @@
 use crate::errors::ServiceError;
 use domain::models::{
     BlockMaterialPayload, CreateMaterialGroupPayload, CreateMaterialPayload,
-    CreateStockMovementPayload, CreateWarehousePayload, CreateWarehouseStockPayload,
-    MaterialDto, MaterialGroupDto, MaterialWithGroupDto, MovementType, PaginatedMaterialGroups,
-    PaginatedMaterials, StockMovementDto, StockMovementWithDetailsDto, TransferStockPayload,
+    CreateWarehousePayload, MaterialDto, MaterialGroupDto, MaterialWithGroupDto, MovementType,
+    PaginatedMaterialGroups, PaginatedMaterials, StockMovementDto, TransferStockPayload,
     UpdateMaterialGroupPayload, UpdateMaterialPayload, UpdateStockMaintenancePayload,
-    UpdateWarehousePayload, UpdateWarehouseStockPayload, WarehouseDto, WarehouseStockDto,
-    WarehouseStockWithDetailsDto, WarehouseWithCityDto,
+    UpdateWarehousePayload, WarehouseDto, WarehouseStockDto, WarehouseStockWithDetailsDto,
+    WarehouseWithCityDto,
 };
 use domain::ports::{
     MaterialGroupRepositoryPort, MaterialRepositoryPort, StockMovementRepositoryPort,

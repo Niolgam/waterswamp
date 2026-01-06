@@ -1,5 +1,5 @@
 use axum::{extract::State, http::StatusCode, Json};
-use casbin::{Adapter, CoreApi, MgmtApi};
+use casbin::{CoreApi, MgmtApi};
 use domain::ports::UserRepositoryPort;
 use persistence::repositories::user_repository::UserRepository;
 use validator::Validate;

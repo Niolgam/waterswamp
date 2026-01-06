@@ -2,7 +2,6 @@ use crate::infra::{errors::AppError, state::AppState};
 use axum::{extract::State, Json};
 use domain::ports::{MfaRepositoryPort, UserRepositoryPort};
 use persistence::repositories::{mfa_repository::MfaRepository, user_repository::UserRepository};
-use sha2::{Digest, Sha256};
 use totp_rs::{Algorithm, Secret, TOTP};
 use tracing::instrument;
 use validator::Validate;
