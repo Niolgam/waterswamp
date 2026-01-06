@@ -14,7 +14,10 @@ pub struct Config {
     #[serde(rename = "logs_database_url")]
     pub logs_db: String,
 
+    #[serde(rename = "jwt_private_key")]
     pub jwt_private_key: String,
+
+    #[serde(rename = "jwt_public_key")]
     pub jwt_public_key: String,
 }
 

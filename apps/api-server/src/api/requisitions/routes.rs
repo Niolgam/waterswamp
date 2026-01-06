@@ -13,8 +13,11 @@ pub fn requisition_routes() -> Router<AppState> {
             "/",
             get(handlers::list_requisitions).post(handlers::create_requisition),
         )
-        .route("/:id", get(handlers::get_requisition).delete(handlers::cancel_requisition))
-        .route("/:id/approve", post(handlers::approve_requisition))
-        .route("/:id/reject", post(handlers::reject_requisition))
-        .route("/:id/fulfill", post(handlers::fulfill_requisition))
+        .route(
+            "/{id}",
+            get(handlers::get_requisition).delete(handlers::cancel_requisition),
+        )
+        .route("/{id}/approve", post(handlers::approve_requisition))
+        .route("/{id}/reject", post(handlers::reject_requisition))
+        .route("/{id}/fulfill", post(handlers::fulfill_requisition))
 }
