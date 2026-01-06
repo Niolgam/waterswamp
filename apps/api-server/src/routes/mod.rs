@@ -2,6 +2,8 @@ use axum::{middleware, Router};
 use core_services::security::security_headers;
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     api::{admin, auth, email_verification, mfa, users},
@@ -9,6 +11,7 @@ use crate::{
     middleware::audit,
     middleware::rate_limit::api_rate_limiter,
     middleware::{mw_authenticate, mw_authorize},
+    openapi::ApiDoc,
     state::AppState,
 };
 
@@ -59,12 +62,18 @@ pub fn build(app_state: AppState) -> Router {
         // Rate limit para admin pode ser diferente, usando o padrão por enquanto
         .layer(api_rate_limiter());
 
+    // Swagger UI routes - public, no authentication required
+    let swagger_routes: Router<()> = SwaggerUi::new("/swagger-ui")
+        .url("/api-docs/openapi.json", ApiDoc::openapi())
+        .into();
+
     let router = Router::new()
         .merge(public_routes)
         .merge(authenticated_routes)
         .merge(protected_routes)
         .merge(admin_routes)
-        .with_state(app_state.clone());
+        .with_state(app_state.clone())
+        .merge(swagger_routes);
 
     apply_global_middleware(router, app_state)
 }
