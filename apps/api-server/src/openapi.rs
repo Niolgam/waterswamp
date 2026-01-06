@@ -28,6 +28,12 @@ use utoipa::OpenApi;
         (name = "Health", description = "Endpoints de saúde e monitoramento"),
         (name = "User", description = "Rotas de usuário autenticado"),
         (name = "Admin", description = "Rotas administrativas (requer permissão admin)"),
+        (name = "Material Groups", description = "Gestão de grupos de materiais"),
+        (name = "Materials", description = "Gestão de materiais e serviços"),
+        (name = "Warehouses", description = "Gestão de almoxarifados"),
+        (name = "Stock", description = "Gestão de estoque e movimentações"),
+        (name = "Requisitions", description = "Gestão de requisições de materiais"),
+        (name = "Reports", description = "Relatórios e análises de almoxarifado"),
     )
 )]
 pub struct ApiDoc;
