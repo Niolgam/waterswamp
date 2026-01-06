@@ -9,6 +9,10 @@ use application::services::warehouse_reports_service::WarehouseReportsService;
 use application::services::warehouse_service::WarehouseService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
+use domain::ports::{
+    BuildingRepositoryPort, BuildingTypeRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
+    SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
+};
 use email_service::EmailSender;
 use moka::future::Cache;
 use sqlx::PgPool;
@@ -35,4 +39,11 @@ pub struct AppState {
     pub warehouse_reports_service: Arc<WarehouseReportsService>,
     pub requisition_workflow_service: Arc<RequisitionWorkflowService>,
     pub config: Arc<Config>,
+    // Repositories for direct access in public handlers
+    pub site_repository: Arc<dyn SiteRepositoryPort>,
+    pub building_repository: Arc<dyn BuildingRepositoryPort>,
+    pub floor_repository: Arc<dyn FloorRepositoryPort>,
+    pub space_repository: Arc<dyn SpaceRepositoryPort>,
+    pub building_type_repository: Arc<dyn BuildingTypeRepositoryPort>,
+    pub space_type_repository: Arc<dyn SpaceTypeRepositoryPort>,
 }

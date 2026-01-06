@@ -40,7 +40,7 @@ regex = { workspace = true }
 base64 = { workspace = true }
 
 utoipa = { workspace = true, features = ["axum_extras", "chrono", "uuid"] }
-utoipa-swagger-ui = { workspace = true, features = ["axum"] }
+utoipa-swagger-ui = { workspace = true, features = ["axum", "vendored"] }
 utoipa-rapidoc = { workspace = true, features = ["axum"] }
 utoipa-redoc = { workspace = true, features = ["axum"] }
 
@@ -60,9 +60,3 @@ futures = { workspace = true }
 moka = { workspace = true }
 
 [dev-dependencies]
-
-[profile.release]
-lto = true
-codegen-units = 1
-panic = 'abort'
-strip = true
