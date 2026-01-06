@@ -60,9 +60,3 @@ futures = { workspace = true }
 moka = { workspace = true }
 
 [dev-dependencies]
-
-[profile.release]
-lto = true
-codegen-units = 1
-panic = 'abort'
-strip = true

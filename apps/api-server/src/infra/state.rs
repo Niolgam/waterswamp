@@ -8,7 +8,7 @@ use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use domain::ports::{
     BuildingRepositoryPort, BuildingTypeRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
-    SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
 };
 use email_service::EmailSender;
 use moka::future::Cache;
@@ -33,7 +33,7 @@ pub struct AppState {
     pub mfa_service: Arc<MfaService>,
     pub location_service: Arc<LocationService>,
     pub config: Arc<Config>,
-    // Location repositories (for public API handlers that need direct access)
+    // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,
     pub building_repository: Arc<dyn BuildingRepositoryPort>,
     pub floor_repository: Arc<dyn FloorRepositoryPort>,

@@ -150,6 +150,7 @@ pub fn build_application_state(
         mfa_service,
         location_service,
         config,
+        // Repositories for direct access in public handlers
         site_repository: site_repo_port,
         building_repository: building_repo_port,
         floor_repository: floor_repo_port,

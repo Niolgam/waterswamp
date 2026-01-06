@@ -124,7 +124,9 @@ pub async fn list_public_sites(
     let site_repo = &state.site_repository;
 
     // Query all sites with relations
-    let (sites, _total) = site_repo.list(1000, 0, None, None, None).await?;
+    let (sites, _total) = site_repo
+        .list(1000, 0, None, None, None)
+        .await?;
 
     let mut results = Vec::new();
 
@@ -133,8 +135,7 @@ pub async fn list_public_sites(
         let (buildings, _) = state
             .building_repository
             .list(10000, 0, None, Some(site.id), None)
-            .await
-            ?;
+            .await?;
 
         let building_count = buildings.len() as i64;
 
@@ -144,15 +145,13 @@ pub async fn list_public_sites(
             let (floors, _) = state
                 .floor_repository
                 .list(10000, 0, None, Some(building.id))
-                .await
-                ?;
+                .await?;
 
             for floor in floors {
                 let (spaces, _) = state
                     .space_repository
                     .list(10000, 0, None, Some(floor.id), None)
-                    .await
-                    ?;
+                    .await?;
                 space_count += spaces.len() as i64;
             }
         }
