@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type};
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -10,7 +11,7 @@ use crate::value_objects::{CatmatCode, MaterialCode, UnitOfMeasure};
 // ============================
 
 /// Tipo de movimentação de estoque
-#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Type, PartialEq, Eq)]
 #[sqlx(type_name = "movement_type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum MovementType {
     /// Entrada de material (compra, doação)
@@ -37,7 +38,7 @@ pub enum MovementType {
 }
 
 /// Status da requisição de materiais
-#[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Type, PartialEq, Eq)]
 #[sqlx(type_name = "requisition_status", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum RequisitionStatus {
     /// Requisição criada, aguardando aprovação
@@ -101,7 +102,7 @@ pub struct ListMaterialGroupsQuery {
 }
 
 /// Payload para criação de grupo de material
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateMaterialGroupPayload {
     pub code: MaterialCode,
     #[validate(length(min = 3, max = 200, message = "Nome deve ter entre 3 e 200 caracteres"))]
@@ -114,7 +115,7 @@ pub struct CreateMaterialGroupPayload {
 }
 
 /// Payload para atualização de grupo de material
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateMaterialGroupPayload {
     pub code: Option<MaterialCode>,
     #[validate(length(min = 3, max = 200, message = "Nome deve ter entre 3 e 200 caracteres"))]
@@ -187,7 +188,7 @@ pub struct ListMaterialsQuery {
 }
 
 /// Payload para criação de material/serviço
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateMaterialPayload {
     pub material_group_id: Uuid,
     #[validate(length(min = 3, max = 200, message = "Denominação deve ter entre 3 e 200 caracteres"))]
@@ -204,7 +205,7 @@ pub struct CreateMaterialPayload {
 }
 
 /// Payload para atualização de material/serviço
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateMaterialPayload {
     pub material_group_id: Option<Uuid>,
     #[validate(length(min = 3, max = 200, message = "Denominação deve ter entre 3 e 200 caracteres"))]
@@ -277,7 +278,7 @@ pub struct ListWarehousesQuery {
     pub is_active: Option<bool>,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateWarehousePayload {
     #[validate(length(min = 3, max = 200, message = "Nome deve ter entre 3 e 200 caracteres"))]
     pub name: String,
@@ -293,7 +294,7 @@ pub struct CreateWarehousePayload {
     pub email: Option<String>,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateWarehousePayload {
     #[validate(length(min = 3, max = 200, message = "Nome deve ter entre 3 e 200 caracteres"))]
     pub name: Option<String>,
@@ -398,7 +399,7 @@ pub struct UpdateWarehouseStockPayload {
 }
 
 /// Payload para manutenção de estoque (estoque mínimo, prazo ressuprimento, localização)
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateStockMaintenancePayload {
     pub min_stock: Option<rust_decimal::Decimal>,
     pub max_stock: Option<rust_decimal::Decimal>,
@@ -409,7 +410,7 @@ pub struct UpdateStockMaintenancePayload {
 }
 
 /// Payload para transferência de estoque entre materiais
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct TransferStockPayload {
     pub from_material_id: Uuid,
     pub to_material_id: Uuid,
@@ -420,7 +421,7 @@ pub struct TransferStockPayload {
 }
 
 /// Payload para bloqueio de material
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct BlockMaterialPayload {
     #[validate(length(min = 10, max = 500, message = "Justificativa deve ter entre 10 e 500 caracteres"))]
     pub reason: String,
@@ -622,13 +623,13 @@ pub struct RequisitionItemDto {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+#[derive(Debug, Serialize, Deserialize, Validate, Clone, ToSchema)]
 pub struct CreateRequisitionItemPayload {
     pub material_id: Uuid,
     pub requested_quantity: rust_decimal::Decimal, // Validated in service layer (> 0)
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct FulfillRequisitionItemPayload {
     pub requisition_item_id: Uuid,
     pub fulfilled_quantity: rust_decimal::Decimal, // Validated in service layer (>= 0)

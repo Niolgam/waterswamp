@@ -16,3 +16,4 @@ serde_json = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 rust_decimal = { workspace = true, features = ["serde"] }
+utoipa = { workspace = true, features = ["uuid", "chrono", "decimal"] }
