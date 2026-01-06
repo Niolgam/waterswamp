@@ -8,7 +8,7 @@ ALTER TABLE spaces DROP COLUMN IF EXISTS coordinates;
 -- Spaces can be either POINT (for small spaces) or POLYGON (for larger spaces)
 -- We use generic GEOMETRY type to allow both, constrained by location_type
 ALTER TABLE spaces ADD COLUMN IF NOT EXISTS coordinates GEOMETRY(GEOMETRY, 4326);
-
+ALTER TABLE spaces ADD COLUMN IF NOT EXISTS location_type VARCHAR(100);
 -- Create spatial index for efficient geographic queries
 CREATE INDEX IF NOT EXISTS idx_spaces_coordinates_gist ON spaces USING GIST(coordinates);
 

@@ -9,8 +9,8 @@ async fn main() {
     // Usamos .ok() para ignorar o erro se o arquivo não existir.
     // Isso é IMPORTANTE: em produção (Docker/AWS), o arquivo .env geralmente
     // não existe (as vars são injetadas pelo ambiente), então não queremos que quebre.
-    dotenvy::dotenv().ok();
-
+    // dotenvy::dotenv().ok();
+    dotenvy::from_path("apps/api-server/.env").ok();
     // 1. Lógica de Resolução da Porta (agora já enxerga o .env se existir)
     let port: u16 = env::var("PORT")
         .ok()

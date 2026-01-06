@@ -63,6 +63,73 @@ BEFORE UPDATE ON warehouses
 FOR EACH ROW
 EXECUTE PROCEDURE trigger_set_timestamp();
 
+-- Cria a tabela de Requisições (Requisitions)
+CREATE TABLE requisitions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Almoxarifado
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
+
+    -- Solicitante
+    requester_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+
+    -- Status
+    status requisition_status NOT NULL DEFAULT 'PENDENTE',
+
+    -- Valor total
+    total_value DECIMAL(15, 2) NOT NULL DEFAULT 0,
+
+    -- Datas
+    request_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Aprovação
+    approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    approved_at TIMESTAMPTZ,
+
+    -- Atendimento
+    fulfilled_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    fulfilled_at TIMESTAMPTZ,
+
+    -- Rejeição
+    rejection_reason TEXT,
+
+    -- Observações
+    notes TEXT,
+
+    -- Timestamps
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Constraints
+    CONSTRAINT check_approved_fields CHECK (
+        (status = 'APROVADA' AND approved_by IS NOT NULL AND approved_at IS NOT NULL) OR
+        (status != 'APROVADA' AND (approved_by IS NULL OR approved_at IS NULL) OR approved_by IS NOT NULL)
+    ),
+    CONSTRAINT check_fulfilled_fields CHECK (
+        (status IN ('ATENDIDA', 'ATENDIDA_PARCIALMENTE') AND fulfilled_by IS NOT NULL AND fulfilled_at IS NOT NULL) OR
+        (status NOT IN ('ATENDIDA', 'ATENDIDA_PARCIALMENTE'))
+    ),
+    CONSTRAINT check_rejected_reason CHECK (
+        (status = 'REJEITADA' AND rejection_reason IS NOT NULL) OR
+        (status != 'REJEITADA')
+    )
+);
+
+-- Índices para requisitions
+CREATE INDEX idx_requisitions_warehouse_id ON requisitions(warehouse_id);
+CREATE INDEX idx_requisitions_requester_id ON requisitions(requester_id);
+CREATE INDEX idx_requisitions_status ON requisitions(status);
+CREATE INDEX idx_requisitions_request_date ON requisitions(request_date DESC);
+CREATE INDEX idx_requisitions_approved_by ON requisitions(approved_by) WHERE approved_by IS NOT NULL;
+CREATE INDEX idx_requisitions_fulfilled_by ON requisitions(fulfilled_by) WHERE fulfilled_by IS NOT NULL;
+
+-- Trigger para atualizar updated_at
+CREATE TRIGGER set_timestamp_requisitions
+BEFORE UPDATE ON requisitions
+FOR EACH ROW
+EXECUTE PROCEDURE trigger_set_timestamp();
+
+
 -- Cria a tabela de Estoque por Almoxarifado (Warehouse Stocks)
 CREATE TABLE warehouse_stocks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -150,72 +217,6 @@ CREATE INDEX idx_stock_movements_user_id ON stock_movements(user_id);
 CREATE INDEX idx_stock_movements_requisition_id ON stock_movements(requisition_id) WHERE requisition_id IS NOT NULL;
 CREATE INDEX idx_stock_movements_document_number ON stock_movements(document_number) WHERE document_number IS NOT NULL;
 
--- Cria a tabela de Requisições (Requisitions)
-CREATE TABLE requisitions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-    -- Almoxarifado
-    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
-
-    -- Solicitante
-    requester_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-
-    -- Status
-    status requisition_status NOT NULL DEFAULT 'PENDENTE',
-
-    -- Valor total
-    total_value DECIMAL(15, 2) NOT NULL DEFAULT 0,
-
-    -- Datas
-    request_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    -- Aprovação
-    approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    approved_at TIMESTAMPTZ,
-
-    -- Atendimento
-    fulfilled_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    fulfilled_at TIMESTAMPTZ,
-
-    -- Rejeição
-    rejection_reason TEXT,
-
-    -- Observações
-    notes TEXT,
-
-    -- Timestamps
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    -- Constraints
-    CONSTRAINT check_approved_fields CHECK (
-        (status = 'APROVADA' AND approved_by IS NOT NULL AND approved_at IS NOT NULL) OR
-        (status != 'APROVADA' AND (approved_by IS NULL OR approved_at IS NULL) OR approved_by IS NOT NULL)
-    ),
-    CONSTRAINT check_fulfilled_fields CHECK (
-        (status IN ('ATENDIDA', 'ATENDIDA_PARCIALMENTE') AND fulfilled_by IS NOT NULL AND fulfilled_at IS NOT NULL) OR
-        (status NOT IN ('ATENDIDA', 'ATENDIDA_PARCIALMENTE'))
-    ),
-    CONSTRAINT check_rejected_reason CHECK (
-        (status = 'REJEITADA' AND rejection_reason IS NOT NULL) OR
-        (status != 'REJEITADA')
-    )
-);
-
--- Índices para requisitions
-CREATE INDEX idx_requisitions_warehouse_id ON requisitions(warehouse_id);
-CREATE INDEX idx_requisitions_requester_id ON requisitions(requester_id);
-CREATE INDEX idx_requisitions_status ON requisitions(status);
-CREATE INDEX idx_requisitions_request_date ON requisitions(request_date DESC);
-CREATE INDEX idx_requisitions_approved_by ON requisitions(approved_by) WHERE approved_by IS NOT NULL;
-CREATE INDEX idx_requisitions_fulfilled_by ON requisitions(fulfilled_by) WHERE fulfilled_by IS NOT NULL;
-
--- Trigger para atualizar updated_at
-CREATE TRIGGER set_timestamp_requisitions
-BEFORE UPDATE ON requisitions
-FOR EACH ROW
-EXECUTE PROCEDURE trigger_set_timestamp();
-
 -- Cria a tabela de Itens da Requisição (Requisition Items)
 CREATE TABLE requisition_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -250,6 +251,16 @@ CREATE INDEX idx_requisition_items_material_id ON requisition_items(material_id)
 -- (já está definida acima, mas garantir que existe)
 -- ALTER TABLE stock_movements ADD CONSTRAINT fk_stock_movements_requisition
 --     FOREIGN KEY (requisition_id) REFERENCES requisitions(id) ON DELETE SET NULL;
+
+-- Garante que a cidade existe antes do warehouse
+INSERT INTO countries (id, name, code) VALUES (uuid_generate_v4(), 'Brasil', 'BR') ON CONFLICT DO NOTHING;
+-- Supondo que você tenha uma tabela de estados (states)
+INSERT INTO states (name, code, country_id) VALUES ('Mato Grosso', 'MT', (SELECT id FROM countries LIMIT 1)) ON CONFLICT DO NOTHING;
+
+-- Insere a cidade
+INSERT INTO cities (name, state_id) 
+SELECT 'Cuiabá', id FROM states WHERE code = 'MT'
+ON CONFLICT DO NOTHING;
 
 -- Inserir dados de exemplo para almoxarifados
 INSERT INTO warehouses (name, code, city_id, address, is_active) VALUES

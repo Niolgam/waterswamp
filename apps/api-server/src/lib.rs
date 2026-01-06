@@ -172,9 +172,8 @@ pub fn build_application_state(
     let warehouse_reports_repo_port: Arc<dyn WarehouseReportsPort> =
         Arc::new(WarehouseReportsRepository::new(pool_auth.clone()));
 
-    let warehouse_reports_service = Arc::new(WarehouseReportsService::new(
-        warehouse_reports_repo_port,
-    ));
+    let warehouse_reports_service =
+        Arc::new(WarehouseReportsService::new(warehouse_reports_repo_port));
 
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
