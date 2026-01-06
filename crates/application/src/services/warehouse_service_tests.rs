@@ -29,6 +29,7 @@ mod tests {
                 description: None,
                 expense_element: None,
                 is_personnel_exclusive: false,
+                is_active: true,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
             }))
@@ -68,6 +69,7 @@ mod tests {
                 description: description.map(|s| s.to_string()),
                 expense_element: expense_element.map(|s| s.to_string()),
                 is_personnel_exclusive,
+                is_active: true,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
             })
@@ -81,6 +83,7 @@ mod tests {
             _description: Option<&str>,
             _expense_element: Option<&str>,
             _is_personnel_exclusive: Option<bool>,
+            _is_active: Option<bool>,
         ) -> Result<MaterialGroupDto, RepositoryError> {
             unimplemented!()
         }
@@ -94,6 +97,8 @@ mod tests {
             _limit: i64,
             _offset: i64,
             _search: Option<String>,
+            _is_personnel_exclusive: Option<bool>,
+            _is_active: Option<bool>,
         ) -> Result<(Vec<MaterialGroupDto>, i64), RepositoryError> {
             Ok((vec![], 0))
         }
@@ -108,24 +113,17 @@ mod tests {
             Ok(Some(MaterialDto {
                 id: Uuid::new_v4(),
                 material_group_id: Uuid::new_v4(),
-                code: MaterialCode::try_from("MAT001".to_string()).unwrap(),
                 name: "Test Material".to_string(),
-                description: None,
-                catmat_code: Some(CatmatCode::try_from("123456".to_string()).unwrap()),
-                unit_of_measure: UnitOfMeasure::Unidade,
                 estimated_value: Decimal::from_str("10.00").unwrap(),
-                minimum_quantity: None,
+                unit_of_measure: UnitOfMeasure::try_from("Unidade".to_string()).unwrap(),
+                specification: "Test specification".to_string(),
+                search_links: None,
+                catmat_code: Some(CatmatCode::try_from("123456".to_string()).unwrap()),
+                photo_url: None,
                 is_active: true,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
             }))
-        }
-
-        async fn find_by_code(
-            &self,
-            _code: &MaterialCode,
-        ) -> Result<Option<MaterialDto>, RepositoryError> {
-            Ok(None)
         }
 
         async fn find_with_group_by_id(
@@ -135,13 +133,18 @@ mod tests {
             unimplemented!()
         }
 
-        async fn exists_by_code(&self, _code: &MaterialCode) -> Result<bool, RepositoryError> {
+        async fn exists_by_name_in_group(
+            &self,
+            _name: &str,
+            _material_group_id: Uuid,
+        ) -> Result<bool, RepositoryError> {
             Ok(false)
         }
 
-        async fn exists_by_code_excluding(
+        async fn exists_by_name_in_group_excluding(
             &self,
-            _code: &MaterialCode,
+            _name: &str,
+            _material_group_id: Uuid,
             _exclude_id: Uuid,
         ) -> Result<bool, RepositoryError> {
             Ok(false)
@@ -150,14 +153,13 @@ mod tests {
         async fn create(
             &self,
             _material_group_id: Uuid,
-            _code: &MaterialCode,
             _name: &str,
-            _description: Option<&str>,
-            _catmat_code: Option<&CatmatCode>,
-            _unit_of_measure: UnitOfMeasure,
             _estimated_value: Decimal,
-            _minimum_quantity: Option<Decimal>,
-            _is_active: bool,
+            _unit_of_measure: &UnitOfMeasure,
+            _specification: &str,
+            _search_links: Option<&str>,
+            _catmat_code: Option<&CatmatCode>,
+            _photo_url: Option<&str>,
         ) -> Result<MaterialDto, RepositoryError> {
             unimplemented!()
         }
@@ -166,13 +168,13 @@ mod tests {
             &self,
             _id: Uuid,
             _material_group_id: Option<Uuid>,
-            _code: Option<&MaterialCode>,
             _name: Option<&str>,
-            _description: Option<&str>,
-            _catmat_code: Option<&CatmatCode>,
-            _unit_of_measure: Option<UnitOfMeasure>,
             _estimated_value: Option<Decimal>,
-            _minimum_quantity: Option<Decimal>,
+            _unit_of_measure: Option<&UnitOfMeasure>,
+            _specification: Option<&str>,
+            _search_links: Option<&str>,
+            _catmat_code: Option<&CatmatCode>,
+            _photo_url: Option<&str>,
             _is_active: Option<bool>,
         ) -> Result<MaterialDto, RepositoryError> {
             unimplemented!()
@@ -186,8 +188,8 @@ mod tests {
             &self,
             _limit: i64,
             _offset: i64,
-            _material_group_id: Option<Uuid>,
             _search: Option<String>,
+            _material_group_id: Option<Uuid>,
             _is_active: Option<bool>,
         ) -> Result<(Vec<MaterialWithGroupDto>, i64), RepositoryError> {
             Ok((vec![], 0))
@@ -202,10 +204,14 @@ mod tests {
         async fn find_by_id(&self, _id: Uuid) -> Result<Option<WarehouseDto>, RepositoryError> {
             Ok(Some(WarehouseDto {
                 id: Uuid::new_v4(),
-                city_id: Uuid::new_v4(),
                 name: "Test Warehouse".to_string(),
-                code: Some("WH001".to_string()),
+                code: "WH001".to_string(),
+                city_id: Uuid::new_v4(),
+                responsible_user_id: None,
                 address: Some("Test Address".to_string()),
+                phone: None,
+                email: None,
+                is_active: true,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
             }))
@@ -218,12 +224,27 @@ mod tests {
             unimplemented!()
         }
 
+        async fn exists_by_code(&self, _code: &str) -> Result<bool, RepositoryError> {
+            Ok(false)
+        }
+
+        async fn exists_by_code_excluding(
+            &self,
+            _code: &str,
+            _exclude_id: Uuid,
+        ) -> Result<bool, RepositoryError> {
+            Ok(false)
+        }
+
         async fn create(
             &self,
-            _city_id: Uuid,
             _name: &str,
-            _code: Option<&str>,
+            _code: &str,
+            _city_id: Uuid,
+            _responsible_user_id: Option<Uuid>,
             _address: Option<&str>,
+            _phone: Option<&str>,
+            _email: Option<&str>,
         ) -> Result<WarehouseDto, RepositoryError> {
             unimplemented!()
         }
@@ -231,11 +252,19 @@ mod tests {
         async fn update(
             &self,
             _id: Uuid,
-            _city_id: Option<Uuid>,
             _name: Option<&str>,
             _code: Option<&str>,
+            _city_id: Option<Uuid>,
+            _responsible_user_id: Option<Uuid>,
             _address: Option<&str>,
+            _phone: Option<&str>,
+            _email: Option<&str>,
+            _is_active: Option<bool>,
         ) -> Result<WarehouseDto, RepositoryError> {
+            unimplemented!()
+        }
+
+        async fn delete(&self, _id: Uuid) -> Result<bool, RepositoryError> {
             unimplemented!()
         }
 
@@ -243,8 +272,9 @@ mod tests {
             &self,
             _limit: i64,
             _offset: i64,
-            _city_id: Option<Uuid>,
             _search: Option<String>,
+            _city_id: Option<Uuid>,
+            _is_active: Option<bool>,
         ) -> Result<(Vec<WarehouseWithCityDto>, i64), RepositoryError> {
             Ok((vec![], 0))
         }
@@ -271,6 +301,13 @@ mod tests {
             Ok(stocks.iter().find(|s| s.id == id).cloned())
         }
 
+        async fn find_with_details_by_id(
+            &self,
+            _id: Uuid,
+        ) -> Result<Option<WarehouseStockWithDetailsDto>, RepositoryError> {
+            unimplemented!()
+        }
+
         async fn find_by_warehouse_and_material(
             &self,
             warehouse_id: Uuid,
@@ -283,20 +320,15 @@ mod tests {
                 .cloned())
         }
 
-        async fn find_with_details_by_id(
-            &self,
-            _id: Uuid,
-        ) -> Result<Option<WarehouseStockWithDetailsDto>, RepositoryError> {
-            unimplemented!()
-        }
-
         async fn create(
             &self,
             warehouse_id: Uuid,
             material_id: Uuid,
             quantity: Decimal,
             average_unit_value: Decimal,
-            minimum_quantity: Option<Decimal>,
+            min_stock: Option<Decimal>,
+            max_stock: Option<Decimal>,
+            location: Option<&str>,
         ) -> Result<WarehouseStockDto, RepositoryError> {
             let stock = WarehouseStockDto {
                 id: Uuid::new_v4(),
@@ -304,13 +336,30 @@ mod tests {
                 material_id,
                 quantity,
                 average_unit_value,
-                minimum_quantity,
+                min_stock,
+                max_stock,
+                location: location.map(|s| s.to_string()),
+                resupply_days: None,
+                is_blocked: false,
+                block_reason: None,
+                blocked_at: None,
+                blocked_by: None,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
             };
 
             self.stocks.lock().unwrap().push(stock.clone());
             Ok(stock)
+        }
+
+        async fn update(
+            &self,
+            _id: Uuid,
+            _min_stock: Option<Decimal>,
+            _max_stock: Option<Decimal>,
+            _location: Option<&str>,
+        ) -> Result<WarehouseStockDto, RepositoryError> {
+            unimplemented!()
         }
 
         async fn update_stock_and_average(
@@ -345,6 +394,30 @@ mod tests {
         ) -> Result<(Vec<WarehouseStockWithDetailsDto>, i64), RepositoryError> {
             Ok((vec![], 0))
         }
+
+        async fn update_stock_maintenance(
+            &self,
+            _id: Uuid,
+            _min_stock: Option<Decimal>,
+            _max_stock: Option<Decimal>,
+            _location: Option<&str>,
+            _resupply_days: Option<i32>,
+        ) -> Result<WarehouseStockDto, RepositoryError> {
+            unimplemented!()
+        }
+
+        async fn block_material(
+            &self,
+            _id: Uuid,
+            _reason: &str,
+            _blocked_by: Uuid,
+        ) -> Result<WarehouseStockDto, RepositoryError> {
+            unimplemented!()
+        }
+
+        async fn unblock_material(&self, _id: Uuid) -> Result<WarehouseStockDto, RepositoryError> {
+            unimplemented!()
+        }
     }
 
     #[derive(Clone)]
@@ -352,6 +425,17 @@ mod tests {
 
     #[async_trait]
     impl StockMovementRepositoryPort for MockStockMovementRepository {
+        async fn find_by_id(&self, _id: Uuid) -> Result<Option<StockMovementDto>, RepositoryError> {
+            unimplemented!()
+        }
+
+        async fn find_with_details_by_id(
+            &self,
+            _id: Uuid,
+        ) -> Result<Option<StockMovementWithDetailsDto>, RepositoryError> {
+            unimplemented!()
+        }
+
         async fn create(
             &self,
             warehouse_stock_id: Uuid,
@@ -363,9 +447,10 @@ mod tests {
             balance_after: Decimal,
             average_before: Decimal,
             average_after: Decimal,
-            user_id: Uuid,
+            movement_date: chrono::DateTime<chrono::Utc>,
             document_number: Option<&str>,
             requisition_id: Option<Uuid>,
+            user_id: Uuid,
             notes: Option<&str>,
         ) -> Result<StockMovementDto, RepositoryError> {
             Ok(StockMovementDto {
@@ -379,24 +464,13 @@ mod tests {
                 balance_after,
                 average_before,
                 average_after,
-                user_id,
+                movement_date,
                 document_number: document_number.map(|s| s.to_string()),
                 requisition_id,
+                user_id,
                 notes: notes.map(|s| s.to_string()),
-                movement_date: chrono::Utc::now(),
                 created_at: chrono::Utc::now(),
             })
-        }
-
-        async fn find_by_id(&self, _id: Uuid) -> Result<Option<StockMovementDto>, RepositoryError> {
-            unimplemented!()
-        }
-
-        async fn find_with_details_by_id(
-            &self,
-            _id: Uuid,
-        ) -> Result<Option<StockMovementWithDetailsDto>, RepositoryError> {
-            unimplemented!()
         }
 
         async fn list(
