@@ -11,6 +11,7 @@ use domain::models::{
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -23,7 +24,7 @@ use crate::{
 // Request/Response Contracts
 // ============================
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ListQuery {
     #[validate(range(min = 1, max = 100))]
     pub limit: Option<i64>,
@@ -32,7 +33,7 @@ pub struct ListQuery {
     pub search: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct StockEntryRequest {
     pub warehouse_id: Uuid,
     pub material_id: Uuid,
@@ -42,7 +43,7 @@ pub struct StockEntryRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct StockExitRequest {
     pub warehouse_id: Uuid,
     pub material_id: Uuid,
@@ -52,7 +53,7 @@ pub struct StockExitRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct StockAdjustmentRequest {
     pub warehouse_id: Uuid,
     pub material_id: Uuid,
@@ -66,6 +67,21 @@ pub struct StockAdjustmentRequest {
 // ============================
 
 /// GET /api/warehouse/material-groups
+#[utoipa::path(
+    get,
+    path = "/api/warehouse/material-groups",
+    tag = "Material Groups",
+    params(
+        ("limit" = Option<i64>, Query, description = "Número de itens por página (1-100)", example = 20),
+        ("offset" = Option<i64>, Query, description = "Deslocamento para paginação", example = 0),
+        ("search" = Option<String>, Query, description = "Busca por código ou nome do grupo"),
+    ),
+    responses(
+        (status = 200, description = "Lista de grupos de materiais retornada com sucesso"),
+        (status = 400, description = "Parâmetros de consulta inválidos"),
+    ),
+    summary = "Listar grupos de materiais"
+)]
 pub async fn list_material_groups(
     State(state): State<AppState>,
     Query(params): Query<ListQuery>,
@@ -84,6 +100,19 @@ pub async fn list_material_groups(
 }
 
 /// GET /api/warehouse/material-groups/:id
+#[utoipa::path(
+    get,
+    path = "/api/warehouse/material-groups/{id}",
+    tag = "Material Groups",
+    params(
+        ("id" = Uuid, Path, description = "ID do grupo de materiais"),
+    ),
+    responses(
+        (status = 200, description = "Grupo de materiais encontrado"),
+        (status = 404, description = "Grupo de materiais não encontrado"),
+    ),
+    summary = "Obter grupo de materiais por ID"
+)]
 pub async fn get_material_group(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -93,6 +122,19 @@ pub async fn get_material_group(
 }
 
 /// POST /api/warehouse/material-groups
+#[utoipa::path(
+    post,
+    path = "/api/warehouse/material-groups",
+    tag = "Material Groups",
+    request_body = CreateMaterialGroupPayload,
+    responses(
+        (status = 201, description = "Grupo de materiais criado com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 409, description = "Código do grupo já existe"),
+    ),
+    summary = "Criar novo grupo de materiais",
+    security(("bearer" = []))
+)]
 pub async fn create_material_group(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -106,6 +148,23 @@ pub async fn create_material_group(
 }
 
 /// PUT /api/warehouse/material-groups/:id
+#[utoipa::path(
+    put,
+    path = "/api/warehouse/material-groups/{id}",
+    tag = "Material Groups",
+    params(
+        ("id" = Uuid, Path, description = "ID do grupo de materiais"),
+    ),
+    request_body = UpdateMaterialGroupPayload,
+    responses(
+        (status = 200, description = "Grupo de materiais atualizado com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Grupo de materiais não encontrado"),
+        (status = 409, description = "Código do grupo já existe"),
+    ),
+    summary = "Atualizar grupo de materiais",
+    security(("bearer" = []))
+)]
 pub async fn update_material_group(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -123,6 +182,21 @@ pub async fn update_material_group(
 }
 
 /// DELETE /api/warehouse/material-groups/:id
+#[utoipa::path(
+    delete,
+    path = "/api/warehouse/material-groups/{id}",
+    tag = "Material Groups",
+    params(
+        ("id" = Uuid, Path, description = "ID do grupo de materiais"),
+    ),
+    responses(
+        (status = 204, description = "Grupo de materiais excluído com sucesso"),
+        (status = 404, description = "Grupo de materiais não encontrado"),
+        (status = 409, description = "Grupo possui materiais associados"),
+    ),
+    summary = "Excluir grupo de materiais",
+    security(("bearer" = []))
+)]
 pub async fn delete_material_group(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -137,6 +211,21 @@ pub async fn delete_material_group(
 // ============================
 
 /// GET /api/warehouse/materials
+#[utoipa::path(
+    get,
+    path = "/api/warehouse/materials",
+    tag = "Materials",
+    params(
+        ("limit" = Option<i64>, Query, description = "Número de itens por página (1-100)", example = 20),
+        ("offset" = Option<i64>, Query, description = "Deslocamento para paginação", example = 0),
+        ("search" = Option<String>, Query, description = "Busca por nome ou código do material"),
+    ),
+    responses(
+        (status = 200, description = "Lista de materiais retornada com sucesso"),
+        (status = 400, description = "Parâmetros de consulta inválidos"),
+    ),
+    summary = "Listar materiais e serviços"
+)]
 pub async fn list_materials(
     State(state): State<AppState>,
     Query(params): Query<ListQuery>,
@@ -155,6 +244,19 @@ pub async fn list_materials(
 }
 
 /// GET /api/warehouse/materials/:id
+#[utoipa::path(
+    get,
+    path = "/api/warehouse/materials/{id}",
+    tag = "Materials",
+    params(
+        ("id" = Uuid, Path, description = "ID do material"),
+    ),
+    responses(
+        (status = 200, description = "Material encontrado"),
+        (status = 404, description = "Material não encontrado"),
+    ),
+    summary = "Obter material por ID"
+)]
 pub async fn get_material(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -164,6 +266,20 @@ pub async fn get_material(
 }
 
 /// POST /api/warehouse/materials
+#[utoipa::path(
+    post,
+    path = "/api/warehouse/materials",
+    tag = "Materials",
+    request_body = CreateMaterialPayload,
+    responses(
+        (status = 201, description = "Material criado com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Grupo de materiais não encontrado"),
+        (status = 409, description = "Material já existe no grupo"),
+    ),
+    summary = "Criar novo material ou serviço",
+    security(("bearer" = []))
+)]
 pub async fn create_material(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -177,6 +293,23 @@ pub async fn create_material(
 }
 
 /// PUT /api/warehouse/materials/:id
+#[utoipa::path(
+    put,
+    path = "/api/warehouse/materials/{id}",
+    tag = "Materials",
+    params(
+        ("id" = Uuid, Path, description = "ID do material"),
+    ),
+    request_body = UpdateMaterialPayload,
+    responses(
+        (status = 200, description = "Material atualizado com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Material não encontrado"),
+        (status = 409, description = "Nome já existe no grupo"),
+    ),
+    summary = "Atualizar material ou serviço",
+    security(("bearer" = []))
+)]
 pub async fn update_material(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -191,6 +324,21 @@ pub async fn update_material(
 }
 
 /// DELETE /api/warehouse/materials/:id
+#[utoipa::path(
+    delete,
+    path = "/api/warehouse/materials/{id}",
+    tag = "Materials",
+    params(
+        ("id" = Uuid, Path, description = "ID do material"),
+    ),
+    responses(
+        (status = 204, description = "Material excluído com sucesso"),
+        (status = 404, description = "Material não encontrado"),
+        (status = 409, description = "Material possui estoque ou movimentações"),
+    ),
+    summary = "Excluir material ou serviço",
+    security(("bearer" = []))
+)]
 pub async fn delete_material(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -205,6 +353,20 @@ pub async fn delete_material(
 // ============================
 
 /// POST /api/warehouse/warehouses
+#[utoipa::path(
+    post,
+    path = "/api/warehouse/warehouses",
+    tag = "Warehouses",
+    request_body = CreateWarehousePayload,
+    responses(
+        (status = 201, description = "Almoxarifado criado com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Cidade não encontrada"),
+        (status = 409, description = "Código do almoxarifado já existe"),
+    ),
+    summary = "Criar novo almoxarifado",
+    security(("bearer" = []))
+)]
 pub async fn create_warehouse(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -218,6 +380,19 @@ pub async fn create_warehouse(
 }
 
 /// GET /api/warehouse/warehouses/:id
+#[utoipa::path(
+    get,
+    path = "/api/warehouse/warehouses/{id}",
+    tag = "Warehouses",
+    params(
+        ("id" = Uuid, Path, description = "ID do almoxarifado"),
+    ),
+    responses(
+        (status = 200, description = "Almoxarifado encontrado"),
+        (status = 404, description = "Almoxarifado não encontrado"),
+    ),
+    summary = "Obter almoxarifado por ID"
+)]
 pub async fn get_warehouse(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -227,6 +402,23 @@ pub async fn get_warehouse(
 }
 
 /// PUT /api/warehouse/warehouses/:id
+#[utoipa::path(
+    put,
+    path = "/api/warehouse/warehouses/{id}",
+    tag = "Warehouses",
+    params(
+        ("id" = Uuid, Path, description = "ID do almoxarifado"),
+    ),
+    request_body = UpdateWarehousePayload,
+    responses(
+        (status = 200, description = "Almoxarifado atualizado com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Almoxarifado ou cidade não encontrados"),
+        (status = 409, description = "Código do almoxarifado já existe"),
+    ),
+    summary = "Atualizar almoxarifado",
+    security(("bearer" = []))
+)]
 pub async fn update_warehouse(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -245,6 +437,19 @@ pub async fn update_warehouse(
 // ============================
 
 /// POST /api/warehouse/stock/entry
+#[utoipa::path(
+    post,
+    path = "/api/warehouse/stock/entry",
+    tag = "Stock",
+    request_body = StockEntryRequest,
+    responses(
+        (status = 201, description = "Entrada de estoque registrada com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Almoxarifado ou material não encontrado"),
+    ),
+    summary = "Registrar entrada de estoque",
+    security(("bearer" = []))
+)]
 pub async fn register_stock_entry(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -276,6 +481,19 @@ pub async fn register_stock_entry(
 }
 
 /// POST /api/warehouse/stock/exit
+#[utoipa::path(
+    post,
+    path = "/api/warehouse/stock/exit",
+    tag = "Stock",
+    request_body = StockExitRequest,
+    responses(
+        (status = 201, description = "Saída de estoque registrada com sucesso"),
+        (status = 400, description = "Dados inválidos ou estoque insuficiente"),
+        (status = 404, description = "Almoxarifado ou material não encontrado"),
+    ),
+    summary = "Registrar saída de estoque",
+    security(("bearer" = []))
+)]
 pub async fn register_stock_exit(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -307,6 +525,19 @@ pub async fn register_stock_exit(
 }
 
 /// POST /api/warehouse/stock/adjustment
+#[utoipa::path(
+    post,
+    path = "/api/warehouse/stock/adjustment",
+    tag = "Stock",
+    request_body = StockAdjustmentRequest,
+    responses(
+        (status = 201, description = "Ajuste de estoque registrado com sucesso"),
+        (status = 400, description = "Dados inválidos ou ajuste resultaria em estoque negativo"),
+        (status = 404, description = "Almoxarifado ou material não encontrado"),
+    ),
+    summary = "Registrar ajuste de estoque (positivo ou negativo)",
+    security(("bearer" = []))
+)]
 pub async fn register_stock_adjustment(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -336,6 +567,19 @@ pub async fn register_stock_adjustment(
 }
 
 /// GET /api/warehouse/stock/:id
+#[utoipa::path(
+    get,
+    path = "/api/warehouse/stock/{id}",
+    tag = "Stock",
+    params(
+        ("id" = Uuid, Path, description = "ID do estoque"),
+    ),
+    responses(
+        (status = 200, description = "Informações do estoque retornadas"),
+        (status = 404, description = "Estoque não encontrado"),
+    ),
+    summary = "Obter informações de estoque específico"
+)]
 pub async fn get_warehouse_stock(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -350,6 +594,22 @@ pub async fn get_warehouse_stock(
 
 /// PUT /api/warehouse/stock/:id/maintenance
 /// Atualiza parâmetros de manutenção do estoque (min stock, resupply days, location)
+#[utoipa::path(
+    put,
+    path = "/api/warehouse/stock/{id}/maintenance",
+    tag = "Stock",
+    params(
+        ("id" = Uuid, Path, description = "ID do estoque"),
+    ),
+    request_body = UpdateStockMaintenancePayload,
+    responses(
+        (status = 200, description = "Parâmetros de manutenção atualizados com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Estoque não encontrado"),
+    ),
+    summary = "Atualizar parâmetros de manutenção do estoque",
+    security(("bearer" = []))
+)]
 pub async fn update_stock_maintenance(
     State(state): State<AppState>,
     Path(stock_id): Path<Uuid>,
@@ -370,6 +630,23 @@ pub async fn update_stock_maintenance(
 
 /// POST /api/warehouse/stock/:id/block
 /// Bloqueia um material, impedindo requisições
+#[utoipa::path(
+    post,
+    path = "/api/warehouse/stock/{id}/block",
+    tag = "Stock",
+    params(
+        ("id" = Uuid, Path, description = "ID do estoque"),
+    ),
+    request_body = BlockMaterialPayload,
+    responses(
+        (status = 200, description = "Material bloqueado com sucesso"),
+        (status = 400, description = "Dados inválidos"),
+        (status = 404, description = "Estoque não encontrado"),
+        (status = 409, description = "Material já está bloqueado"),
+    ),
+    summary = "Bloquear material (impede requisições)",
+    security(("bearer" = []))
+)]
 pub async fn block_material(
     State(state): State<AppState>,
     Path(stock_id): Path<Uuid>,
@@ -391,6 +668,21 @@ pub async fn block_material(
 
 /// DELETE /api/warehouse/stock/:id/block
 /// Desbloqueia um material, permitindo requisições novamente
+#[utoipa::path(
+    delete,
+    path = "/api/warehouse/stock/{id}/block",
+    tag = "Stock",
+    params(
+        ("id" = Uuid, Path, description = "ID do estoque"),
+    ),
+    responses(
+        (status = 200, description = "Material desbloqueado com sucesso"),
+        (status = 404, description = "Estoque não encontrado"),
+        (status = 409, description = "Material não está bloqueado"),
+    ),
+    summary = "Desbloquear material (permite requisições novamente)",
+    security(("bearer" = []))
+)]
 pub async fn unblock_material(
     State(state): State<AppState>,
     Path(stock_id): Path<Uuid>,
@@ -405,6 +697,20 @@ pub async fn unblock_material(
 
 /// POST /api/warehouse/stock/transfer
 /// Transfere estoque de um material para outro dentro do mesmo grupo
+#[utoipa::path(
+    post,
+    path = "/api/warehouse/stock/transfer",
+    tag = "Stock",
+    request_body = TransferStockPayload,
+    responses(
+        (status = 201, description = "Transferência realizada com sucesso"),
+        (status = 400, description = "Dados inválidos ou estoque insuficiente"),
+        (status = 404, description = "Estoque de origem ou destino não encontrado"),
+        (status = 409, description = "Materiais não pertencem ao mesmo grupo"),
+    ),
+    summary = "Transferir estoque entre materiais do mesmo grupo",
+    security(("bearer" = []))
+)]
 pub async fn transfer_stock(
     State(state): State<AppState>,
     user: CurrentUser,

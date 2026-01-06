@@ -6,6 +6,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{extractors::current_user::CurrentUser, infra::{errors::AppError, state::AppState}};
@@ -14,18 +15,18 @@ use crate::{extractors::current_user::CurrentUser, infra::{errors::AppError, sta
 // Request/Query Contracts
 // ============================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct StockValueReportQuery {
     pub warehouse_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct StockValueDetailQuery {
     pub warehouse_id: Uuid,
     pub material_group_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ConsumptionReportQuery {
     pub warehouse_id: Option<Uuid>,
     pub start_date: DateTime<Utc>,
@@ -34,7 +35,7 @@ pub struct ConsumptionReportQuery {
     pub limit: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct MostRequestedQuery {
     pub warehouse_id: Option<Uuid>,
     pub start_date: Option<DateTime<Utc>>,
@@ -43,7 +44,7 @@ pub struct MostRequestedQuery {
     pub limit: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct MovementAnalysisQuery {
     pub warehouse_id: Option<Uuid>,
     pub start_date: DateTime<Utc>,
@@ -60,6 +61,19 @@ fn default_limit() -> i64 {
 
 /// GET /api/admin/warehouse/reports/stock-value
 /// Relatório de valor total de estoque por almoxarifado
+#[utoipa::path(
+    get,
+    path = "/api/admin/warehouse/reports/stock-value",
+    tag = "Reports",
+    params(
+        ("warehouse_id" = Option<Uuid>, Query, description = "Filtrar por almoxarifado específico"),
+    ),
+    responses(
+        (status = 200, description = "Relatório de valor de estoque gerado com sucesso"),
+    ),
+    summary = "Relatório de valor total de estoque por almoxarifado",
+    security(("bearer" = []))
+)]
 pub async fn get_stock_value_report(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -78,6 +92,21 @@ pub async fn get_stock_value_report(
 
 /// GET /api/admin/warehouse/reports/stock-value/detail
 /// Relatório detalhado de valor de estoque por material
+#[utoipa::path(
+    get,
+    path = "/api/admin/warehouse/reports/stock-value/detail",
+    tag = "Reports",
+    params(
+        ("warehouse_id" = Uuid, Query, description = "ID do almoxarifado"),
+        ("material_group_id" = Option<Uuid>, Query, description = "Filtrar por grupo de materiais"),
+    ),
+    responses(
+        (status = 200, description = "Relatório detalhado de estoque gerado com sucesso"),
+        (status = 404, description = "Almoxarifado não encontrado"),
+    ),
+    summary = "Relatório detalhado de valor de estoque por material",
+    security(("bearer" = []))
+)]
 pub async fn get_stock_value_detail(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -96,6 +125,22 @@ pub async fn get_stock_value_detail(
 
 /// GET /api/admin/warehouse/reports/consumption
 /// Relatório de consumo de materiais por período
+#[utoipa::path(
+    get,
+    path = "/api/admin/warehouse/reports/consumption",
+    tag = "Reports",
+    params(
+        ("warehouse_id" = Option<Uuid>, Query, description = "Filtrar por almoxarifado"),
+        ("start_date" = DateTime<Utc>, Query, description = "Data inicial do período"),
+        ("end_date" = DateTime<Utc>, Query, description = "Data final do período"),
+        ("limit" = Option<i64>, Query, description = "Número máximo de itens", example = 50),
+    ),
+    responses(
+        (status = 200, description = "Relatório de consumo gerado com sucesso"),
+    ),
+    summary = "Relatório de consumo de materiais por período",
+    security(("bearer" = []))
+)]
 pub async fn get_consumption_report(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -123,6 +168,22 @@ pub async fn get_consumption_report(
 
 /// GET /api/admin/warehouse/reports/most-requested
 /// Relatório de materiais mais requisitados
+#[utoipa::path(
+    get,
+    path = "/api/admin/warehouse/reports/most-requested",
+    tag = "Reports",
+    params(
+        ("warehouse_id" = Option<Uuid>, Query, description = "Filtrar por almoxarifado"),
+        ("start_date" = Option<DateTime<Utc>>, Query, description = "Data inicial do período (opcional)"),
+        ("end_date" = Option<DateTime<Utc>>, Query, description = "Data final do período (opcional)"),
+        ("limit" = Option<i64>, Query, description = "Número máximo de itens", example = 50),
+    ),
+    responses(
+        (status = 200, description = "Relatório de materiais mais requisitados gerado com sucesso"),
+    ),
+    summary = "Relatório de materiais mais requisitados",
+    security(("bearer" = []))
+)]
 pub async fn get_most_requested_materials(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -150,6 +211,21 @@ pub async fn get_most_requested_materials(
 
 /// GET /api/admin/warehouse/reports/movement-analysis
 /// Análise de movimentações por tipo e período
+#[utoipa::path(
+    get,
+    path = "/api/admin/warehouse/reports/movement-analysis",
+    tag = "Reports",
+    params(
+        ("warehouse_id" = Option<Uuid>, Query, description = "Filtrar por almoxarifado"),
+        ("start_date" = DateTime<Utc>, Query, description = "Data inicial do período"),
+        ("end_date" = DateTime<Utc>, Query, description = "Data final do período"),
+    ),
+    responses(
+        (status = 200, description = "Análise de movimentações gerada com sucesso"),
+    ),
+    summary = "Análise de movimentações por tipo e período",
+    security(("bearer" = []))
+)]
 pub async fn get_movement_analysis(
     State(state): State<AppState>,
     _user: CurrentUser,
