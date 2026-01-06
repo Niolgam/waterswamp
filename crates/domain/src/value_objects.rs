@@ -2,6 +2,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fmt; // Importante para Display
+use utoipa::ToSchema;
 
 lazy_static! {
     static ref EMAIL_REGEX: Regex = Regex::new(
@@ -200,7 +201,7 @@ impl AsRef<str> for LocationName {
 // ============================
 
 /// Material Code - Código numérico do grupo de material (1-10 dígitos)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
 #[sqlx(transparent)]
 #[serde(try_from = "String")]
 pub struct MaterialCode(String);
@@ -243,7 +244,7 @@ impl AsRef<str> for MaterialCode {
 }
 
 /// CATMAT Code - Código do material no sistema CATMAT do governo (opcional)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
 #[sqlx(transparent)]
 #[serde(try_from = "String")]
 pub struct CatmatCode(String);
@@ -286,7 +287,7 @@ impl AsRef<str> for CatmatCode {
 }
 
 /// Unit of Measure - Unidade de medida do material (ex: Litro, Unidade, Kg)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
 #[sqlx(transparent)]
 #[serde(try_from = "String")]
 pub struct UnitOfMeasure(String);
