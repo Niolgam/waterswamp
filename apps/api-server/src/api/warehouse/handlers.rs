@@ -95,7 +95,7 @@ pub async fn get_material_group(
 /// POST /api/warehouse/material-groups
 pub async fn create_material_group(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Json(payload): Json<CreateMaterialGroupPayload>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     payload.validate()?;
@@ -108,7 +108,7 @@ pub async fn create_material_group(
 /// PUT /api/warehouse/material-groups/:id
 pub async fn update_material_group(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateMaterialGroupPayload>,
 ) -> Result<Json<Value>, AppError> {
@@ -125,7 +125,7 @@ pub async fn update_material_group(
 /// DELETE /api/warehouse/material-groups/:id
 pub async fn delete_material_group(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     state.warehouse_service.delete_material_group(id).await?;
@@ -166,7 +166,7 @@ pub async fn get_material(
 /// POST /api/warehouse/materials
 pub async fn create_material(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Json(payload): Json<CreateMaterialPayload>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     payload.validate()?;
@@ -179,7 +179,7 @@ pub async fn create_material(
 /// PUT /api/warehouse/materials/:id
 pub async fn update_material(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateMaterialPayload>,
 ) -> Result<Json<Value>, AppError> {
@@ -193,7 +193,7 @@ pub async fn update_material(
 /// DELETE /api/warehouse/materials/:id
 pub async fn delete_material(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, AppError> {
     state.warehouse_service.delete_material(id).await?;
@@ -207,7 +207,7 @@ pub async fn delete_material(
 /// POST /api/warehouse/warehouses
 pub async fn create_warehouse(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Json(payload): Json<CreateWarehousePayload>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     payload.validate()?;
@@ -229,7 +229,7 @@ pub async fn get_warehouse(
 /// PUT /api/warehouse/warehouses/:id
 pub async fn update_warehouse(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateWarehousePayload>,
 ) -> Result<Json<Value>, AppError> {
@@ -247,7 +247,7 @@ pub async fn update_warehouse(
 /// POST /api/warehouse/stock/entry
 pub async fn register_stock_entry(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user: CurrentUser,
     Json(req): Json<StockEntryRequest>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     req.validate()?;
@@ -278,7 +278,7 @@ pub async fn register_stock_entry(
 /// POST /api/warehouse/stock/exit
 pub async fn register_stock_exit(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user: CurrentUser,
     Json(req): Json<StockExitRequest>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     req.validate()?;
@@ -309,7 +309,7 @@ pub async fn register_stock_exit(
 /// POST /api/warehouse/stock/adjustment
 pub async fn register_stock_adjustment(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user: CurrentUser,
     Json(req): Json<StockAdjustmentRequest>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     req.validate()?;

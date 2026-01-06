@@ -61,7 +61,7 @@ pub struct ListRequisitionsQuery {
 /// POST /api/requisitions
 pub async fn create_requisition(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user: CurrentUser,
     Json(req): Json<CreateRequisitionRequest>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     req.validate()?;
@@ -126,7 +126,7 @@ pub async fn list_requisitions(
 /// POST /api/requisitions/:id/approve
 pub async fn approve_requisition(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user: CurrentUser,
     Path(id): Path<Uuid>,
     Json(req): Json<ApproveRequisitionRequest>,
 ) -> Result<Json<Value>, AppError> {
@@ -144,7 +144,7 @@ pub async fn approve_requisition(
 /// POST /api/requisitions/:id/reject
 pub async fn reject_requisition(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Path(id): Path<Uuid>,
     Json(req): Json<RejectRequisitionRequest>,
 ) -> Result<Json<Value>, AppError> {
@@ -164,7 +164,7 @@ pub async fn reject_requisition(
 /// POST /api/requisitions/:id/fulfill
 pub async fn fulfill_requisition(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    user: CurrentUser,
     Path(id): Path<Uuid>,
     Json(req): Json<FulfillRequisitionRequest>,
 ) -> Result<Json<Value>, AppError> {
@@ -182,7 +182,7 @@ pub async fn fulfill_requisition(
 /// DELETE /api/requisitions/:id
 pub async fn cancel_requisition(
     State(state): State<AppState>,
-    CurrentUser(_user): CurrentUser,
+    _user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, AppError> {
     let requisition = state
