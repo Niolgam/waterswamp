@@ -6,7 +6,7 @@ use axum::{
 use domain::models::{
     CreateRequisitionItemPayload, FulfillRequisitionItemPayload, RequisitionStatus,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use utoipa::ToSchema;
 use uuid::Uuid;

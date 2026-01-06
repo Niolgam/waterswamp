@@ -9,7 +9,6 @@ use domain::ports::{AuthRepositoryPort, EmailServicePort, MfaRepositoryPort, Use
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use totp_rs::{Algorithm, Secret, TOTP};
-use tracing::info;
 use uuid::Uuid;
 
 // Helper local

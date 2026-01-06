@@ -9,7 +9,7 @@ use domain::models::{
     UpdateMaterialPayload, UpdateStockMaintenancePayload, UpdateWarehousePayload,
 };
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use utoipa::ToSchema;
 use uuid::Uuid;

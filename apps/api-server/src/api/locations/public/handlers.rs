@@ -805,7 +805,7 @@ pub async fn list_public_building_types(
 
     for building_type in building_types {
         // Count buildings of this type
-        let (buildings, total) = state
+        let (_buildings, total) = state
             .building_repository
             .list(1, 0, None, None, Some(building_type.id))
             .await
@@ -844,7 +844,7 @@ pub async fn list_public_space_types(
 
     for space_type in space_types {
         // Count spaces of this type
-        let (spaces, total) = state
+        let (_spaces, total) = state
             .space_repository
             .list(1, 0, None, None, Some(space_type.id))
             .await

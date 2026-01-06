@@ -1,5 +1,4 @@
 use chrono::{DateTime, Utc};
-use regex;
 use serde::{Deserialize, Serialize};
 use sqlx;
 use uuid::Uuid;

@@ -4,26 +4,16 @@ use axum::{
     Json,
 };
 use domain::models::{
-    CreateBuildingPayload, CreateBuildingTypePayload, CreateCityPayload, CreateCountryPayload,
-    CreateDepartmentCategoryPayload, CreateFloorPayload, CreateSitePayload, CreateSiteTypePayload,
-    CreateSpacePayload, CreateSpaceTypePayload, CreateStatePayload, ListBuildingsQuery,
-    ListBuildingTypesQuery, ListCitiesQuery, ListCountriesQuery, ListDepartmentCategoriesQuery,
-    ListFloorsQuery, ListSitesQuery, ListSiteTypesQuery, ListSpacesQuery, ListSpaceTypesQuery,
-    ListStatesQuery, PaginatedBuildings, PaginatedBuildingTypes, PaginatedCities,
-    PaginatedCountries, PaginatedDepartmentCategories, PaginatedFloors, PaginatedSites,
-    PaginatedSiteTypes, PaginatedSpaceTypes, PaginatedStates, UpdateBuildingPayload,
-    UpdateBuildingTypePayload, UpdateCityPayload, UpdateCountryPayload,
-    UpdateDepartmentCategoryPayload, UpdateFloorPayload, UpdateSitePayload, UpdateSiteTypePayload,
-    UpdateSpacePayload, UpdateSpaceTypePayload, UpdateStatePayload,
+    CreateCityPayload, CreateCountryPayload, CreateStatePayload, ListCitiesQuery,
+    ListCountriesQuery, ListStatesQuery, PaginatedCities, PaginatedCountries, PaginatedStates,
+    UpdateCityPayload, UpdateCountryPayload, UpdateStatePayload,
 };
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::infra::{errors::AppError, state::AppState};
 
-use super::contracts::{
-    CityResponse, CityWithStateResponse, CountryResponse, StateResponse, StateWithCountryResponse,
-};
+use super::contracts::{CityResponse, CityWithStateResponse, CountryResponse, StateResponse};
 
 // ============================
 // Country Handlers

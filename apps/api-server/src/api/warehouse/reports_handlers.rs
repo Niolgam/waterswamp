@@ -1,10 +1,9 @@
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
     Json,
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use utoipa::ToSchema;
 use uuid::Uuid;

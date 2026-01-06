@@ -11,7 +11,7 @@ use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use domain::ports::{
     BuildingRepositoryPort, BuildingTypeRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
-    SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    SpaceRepositoryPort, SpaceTypeRepositoryPort,
 };
 use email_service::EmailSender;
 use moka::future::Cache;
