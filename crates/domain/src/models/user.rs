@@ -2,6 +2,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -17,7 +18,7 @@ pub struct User {
     pub password_hash: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone, ToSchema)]
 pub struct UserDto {
     pub id: Uuid,
     pub username: Username, // Value Object
@@ -26,7 +27,7 @@ pub struct UserDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone, ToSchema)]
 pub struct UserDtoExtended {
     pub id: Uuid,
     pub username: Username, // Value Object
@@ -48,14 +49,14 @@ pub struct UserLoginInfo {
     pub mfa_enabled: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UserDetailDto {
     #[serde(flatten)]
     pub user: UserDto,
     pub roles: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PaginatedUsers {
     pub users: Vec<UserDto>,
     pub total: i64,
@@ -63,14 +64,14 @@ pub struct PaginatedUsers {
     pub offset: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ListUsersQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub search: Option<String>, // Busca é string pura
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateUserPayload {
     pub username: Username,
     pub email: Email,
@@ -80,7 +81,7 @@ pub struct CreateUserPayload {
     pub role: String,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateUserPayload {
     // Usamos Option<ValueObject> para update parcial
     pub username: Option<Username>,

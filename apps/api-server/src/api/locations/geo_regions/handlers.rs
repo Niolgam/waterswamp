@@ -20,6 +20,24 @@ use super::contracts::{CityResponse, CityWithStateResponse, CountryResponse, Sta
 // ============================
 
 /// GET /admin/locations/countries
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/locations/countries",
+    tag = "Admin",
+    params(
+        ("limit" = Option<i64>, Query, description = "Limite de resultados por página"),
+        ("offset" = Option<i64>, Query, description = "Offset para paginação"),
+        ("search" = Option<String>, Query, description = "Termo de busca")
+    ),
+    responses(
+        (status = 200, description = "Lista de países", body = PaginatedCountries),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn list_countries(
     State(state): State<AppState>,
     Query(params): Query<ListCountriesQuery>,
@@ -37,6 +55,23 @@ pub async fn list_countries(
 }
 
 /// GET /admin/locations/countries/:id
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/locations/countries/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do país")
+    ),
+    responses(
+        (status = 200, description = "País encontrado", body = CountryResponse),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "País não encontrado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_country(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -53,6 +88,21 @@ pub async fn get_country(
 }
 
 /// POST /admin/locations/countries
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/locations/countries",
+    tag = "Admin",
+    request_body = CreateCountryPayload,
+    responses(
+        (status = 201, description = "País criado com sucesso", body = CountryResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn create_country(
     State(state): State<AppState>,
     Json(payload): Json<CreateCountryPayload>,
@@ -76,6 +126,25 @@ pub async fn create_country(
 }
 
 /// PUT /admin/locations/countries/:id
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/locations/countries/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do país")
+    ),
+    request_body = UpdateCountryPayload,
+    responses(
+        (status = 200, description = "País atualizado com sucesso", body = CountryResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "País não encontrado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn update_country(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -97,6 +166,23 @@ pub async fn update_country(
 }
 
 /// DELETE /admin/locations/countries/:id
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/locations/countries/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do país")
+    ),
+    responses(
+        (status = 204, description = "País deletado com sucesso"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "País não encontrado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn delete_country(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -110,6 +196,25 @@ pub async fn delete_country(
 // ============================
 
 /// GET /admin/locations/states
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/locations/states",
+    tag = "Admin",
+    params(
+        ("limit" = Option<i64>, Query, description = "Limite de resultados por página"),
+        ("offset" = Option<i64>, Query, description = "Offset para paginação"),
+        ("search" = Option<String>, Query, description = "Termo de busca"),
+        ("country_id" = Option<Uuid>, Query, description = "Filtrar por ID do país")
+    ),
+    responses(
+        (status = 200, description = "Lista de estados", body = PaginatedStates),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn list_states(
     State(state): State<AppState>,
     Query(params): Query<ListStatesQuery>,
@@ -123,6 +228,23 @@ pub async fn list_states(
 }
 
 /// GET /admin/locations/states/:id
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/locations/states/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do estado")
+    ),
+    responses(
+        (status = 200, description = "Estado encontrado", body = StateResponse),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "Estado não encontrado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_state(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -140,6 +262,21 @@ pub async fn get_state(
 }
 
 /// POST /admin/locations/states
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/locations/states",
+    tag = "Admin",
+    request_body = CreateStatePayload,
+    responses(
+        (status = 201, description = "Estado criado com sucesso", body = StateResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn create_state(
     State(state): State<AppState>,
     Json(payload): Json<CreateStatePayload>,
@@ -164,6 +301,25 @@ pub async fn create_state(
 }
 
 /// PUT /admin/locations/states/:id
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/locations/states/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do estado")
+    ),
+    request_body = UpdateStatePayload,
+    responses(
+        (status = 200, description = "Estado atualizado com sucesso", body = StateResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "Estado não encontrado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn update_state(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -186,6 +342,23 @@ pub async fn update_state(
 }
 
 /// DELETE /admin/locations/states/:id
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/locations/states/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do estado")
+    ),
+    responses(
+        (status = 204, description = "Estado deletado com sucesso"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "Estado não encontrado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn delete_state(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -199,6 +372,25 @@ pub async fn delete_state(
 // ============================
 
 /// GET /admin/locations/cities
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/locations/cities",
+    tag = "Admin",
+    params(
+        ("limit" = Option<i64>, Query, description = "Limite de resultados por página"),
+        ("offset" = Option<i64>, Query, description = "Offset para paginação"),
+        ("search" = Option<String>, Query, description = "Termo de busca"),
+        ("state_id" = Option<Uuid>, Query, description = "Filtrar por ID do estado")
+    ),
+    responses(
+        (status = 200, description = "Lista de cidades", body = PaginatedCities),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn list_cities(
     State(state): State<AppState>,
     Query(params): Query<ListCitiesQuery>,
@@ -212,6 +404,23 @@ pub async fn list_cities(
 }
 
 /// GET /admin/locations/cities/:id
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/locations/cities/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID da cidade")
+    ),
+    responses(
+        (status = 200, description = "Cidade encontrada", body = CityWithStateResponse),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "Cidade não encontrada")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_city(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -233,6 +442,21 @@ pub async fn get_city(
 }
 
 /// POST /admin/locations/cities
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/locations/cities",
+    tag = "Admin",
+    request_body = CreateCityPayload,
+    responses(
+        (status = 201, description = "Cidade criada com sucesso", body = CityResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn create_city(
     State(state): State<AppState>,
     Json(payload): Json<CreateCityPayload>,
@@ -256,6 +480,25 @@ pub async fn create_city(
 }
 
 /// PUT /admin/locations/cities/:id
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/locations/cities/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID da cidade")
+    ),
+    request_body = UpdateCityPayload,
+    responses(
+        (status = 200, description = "Cidade atualizada com sucesso", body = CityResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "Cidade não encontrada")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn update_city(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -277,6 +520,23 @@ pub async fn update_city(
 }
 
 /// DELETE /admin/locations/cities/:id
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/locations/cities/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID da cidade")
+    ),
+    responses(
+        (status = 204, description = "Cidade deletada com sucesso"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "Cidade não encontrada")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn delete_city(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,

@@ -23,9 +23,10 @@ lazy_static! {
     static ref UNIT_OF_MEASURE_REGEX: Regex = Regex::new(r"^[a-zA-ZÀ-ÿ0-9\s\-]{1,50}$").unwrap();
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
 #[sqlx(transparent)]
 #[serde(try_from = "String")]
+#[schema(value_type = String, example = "usuario@exemplo.com")]
 pub struct Email(String);
 
 impl Email {
@@ -66,9 +67,10 @@ impl AsRef<str> for Email {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
 #[sqlx(transparent)]
 #[serde(try_from = "String")]
+#[schema(value_type = String, example = "nome_usuario")]
 pub struct Username(String);
 
 impl Username {
@@ -112,9 +114,10 @@ impl AsRef<str> for Username {
 // Location Value Objects
 // ============================
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
 #[sqlx(transparent)]
 #[serde(try_from = "String")]
+#[schema(value_type = String, example = "SP")]
 pub struct StateCode(String);
 
 impl StateCode {
@@ -154,9 +157,10 @@ impl AsRef<str> for StateCode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
 #[sqlx(transparent)]
 #[serde(try_from = "String")]
+#[schema(value_type = String, example = "São Paulo")]
 pub struct LocationName(String);
 
 impl LocationName {

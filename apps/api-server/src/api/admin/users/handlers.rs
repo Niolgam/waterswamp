@@ -34,6 +34,24 @@ fn user_to_user_detail_dto(user: UserDtoExtended) -> UserDetailDto {
 }
 
 /// GET /admin/users
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users",
+    tag = "Admin",
+    params(
+        ("limit" = Option<i64>, Query, description = "Limite de resultados por página"),
+        ("offset" = Option<i64>, Query, description = "Offset para paginação"),
+        ("search" = Option<String>, Query, description = "Termo de busca")
+    ),
+    responses(
+        (status = 200, description = "Lista de usuários"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn list_users(
     State(state): State<AppState>,
     Query(params): Query<ListUsersQuery>,
@@ -76,6 +94,22 @@ pub async fn list_users(
 }
 
 /// POST /admin/users
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/users",
+    tag = "Admin",
+    request_body = AdminCreateUserRequest,
+    responses(
+        (status = 200, description = "Usuário criado com sucesso", body = UserDetailDto),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 409, description = "Username ou email já existe")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn create_user(
     State(state): State<AppState>,
     Json(payload): Json<AdminCreateUserRequest>,
@@ -133,6 +167,23 @@ pub async fn create_user(
 }
 
 /// GET /admin/users/{id}
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do usuário")
+    ),
+    responses(
+        (status = 200, description = "Usuário encontrado", body = UserDetailDto),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "Usuário não encontrado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
@@ -147,6 +198,26 @@ pub async fn get_user(
 }
 
 /// PUT /admin/users/{id}
+#[utoipa::path(
+    put,
+    path = "/api/v1/admin/users/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do usuário")
+    ),
+    request_body = AdminUpdateUserRequest,
+    responses(
+        (status = 200, description = "Usuário atualizado com sucesso", body = UserDetailDto),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador"),
+        (status = 404, description = "Usuário não encontrado"),
+        (status = 409, description = "Username ou email já está em uso")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn update_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
@@ -225,6 +296,23 @@ pub async fn update_user(
 }
 
 /// DELETE /admin/users/{id}
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/users/{id}",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do usuário")
+    ),
+    responses(
+        (status = 204, description = "Usuário deletado com sucesso"),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador ou tentando deletar a si mesmo"),
+        (status = 404, description = "Usuário não encontrado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn delete_user(
     State(state): State<AppState>,
     current_user: CurrentUser,
@@ -265,6 +353,22 @@ pub async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/users/{id}/ban",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do usuário")
+    ),
+    responses(
+        (status = 200, description = "Usuário banido com sucesso", body = UserActionResponse),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn ban_user(
     State(_state): State<AppState>,
     Path(user_id): Path<Uuid>,
@@ -276,6 +380,22 @@ pub async fn ban_user(
     }))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/users/{id}/unban",
+    tag = "Admin",
+    params(
+        ("id" = Uuid, Path, description = "ID do usuário")
+    ),
+    responses(
+        (status = 200, description = "Usuário desbanido com sucesso", body = UserActionResponse),
+        (status = 401, description = "Não autenticado"),
+        (status = 403, description = "Sem permissão de administrador")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 pub async fn unban_user(
     State(_state): State<AppState>,
     Path(user_id): Path<Uuid>,

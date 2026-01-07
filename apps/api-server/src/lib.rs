@@ -229,12 +229,25 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
     };
 
     info!("🔑 Inicializando serviço JWT...");
-    let jwt_service = Arc::new(
-        JwtService::new(
-            config.jwt_private_key.as_bytes(),
-            config.jwt_public_key.as_bytes(),
+    let (private_pem, public_pem) = if !config.jwt_private_key.is_empty()
+        && !config.jwt_public_key.is_empty()
+    {
+        (
+            config.jwt_private_key.as_bytes().to_vec(),
+            config.jwt_public_key.as_bytes().to_vec(),
         )
-        .context("Falha ao inicializar chaves JWT")?,
+    } else {
+        info!("Carregando chaves JWT dos arquivos private.pem e public.pem");
+        let private_pem =
+            std::fs::read("private.pem").context("Falha ao ler private.pem. Certifique-se de que o arquivo existe no diretório raiz do projeto.")?;
+        let public_pem = std::fs::read("public.pem")
+            .context("Falha ao ler public.pem. Certifique-se de que o arquivo existe no diretório raiz do projeto.")?;
+        (private_pem, public_pem)
+    };
+
+    let jwt_service = Arc::new(
+        JwtService::new(&private_pem, &public_pem)
+            .context("Falha ao inicializar chaves JWT")?,
     );
 
     info!("📧 Inicializando serviço de email...");

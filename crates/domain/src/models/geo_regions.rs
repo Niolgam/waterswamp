@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -9,7 +10,7 @@ use crate::value_objects::{LocationName, StateCode};
 // Country Models
 // ============================
 
-#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone, ToSchema)]
 pub struct CountryDto {
     pub id: Uuid,
     pub name: LocationName,
@@ -18,7 +19,7 @@ pub struct CountryDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PaginatedCountries {
     pub countries: Vec<CountryDto>,
     pub total: i64,
@@ -26,21 +27,21 @@ pub struct PaginatedCountries {
     pub offset: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ListCountriesQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
     pub search: Option<String>,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateCountryPayload {
     pub name: LocationName,
     #[validate(length(equal = 3))]
     pub code: String, // ISO 3166-1 alpha-3 code
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateCountryPayload {
     pub name: Option<LocationName>,
     #[validate(length(equal = 3))]
@@ -51,7 +52,7 @@ pub struct UpdateCountryPayload {
 // State Models
 // ============================
 
-#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone, ToSchema)]
 pub struct StateDto {
     pub id: Uuid,
     pub name: LocationName,
@@ -61,7 +62,7 @@ pub struct StateDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone, ToSchema)]
 pub struct StateWithCountryDto {
     pub id: Uuid,
     pub name: LocationName,
@@ -73,7 +74,7 @@ pub struct StateWithCountryDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PaginatedStates {
     pub states: Vec<StateWithCountryDto>,
     pub total: i64,
@@ -81,7 +82,7 @@ pub struct PaginatedStates {
     pub offset: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ListStatesQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
@@ -89,14 +90,14 @@ pub struct ListStatesQuery {
     pub country_id: Option<Uuid>,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateStatePayload {
     pub name: LocationName,
     pub code: StateCode,
     pub country_id: Uuid,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateStatePayload {
     pub name: Option<LocationName>,
     pub code: Option<StateCode>,
@@ -107,7 +108,7 @@ pub struct UpdateStatePayload {
 // City Models
 // ============================
 
-#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone, ToSchema)]
 pub struct CityDto {
     pub id: Uuid,
     pub name: LocationName,
@@ -116,7 +117,7 @@ pub struct CityDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone, ToSchema)]
 pub struct CityWithStateDto {
     pub id: Uuid,
     pub name: LocationName,
@@ -130,7 +131,7 @@ pub struct CityWithStateDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PaginatedCities {
     pub cities: Vec<CityWithStateDto>,
     pub total: i64,
@@ -138,7 +139,7 @@ pub struct PaginatedCities {
     pub offset: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ListCitiesQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
@@ -146,13 +147,13 @@ pub struct ListCitiesQuery {
     pub state_id: Option<Uuid>,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateCityPayload {
     pub name: LocationName,
     pub state_id: Uuid,
 }
 
-#[derive(Debug, Validate, Deserialize)]
+#[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateCityPayload {
     pub name: Option<LocationName>,
     pub state_id: Option<Uuid>,

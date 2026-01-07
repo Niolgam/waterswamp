@@ -17,6 +17,18 @@ use super::contracts::{
 // ============================================================================
 
 /// GET /api/v1/users/profile
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/profile",
+    tag = "User",
+    responses(
+        (status = 200, description = "Perfil do usuário", body = ProfileResponse),
+        (status = 401, description = "Não autenticado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[instrument(skip_all)]
 pub async fn get_profile(
     State(state): State<AppState>,
@@ -34,6 +46,21 @@ pub async fn get_profile(
 }
 
 /// PUT /api/v1/users/profile
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/profile",
+    tag = "User",
+    request_body = UpdateProfileRequest,
+    responses(
+        (status = 200, description = "Perfil atualizado com sucesso", body = ProfileResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Não autenticado"),
+        (status = 409, description = "Username ou email já está em uso")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[instrument(skip_all)]
 pub async fn update_profile(
     State(state): State<AppState>,
@@ -82,6 +109,20 @@ pub async fn update_profile(
 }
 
 /// PUT /api/v1/users/password
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/password",
+    tag = "User",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 200, description = "Senha alterada com sucesso", body = ChangePasswordResponse),
+        (status = 400, description = "Dados inválidos"),
+        (status = 401, description = "Senha atual incorreta ou não autenticado")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[instrument(skip_all)]
 pub async fn change_password(
     State(state): State<AppState>,
