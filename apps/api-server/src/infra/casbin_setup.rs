@@ -349,6 +349,122 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Location Management carregadas");
 
+    // --- WAREHOUSE POLICIES ---
+    // Material Groups
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/material-groups", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/material-groups", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/material-groups/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/material-groups/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/material-groups/{id}", ACTION_DELETE])
+        .await?;
+
+    // Materials
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/materials", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/materials", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/materials/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/materials/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/materials/{id}", ACTION_DELETE])
+        .await?;
+
+    // Warehouses
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/warehouses", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/warehouses/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/warehouses/{id}", ACTION_PUT])
+        .await?;
+
+    // Stock Movements
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/stock/entry", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/stock/exit", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/stock/adjustment", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/stock/transfer", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/stock/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/stock/{id}/maintenance", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/stock/{id}/block", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/stock/{id}/block", ACTION_DELETE])
+        .await?;
+
+    // Warehouse Reports
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/reports/stock-value", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/reports/stock-value/detail", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/reports/consumption", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/reports/most-requested", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/warehouse/reports/movement-analysis", ACTION_GET])
+        .await?;
+
+    info!("Políticas de Warehouse Management carregadas");
+
+    // --- REQUISITION POLICIES ---
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}", ACTION_DELETE])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/approve", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/reject", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/fulfill", ACTION_POST])
+        .await?;
+
+    info!("Políticas de Requisitions carregadas");
+
     match enforcer.save_policy().await {
         Ok(_) => {
             info!("Políticas do Casbin carregadas e salvas no banco.");
