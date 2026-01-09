@@ -7,9 +7,19 @@ use serde_json::{json, Value};
 use std::str::FromStr;
 use uuid::Uuid;
 
-/// Helper to generate unique codes for tests
-fn unique_code(prefix: &str) -> String {
-    format!("{}_{}", prefix, &Uuid::new_v4().to_string()[..8])
+/// Helper to generate unique numeric codes for MaterialCode (1-10 digits)
+fn unique_numeric_code() -> String {
+    // Use timestamp + random suffix for uniqueness (max 10 digits)
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    format!("{}", timestamp % 10_000_000_000) // Keep it under 10 digits
+}
+
+/// Helper to generate unique alphanumeric codes for warehouse (2-50 chars)
+fn unique_warehouse_code() -> String {
+    format!("ALM_{}", &Uuid::new_v4().to_string()[..8])
 }
 
 // ============================
@@ -19,7 +29,7 @@ fn unique_code(prefix: &str) -> String {
 #[tokio::test]
 async fn test_create_material_group_success() {
     let app = spawn_app().await;
-    let code = unique_code("GRP");
+    let code = unique_numeric_code();
 
     let response = app
         .api
@@ -43,7 +53,7 @@ async fn test_create_material_group_success() {
 #[tokio::test]
 async fn test_create_material_group_duplicate_code() {
     let app = spawn_app().await;
-    let code = unique_code("DUP");
+    let code = unique_numeric_code();
 
     // Create first group
     app.api
@@ -78,8 +88,8 @@ async fn test_create_material_group_duplicate_code() {
 #[tokio::test]
 async fn test_create_material_success() {
     let app = spawn_app().await;
-    let group_code = unique_code("GRP");
-    let material_code = unique_code("MAT");
+    let group_code = unique_numeric_code();
+    let material_code = unique_numeric_code();
 
     // Create material group first
     let group_response = app
@@ -131,7 +141,7 @@ async fn create_test_warehouse(app: &common::TestApp) -> String {
         .await
         .expect("Need at least one city");
 
-    let warehouse_code = unique_code("ALM");
+    let warehouse_code = unique_warehouse_code();
 
     let response = app
         .api
@@ -156,8 +166,8 @@ async fn create_test_warehouse(app: &common::TestApp) -> String {
 #[tokio::test]
 async fn test_stock_entry_calculates_weighted_average() {
     let app = spawn_app().await;
-    let group_code = unique_code("GRP");
-    let material_code = unique_code("MAT");
+    let group_code = unique_numeric_code();
+    let material_code = unique_numeric_code();
 
     // Setup: Create material group, material, and warehouse
     let group_response = app
@@ -243,8 +253,8 @@ async fn test_stock_entry_calculates_weighted_average() {
 #[tokio::test]
 async fn test_stock_exit_maintains_average() {
     let app = spawn_app().await;
-    let group_code = unique_code("GRP");
-    let material_code = unique_code("MAT");
+    let group_code = unique_numeric_code();
+    let material_code = unique_numeric_code();
 
     // Setup: Create material group, material, and warehouse
     let group_response = app
@@ -316,8 +326,8 @@ async fn test_stock_exit_maintains_average() {
 #[tokio::test]
 async fn test_stock_exit_insufficient_quantity() {
     let app = spawn_app().await;
-    let group_code = unique_code("GRP");
-    let material_code = unique_code("MAT");
+    let group_code = unique_numeric_code();
+    let material_code = unique_numeric_code();
 
     let group_response = app
         .api
@@ -385,8 +395,8 @@ async fn test_stock_exit_insufficient_quantity() {
 #[tokio::test]
 async fn test_requisition_workflow_complete() {
     let app = spawn_app().await;
-    let group_code = unique_code("GRP");
-    let material_code = unique_code("MAT");
+    let group_code = unique_numeric_code();
+    let material_code = unique_numeric_code();
 
     // Setup
     let group_response = app
@@ -494,8 +504,8 @@ async fn test_requisition_workflow_complete() {
 #[tokio::test]
 async fn test_requisition_reject() {
     let app = spawn_app().await;
-    let group_code = unique_code("GRP");
-    let material_code = unique_code("MAT");
+    let group_code = unique_numeric_code();
+    let material_code = unique_numeric_code();
 
     let group_response = app
         .api
@@ -570,8 +580,8 @@ async fn test_requisition_reject() {
 #[tokio::test]
 async fn test_stock_value_report() {
     let app = spawn_app().await;
-    let group_code = unique_code("GRP");
-    let material_code = unique_code("MAT");
+    let group_code = unique_numeric_code();
+    let material_code = unique_numeric_code();
 
     // Setup: Create materials and stock
     let group_response = app
