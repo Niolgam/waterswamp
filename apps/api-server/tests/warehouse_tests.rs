@@ -89,7 +89,6 @@ async fn test_create_material_group_duplicate_code() {
 async fn test_create_material_success() {
     let app = spawn_app().await;
     let group_code = unique_numeric_code();
-    let material_code = unique_numeric_code();
 
     // Create material group first
     let group_response = app
@@ -113,20 +112,16 @@ async fn test_create_material_success() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": material_code,
             "name": "Caneta Azul",
-            "description": "Caneta esferográfica azul",
+            "specification": "Caneta esferográfica azul, ponta média 1.0mm, tinta de secagem rápida",
             "catmat_code": "123456",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "2.50",
-            "minimum_quantity": "100",
-            "is_active": true
+            "estimated_value": "2.50"
         }))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let body: Value = response.json();
-    assert_eq!(body["material"]["code"], material_code);
     assert_eq!(body["material"]["name"], "Caneta Azul");
 }
 
@@ -167,7 +162,6 @@ async fn create_test_warehouse(app: &common::TestApp) -> String {
 async fn test_stock_entry_calculates_weighted_average() {
     let app = spawn_app().await;
     let group_code = unique_numeric_code();
-    let material_code = unique_numeric_code();
 
     // Setup: Create material group, material, and warehouse
     let group_response = app
@@ -189,12 +183,11 @@ async fn test_stock_entry_calculates_weighted_average() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": material_code,
             "name": "Test Material",
+            "specification": "Material de teste para cálculo de média ponderada",
             "catmat_code": "111111",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "10.00",
-            "is_active": true
+            "estimated_value": "10.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -254,7 +247,6 @@ async fn test_stock_entry_calculates_weighted_average() {
 async fn test_stock_exit_maintains_average() {
     let app = spawn_app().await;
     let group_code = unique_numeric_code();
-    let material_code = unique_numeric_code();
 
     // Setup: Create material group, material, and warehouse
     let group_response = app
@@ -276,12 +268,11 @@ async fn test_stock_exit_maintains_average() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": material_code,
             "name": "Exit Test Material",
+            "specification": "Material de teste para verificar manutenção da média",
             "catmat_code": "222222",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "5.00",
-            "is_active": true
+            "estimated_value": "5.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -327,7 +318,6 @@ async fn test_stock_exit_maintains_average() {
 async fn test_stock_exit_insufficient_quantity() {
     let app = spawn_app().await;
     let group_code = unique_numeric_code();
-    let material_code = unique_numeric_code();
 
     let group_response = app
         .api
@@ -348,12 +338,11 @@ async fn test_stock_exit_insufficient_quantity() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": material_code,
             "name": "Insufficient Material",
+            "specification": "Material de teste para estoque insuficiente",
             "catmat_code": "333333",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "1.00",
-            "is_active": true
+            "estimated_value": "1.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -396,7 +385,6 @@ async fn test_stock_exit_insufficient_quantity() {
 async fn test_requisition_workflow_complete() {
     let app = spawn_app().await;
     let group_code = unique_numeric_code();
-    let material_code = unique_numeric_code();
 
     // Setup
     let group_response = app
@@ -418,12 +406,11 @@ async fn test_requisition_workflow_complete() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": material_code,
             "name": "Requisition Material",
+            "specification": "Material de teste para fluxo de requisição completo",
             "catmat_code": "444444",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "15.00",
-            "is_active": true
+            "estimated_value": "15.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -505,7 +492,6 @@ async fn test_requisition_workflow_complete() {
 async fn test_requisition_reject() {
     let app = spawn_app().await;
     let group_code = unique_numeric_code();
-    let material_code = unique_numeric_code();
 
     let group_response = app
         .api
@@ -526,12 +512,11 @@ async fn test_requisition_reject() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": material_code,
             "name": "Reject Material",
+            "specification": "Material de teste para rejeição de requisição",
             "catmat_code": "555555",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "20.00",
-            "is_active": true
+            "estimated_value": "20.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -581,7 +566,6 @@ async fn test_requisition_reject() {
 async fn test_stock_value_report() {
     let app = spawn_app().await;
     let group_code = unique_numeric_code();
-    let material_code = unique_numeric_code();
 
     // Setup: Create materials and stock
     let group_response = app
@@ -603,12 +587,11 @@ async fn test_stock_value_report() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": material_code,
             "name": "Report Material",
+            "specification": "Material de teste para relatório de valor de estoque",
             "catmat_code": "666666",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "100.00",
-            "is_active": true
+            "estimated_value": "100.00"
         }))
         .await;
     let material_body: Value = material_response.json();
