@@ -7,6 +7,21 @@ use serde_json::{json, Value};
 use std::str::FromStr;
 use uuid::Uuid;
 
+/// Helper to generate unique numeric codes for MaterialCode (1-10 digits)
+fn unique_numeric_code() -> String {
+    // Use timestamp + random suffix for uniqueness (max 10 digits)
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    format!("{}", timestamp % 10_000_000_000) // Keep it under 10 digits
+}
+
+/// Helper to generate unique alphanumeric codes for warehouse (2-50 chars)
+fn unique_warehouse_code() -> String {
+    format!("ALM_{}", &Uuid::new_v4().to_string()[..8])
+}
+
 // ============================
 // Material Groups Tests
 // ============================
@@ -14,13 +29,14 @@ use uuid::Uuid;
 #[tokio::test]
 async fn test_create_material_group_success() {
     let app = spawn_app().await;
+    let code = unique_numeric_code();
 
     let response = app
         .api
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "01",
+            "code": code,
             "name": "Materiais de Consumo",
             "description": "Materiais de consumo em geral",
             "expense_element": "339030",
@@ -30,20 +46,21 @@ async fn test_create_material_group_success() {
 
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let body: Value = response.json();
-    assert_eq!(body["material_group"]["code"], "01");
+    assert_eq!(body["material_group"]["code"], code);
     assert_eq!(body["material_group"]["name"], "Materiais de Consumo");
 }
 
 #[tokio::test]
 async fn test_create_material_group_duplicate_code() {
     let app = spawn_app().await;
+    let code = unique_numeric_code();
 
     // Create first group
     app.api
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "02",
+            "code": code,
             "name": "Grupo 1",
             "is_personnel_exclusive": false
         }))
@@ -55,7 +72,7 @@ async fn test_create_material_group_duplicate_code() {
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "02",
+            "code": code,
             "name": "Grupo 2",
             "is_personnel_exclusive": false
         }))
@@ -71,6 +88,7 @@ async fn test_create_material_group_duplicate_code() {
 #[tokio::test]
 async fn test_create_material_success() {
     let app = spawn_app().await;
+    let group_code = unique_numeric_code();
 
     // Create material group first
     let group_response = app
@@ -78,7 +96,7 @@ async fn test_create_material_success() {
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "03",
+            "code": group_code,
             "name": "Equipamentos",
             "is_personnel_exclusive": false
         }))
@@ -94,20 +112,16 @@ async fn test_create_material_success() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": "MAT001",
             "name": "Caneta Azul",
-            "description": "Caneta esferográfica azul",
+            "specification": "Caneta esferográfica azul, ponta média 1.0mm, tinta de secagem rápida",
             "catmat_code": "123456",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "2.50",
-            "minimum_quantity": "100",
-            "is_active": true
+            "estimated_value": "2.50"
         }))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let body: Value = response.json();
-    assert_eq!(body["material"]["code"], "MAT001");
     assert_eq!(body["material"]["name"], "Caneta Azul");
 }
 
@@ -122,6 +136,8 @@ async fn create_test_warehouse(app: &common::TestApp) -> String {
         .await
         .expect("Need at least one city");
 
+    let warehouse_code = unique_warehouse_code();
+
     let response = app
         .api
         .post("/api/admin/warehouse/warehouses")
@@ -129,7 +145,7 @@ async fn create_test_warehouse(app: &common::TestApp) -> String {
         .json(&json!({
             "city_id": city_id.to_string(),
             "name": "Almoxarifado Central",
-            "code": "ALM001",
+            "code": warehouse_code,
             "address": "Rua Principal, 100"
         }))
         .await;
@@ -145,6 +161,7 @@ async fn create_test_warehouse(app: &common::TestApp) -> String {
 #[tokio::test]
 async fn test_stock_entry_calculates_weighted_average() {
     let app = spawn_app().await;
+    let group_code = unique_numeric_code();
 
     // Setup: Create material group, material, and warehouse
     let group_response = app
@@ -152,7 +169,7 @@ async fn test_stock_entry_calculates_weighted_average() {
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "04",
+            "code": group_code,
             "name": "Test Group",
             "is_personnel_exclusive": false
         }))
@@ -166,12 +183,11 @@ async fn test_stock_entry_calculates_weighted_average() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": "MAT002",
             "name": "Test Material",
+            "specification": "Material de teste para cálculo de média ponderada",
             "catmat_code": "111111",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "10.00",
-            "is_active": true
+            "estimated_value": "10.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -230,6 +246,7 @@ async fn test_stock_entry_calculates_weighted_average() {
 #[tokio::test]
 async fn test_stock_exit_maintains_average() {
     let app = spawn_app().await;
+    let group_code = unique_numeric_code();
 
     // Setup: Create material group, material, and warehouse
     let group_response = app
@@ -237,7 +254,7 @@ async fn test_stock_exit_maintains_average() {
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "05",
+            "code": group_code,
             "name": "Exit Test Group",
             "is_personnel_exclusive": false
         }))
@@ -251,12 +268,11 @@ async fn test_stock_exit_maintains_average() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": "MAT003",
             "name": "Exit Test Material",
+            "specification": "Material de teste para verificar manutenção da média",
             "catmat_code": "222222",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "5.00",
-            "is_active": true
+            "estimated_value": "5.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -301,13 +317,14 @@ async fn test_stock_exit_maintains_average() {
 #[tokio::test]
 async fn test_stock_exit_insufficient_quantity() {
     let app = spawn_app().await;
+    let group_code = unique_numeric_code();
 
     let group_response = app
         .api
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "06",
+            "code": group_code,
             "name": "Insufficient Test",
             "is_personnel_exclusive": false
         }))
@@ -321,12 +338,11 @@ async fn test_stock_exit_insufficient_quantity() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": "MAT004",
             "name": "Insufficient Material",
+            "specification": "Material de teste para estoque insuficiente",
             "catmat_code": "333333",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "1.00",
-            "is_active": true
+            "estimated_value": "1.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -368,6 +384,7 @@ async fn test_stock_exit_insufficient_quantity() {
 #[tokio::test]
 async fn test_requisition_workflow_complete() {
     let app = spawn_app().await;
+    let group_code = unique_numeric_code();
 
     // Setup
     let group_response = app
@@ -375,7 +392,7 @@ async fn test_requisition_workflow_complete() {
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "07",
+            "code": group_code,
             "name": "Requisition Test",
             "is_personnel_exclusive": false
         }))
@@ -389,12 +406,11 @@ async fn test_requisition_workflow_complete() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": "MAT005",
             "name": "Requisition Material",
+            "specification": "Material de teste para fluxo de requisição completo",
             "catmat_code": "444444",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "15.00",
-            "is_active": true
+            "estimated_value": "15.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -475,13 +491,14 @@ async fn test_requisition_workflow_complete() {
 #[tokio::test]
 async fn test_requisition_reject() {
     let app = spawn_app().await;
+    let group_code = unique_numeric_code();
 
     let group_response = app
         .api
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "08",
+            "code": group_code,
             "name": "Reject Test",
             "is_personnel_exclusive": false
         }))
@@ -495,12 +512,11 @@ async fn test_requisition_reject() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": "MAT006",
             "name": "Reject Material",
+            "specification": "Material de teste para rejeição de requisição",
             "catmat_code": "555555",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "20.00",
-            "is_active": true
+            "estimated_value": "20.00"
         }))
         .await;
     let material_body: Value = material_response.json();
@@ -549,6 +565,7 @@ async fn test_requisition_reject() {
 #[tokio::test]
 async fn test_stock_value_report() {
     let app = spawn_app().await;
+    let group_code = unique_numeric_code();
 
     // Setup: Create materials and stock
     let group_response = app
@@ -556,7 +573,7 @@ async fn test_stock_value_report() {
         .post("/api/admin/warehouse/material-groups")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "code": "09",
+            "code": group_code,
             "name": "Report Test",
             "is_personnel_exclusive": false
         }))
@@ -570,12 +587,11 @@ async fn test_stock_value_report() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "material_group_id": group_id,
-            "code": "MAT007",
             "name": "Report Material",
+            "specification": "Material de teste para relatório de valor de estoque",
             "catmat_code": "666666",
             "unit_of_measure": "UNIDADE",
-            "estimated_value": "100.00",
-            "is_active": true
+            "estimated_value": "100.00"
         }))
         .await;
     let material_body: Value = material_response.json();

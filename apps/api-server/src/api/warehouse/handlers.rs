@@ -118,7 +118,7 @@ pub async fn get_material_group(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, AppError> {
     let group = state.warehouse_service.get_material_group(id).await?;
-    Ok(Json(json!(group)))
+    Ok(Json(json!({"material_group": group})))
 }
 
 /// POST /api/warehouse/material-groups
@@ -144,7 +144,7 @@ pub async fn create_material_group(
 
     let group = state.warehouse_service.create_material_group(payload).await?;
 
-    Ok((StatusCode::CREATED, Json(json!(group))))
+    Ok((StatusCode::CREATED, Json(json!({"material_group": group}))))
 }
 
 /// PUT /api/warehouse/material-groups/:id
@@ -178,7 +178,7 @@ pub async fn update_material_group(
         .update_material_group(id, payload)
         .await?;
 
-    Ok(Json(json!(group)))
+    Ok(Json(json!({"material_group": group})))
 }
 
 /// DELETE /api/warehouse/material-groups/:id
@@ -262,7 +262,7 @@ pub async fn get_material(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, AppError> {
     let material = state.warehouse_service.get_material_with_group(id).await?;
-    Ok(Json(json!(material)))
+    Ok(Json(json!({"material": material})))
 }
 
 /// POST /api/warehouse/materials
@@ -289,7 +289,7 @@ pub async fn create_material(
 
     let material = state.warehouse_service.create_material(payload).await?;
 
-    Ok((StatusCode::CREATED, Json(json!(material))))
+    Ok((StatusCode::CREATED, Json(json!({"material": material}))))
 }
 
 /// PUT /api/warehouse/materials/:id
@@ -320,7 +320,7 @@ pub async fn update_material(
 
     let material = state.warehouse_service.update_material(id, payload).await?;
 
-    Ok(Json(json!(material)))
+    Ok(Json(json!({"material": material})))
 }
 
 /// DELETE /api/warehouse/materials/:id
@@ -376,7 +376,7 @@ pub async fn create_warehouse(
 
     let warehouse = state.warehouse_service.create_warehouse(payload).await?;
 
-    Ok((StatusCode::CREATED, Json(json!(warehouse))))
+    Ok((StatusCode::CREATED, Json(json!({"warehouse": warehouse}))))
 }
 
 /// GET /api/warehouse/warehouses/:id
@@ -398,7 +398,7 @@ pub async fn get_warehouse(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, AppError> {
     let warehouse = state.warehouse_service.get_warehouse_with_city(id).await?;
-    Ok(Json(json!(warehouse)))
+    Ok(Json(json!({"warehouse": warehouse})))
 }
 
 /// PUT /api/warehouse/warehouses/:id
@@ -429,7 +429,7 @@ pub async fn update_warehouse(
 
     let warehouse = state.warehouse_service.update_warehouse(id, payload).await?;
 
-    Ok(Json(json!(warehouse)))
+    Ok(Json(json!({"warehouse": warehouse})))
 }
 
 // ============================
@@ -585,7 +585,7 @@ pub async fn get_warehouse_stock(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, AppError> {
     let stock = state.warehouse_service.get_warehouse_stock(id).await?;
-    Ok(Json(json!(stock)))
+    Ok(Json(json!({"stock": stock})))
 }
 
 // ============================
