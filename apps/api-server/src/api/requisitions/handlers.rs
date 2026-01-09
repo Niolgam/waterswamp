@@ -119,7 +119,7 @@ pub async fn get_requisition(
         .get_requisition_with_details(id)
         .await?;
 
-    Ok(Json(json!(requisition)))
+    Ok(Json(json!({"requisition": requisition})))
 }
 
 /// GET /api/requisitions
