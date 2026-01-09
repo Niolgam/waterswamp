@@ -16,19 +16,18 @@ use application::services::{
 };
 use domain::ports::{
     AuthRepositoryPort, BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
-    CountryRepositoryPort, DepartmentCategoryRepositoryPort, EmailServicePort, FloorRepositoryPort,
+    CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
     MaterialGroupRepositoryPort, MaterialRepositoryPort, MfaRepositoryPort,
     RequisitionItemRepositoryPort, RequisitionRepositoryPort, SiteRepositoryPort,
-    SiteTypeRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
     StockMovementRepositoryPort, UserRepositoryPort, WarehouseReportsPort, WarehouseRepositoryPort,
     WarehouseStockRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
-    departments_repository::DepartmentCategoryRepository,
     facilities_repository::{
         BuildingRepository, BuildingTypeRepository, FloorRepository, SiteRepository,
-        SiteTypeRepository, SpaceRepository, SpaceTypeRepository,
+        SpaceRepository, SpaceTypeRepository,
     },
     geo_regions_repository::{CityRepository, CountryRepository, StateRepository},
     mfa_repository::MfaRepository,
@@ -107,14 +106,10 @@ pub fn build_application_state(
         Arc::new(StateRepository::new(pool_auth.clone()));
     let city_repo_port: Arc<dyn CityRepositoryPort> =
         Arc::new(CityRepository::new(pool_auth.clone()));
-    let site_type_repo_port: Arc<dyn SiteTypeRepositoryPort> =
-        Arc::new(SiteTypeRepository::new(pool_auth.clone()));
     let building_type_repo_port: Arc<dyn BuildingTypeRepositoryPort> =
         Arc::new(BuildingTypeRepository::new(pool_auth.clone()));
     let space_type_repo_port: Arc<dyn SpaceTypeRepositoryPort> =
         Arc::new(SpaceTypeRepository::new(pool_auth.clone()));
-    let department_category_repo_port: Arc<dyn DepartmentCategoryRepositoryPort> =
-        Arc::new(DepartmentCategoryRepository::new(pool_auth.clone()));
     let site_repo_port: Arc<dyn SiteRepositoryPort> =
         Arc::new(SiteRepository::new(pool_auth.clone()));
     let building_repo_port: Arc<dyn BuildingRepositoryPort> =
@@ -128,14 +123,6 @@ pub fn build_application_state(
         country_repo_port,
         state_repo_port,
         city_repo_port,
-        site_type_repo_port.clone(),
-        building_type_repo_port.clone(),
-        space_type_repo_port.clone(),
-        department_category_repo_port,
-        site_repo_port.clone(),
-        building_repo_port.clone(),
-        floor_repo_port.clone(),
-        space_repo_port.clone(),
     ));
 
     // Warehouse repositories and services
