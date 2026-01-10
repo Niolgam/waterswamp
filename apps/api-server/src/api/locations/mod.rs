@@ -1,55 +1,9 @@
-//! Location Management Feature Module
-//!
-//! Este módulo contém os endpoints para gerenciamento de regiões geográficas:
-//! - **geo_regions**: Entidades geográficas (Country, State, City)
-//!
-//! # Arquitetura
-//!
-//! ```text
-//! api/locations/
-//! ├── mod.rs              # Router principal (este arquivo)
-//! ├── geo_regions/
-//! │   ├── mod.rs          # Router de regiões geográficas
-//! │   ├── handlers.rs     # Handlers HTTP
-//! │   └── contracts.rs    # DTOs
-//! └── public/
-//!     ├── mod.rs          # Router público
-//!     ├── handlers.rs     # Handlers HTTP públicos
-//!     └── contracts.rs    # DTOs
-//! ```
-//!
-//! # Autenticação e Autorização
-//!
-//! As rotas de geo_regions requerem:
-//! - Autenticação via JWT
-//! - Autorização via RBAC (role: admin)
-
-pub mod geo_regions;
 pub mod public;
 
-use axum::Router;
 use crate::infra::state::AppState;
+use axum::Router;
 
-// =============================================================================
-// RE-EXPORTS
-// =============================================================================
-
-// Geographic Regions
-pub use geo_regions::{
-    CityResponse, CityWithStateResponse, CountryResponse, StateResponse, StateWithCountryResponse,
-};
-
-// =============================================================================
-// ROUTER
-// =============================================================================
-
-/// Cria o router principal de gerenciamento de localizações (ADMIN).
-///
-/// Agrega os routers dos submódulos:
-/// - `/countries/*`, `/states/*`, `/cities/*` - Geographic regions
-pub fn router() -> Router<AppState> {
-    geo_regions::router()
-}
+// pub fn router() -> Router<AppState> {}
 
 /// Cria o router público de localizações (SEM AUTENTICAÇÃO).
 ///

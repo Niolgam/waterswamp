@@ -6,11 +6,10 @@
 pub mod admin;
 pub mod auth;
 pub mod email_verification;
+pub mod geo_regions;
 pub mod locations;
 pub mod mfa;
-pub mod requisitions;
 pub mod users;
-pub mod warehouse;
 
 use axum::Router;
 
@@ -51,6 +50,7 @@ pub fn router(state: AppState) -> Router {
         .merge(auth::router())
         // User self-service routes (requer autenticação - aplicada em routes/)
         .merge(users::router())
+        .merge(geo_regions::router())
         .with_state(state)
 }
 

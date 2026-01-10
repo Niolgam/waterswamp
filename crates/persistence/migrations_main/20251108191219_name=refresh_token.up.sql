@@ -37,7 +37,7 @@ CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 CREATE INDEX idx_refresh_tokens_valid ON refresh_tokens(token_hash, revoked, expires_at);
 
 -- Trigger para atualizar updated_at automaticamente
-CREATE OR REPLACE FUNCTION trigger_set_timestamp_refresh_tokens()
+CREATE OR REPLACE FUNCTION update_updated_at_column_refresh_tokens()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -48,7 +48,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER set_timestamp_refresh_tokens
 BEFORE UPDATE ON refresh_tokens
 FOR EACH ROW
-EXECUTE PROCEDURE trigger_set_timestamp_refresh_tokens();
+EXECUTE PROCEDURE update_updated_at_column_refresh_tokens();
 
 -- Comentários para documentação
 COMMENT ON TABLE refresh_tokens IS 'Armazena refresh tokens para renovação de JWT';

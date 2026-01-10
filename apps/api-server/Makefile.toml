@@ -34,7 +34,7 @@ script = [
 ]
  
 # --- Tarefa para CRIAR nova migração ---
-[tasks.new-migration]
+[tasks.new-migration-main]
 description = "Cria um novo arquivo de migração SQL para o banco MAIN"
 # Ex: cargo make new-migration name="nome_da_migration"
 script_runner = "@shell"
