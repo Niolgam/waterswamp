@@ -2,7 +2,7 @@ CREATE TABLE countries (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL UNIQUE,
     iso2 CHAR(2) NOT NULL, -- ISO 3166-1 alpha-2 (BR, US, etc)
-    bacen_code INT UNIQUE NOT NULL -- O cPais da NF-e (Brasil é 1058)
+    bacen_code INT UNIQUE NOT NULL, -- O cPais da NF-e (Brasil é 1058)
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -21,7 +21,7 @@ EXECUTE FUNCTION update_updated_at_column();
 INSERT INTO countries (name, iso2, bacen_code) VALUES 
 -- América do Sul
 ('Argentina', 'AR', 639),
-('Brasil', 'BRA', 1058),
+('Brasil', 'BR', 1058),
 ('Chile', 'CL', 1589),
 ('Uruguai', 'UY', 8451),
 ('Paraguai', 'PY', 5860),
