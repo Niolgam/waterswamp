@@ -8,13 +8,13 @@ use domain::ports::{CityRepositoryPort, CountryRepositoryPort, StateRepositoryPo
 use std::sync::Arc;
 use uuid::Uuid;
 
-pub struct LocationService {
+pub struct GeoRegionsService {
     country_repo: Arc<dyn CountryRepositoryPort>,
     state_repo: Arc<dyn StateRepositoryPort>,
     city_repo: Arc<dyn CityRepositoryPort>,
 }
 
-impl LocationService {
+impl GeoRegionsService {
     pub fn new(
         country_repo: Arc<dyn CountryRepositoryPort>,
         state_repo: Arc<dyn StateRepositoryPort>,

@@ -10,7 +10,7 @@ use tracing::info;
 
 // Imports de Portas e Serviços
 use application::services::{
-    auth_service::AuthService, location_service::LocationService, mfa_service::MfaService,
+    auth_service::AuthService, geo_regions_service::GeoRegionsService, mfa_service::MfaService,
     user_service::UserService,
 };
 use domain::ports::{
@@ -110,7 +110,7 @@ pub fn build_application_state(
     let space_repo_port: Arc<dyn SpaceRepositoryPort> =
         Arc::new(SpaceRepository::new(pool_auth.clone()));
 
-    let location_service = Arc::new(LocationService::new(
+    let location_service = Arc::new(GeoRegionsService::new(
         country_repo_port,
         state_repo_port,
         city_repo_port,
