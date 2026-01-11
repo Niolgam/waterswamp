@@ -5,6 +5,7 @@
 
 pub mod admin;
 pub mod auth;
+pub mod budget_classifications;
 pub mod email_verification;
 pub mod geo_regions;
 pub mod locations;

@@ -1,5 +1,6 @@
 pub mod audit_logs_repository;
 pub mod auth_repository;
+pub mod budget_classifications_repository;
 pub mod departments_repository;
 pub mod email_verification_repository;
 pub mod facilities_repository;

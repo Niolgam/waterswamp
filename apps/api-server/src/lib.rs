@@ -10,17 +10,18 @@ use tracing::info;
 
 // Imports de Portas e Serviços
 use application::services::{
-    auth_service::AuthService, geo_regions_service::GeoRegionsService, mfa_service::MfaService,
-    user_service::UserService,
+    auth_service::AuthService, budget_classifications_service::BudgetClassificationsService,
+    geo_regions_service::GeoRegionsService, mfa_service::MfaService, user_service::UserService,
 };
 use domain::ports::{
-    AuthRepositoryPort, BuildingRepositoryPort, BuildingTypeRepositoryPort, CityRepositoryPort,
-    CountryRepositoryPort, EmailServicePort, FloorRepositoryPort, MfaRepositoryPort,
-    SiteRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
-    UserRepositoryPort,
+    AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
+    BuildingTypeRepositoryPort, CityRepositoryPort, CountryRepositoryPort, EmailServicePort,
+    FloorRepositoryPort, MfaRepositoryPort, SiteRepositoryPort, SpaceRepositoryPort,
+    SpaceTypeRepositoryPort, StateRepositoryPort, UserRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
+    budget_classifications_repository::BudgetClassificationRepository,
     facilities_repository::{
         BuildingRepository, BuildingTypeRepository, FloorRepository, SiteRepository,
         SpaceRepository, SpaceTypeRepository,
@@ -116,6 +117,13 @@ pub fn build_application_state(
         city_repo_port,
     ));
 
+    let budget_classifications_repo_port: Arc<dyn BudgetClassificationRepositoryPort> =
+        Arc::new(BudgetClassificationRepository::new(pool_auth.clone()));
+
+    let budget_classifications_service = Arc::new(BudgetClassificationsService::new(
+        budget_classifications_repo_port,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -134,6 +142,7 @@ pub fn build_application_state(
         user_service,
         mfa_service,
         location_service,
+        budget_classifications_service,
         config,
 
         site_repository: site_repo_port,
