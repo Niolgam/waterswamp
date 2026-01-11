@@ -349,6 +349,82 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Location Management carregadas");
 
+    // --- GEO REGIONS POLICIES ---
+    // Countries
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries/{id}", ACTION_DELETE])
+        .await?;
+
+    // States
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states/{id}", ACTION_DELETE])
+        .await?;
+
+    // Cities
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Geo Regions carregadas");
+
+    // --- BUDGET CLASSIFICATIONS POLICIES ---
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications/tree", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Budget Classifications carregadas");
+
     // --- WAREHOUSE POLICIES ---
     // Material Groups
     enforcer
