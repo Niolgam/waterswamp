@@ -26,12 +26,36 @@ fn random_name(prefix: &str) -> String {
     format!("{}-{}", prefix, Uuid::new_v4().simple())
 }
 
+// Generates a random BACEN code (int in range 100-9999)
+fn random_bacen_code() -> i32 {
+    let uuid = Uuid::new_v4();
+    let bytes = uuid.as_bytes();
+    let num = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    (num % 9900 + 100) as i32
+}
+
+// Generates a random IBGE code (int in range 1000000-9999999 for municipalities, 10-99 for states)
+fn random_ibge_code_state() -> i32 {
+    let uuid = Uuid::new_v4();
+    let bytes = uuid.as_bytes();
+    let num = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    (num % 90 + 10) as i32
+}
+
+fn random_ibge_code_city() -> i32 {
+    let uuid = Uuid::new_v4();
+    let bytes = uuid.as_bytes();
+    let num = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    (num % 8999999 + 1000000) as i32
+}
+
 async fn create_unique_country(app: &TestApp) -> Value {
     let mut attempts = 0;
     loop {
         attempts += 1;
         let name = random_name("Country");
-        let code = random_code(3);
+        let iso2 = random_code(2);
+        let bacen_code = random_bacen_code();
 
         let response = app
             .api
@@ -39,7 +63,8 @@ async fn create_unique_country(app: &TestApp) -> Value {
             .add_header("Authorization", format!("Bearer {}", app.admin_token))
             .json(&json!({
                 "name": name,
-                "code": code
+                "iso2": iso2,
+                "bacen_code": bacen_code
             }))
             .await;
 
@@ -63,7 +88,8 @@ async fn create_unique_state(app: &TestApp, country_id: &str) -> Value {
     loop {
         attempts += 1;
         let name = random_name("State");
-        let code = random_code(2);
+        let abbreviation = random_code(2);
+        let ibge_code = random_ibge_code_state();
 
         let response = app
             .api
@@ -71,7 +97,8 @@ async fn create_unique_state(app: &TestApp, country_id: &str) -> Value {
             .add_header("Authorization", format!("Bearer {}", app.admin_token))
             .json(&json!({
                 "name": name,
-                "code": code,
+                "abbreviation": abbreviation,
+                "ibge_code": ibge_code,
                 "country_id": country_id
             }))
             .await;
@@ -92,25 +119,36 @@ async fn create_unique_state(app: &TestApp, country_id: &str) -> Value {
 }
 
 async fn create_unique_city(app: &TestApp, state_id: &str) -> Value {
-    let name = random_name("City");
+    let mut attempts = 0;
+    loop {
+        attempts += 1;
+        let name = random_name("City");
+        let ibge_code = random_ibge_code_city();
 
-    let response = app
-        .api
-        .post("/api/admin/locations/cities")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&json!({
-            "name": name,
-            "state_id": state_id
-        }))
-        .await;
+        let response = app
+            .api
+            .post("/api/admin/locations/cities")
+            .add_header("Authorization", format!("Bearer {}", app.admin_token))
+            .json(&json!({
+                "name": name,
+                "ibge_code": ibge_code,
+                "state_id": state_id
+            }))
+            .await;
 
-    assert_eq!(
-        response.status_code(),
-        StatusCode::CREATED,
-        "Failed to create city: {}",
-        response.text()
-    );
-    response.json()
+        if response.status_code() == StatusCode::CREATED {
+            return response.json();
+        }
+
+        if response.status_code() != StatusCode::CONFLICT || attempts >= 10 {
+            panic!(
+                "Failed to create city after {} attempts. Last status: {}. Body: {}",
+                attempts,
+                response.status_code(),
+                response.text()
+            );
+        }
+    }
 }
 
 // ============================
@@ -121,7 +159,8 @@ async fn create_unique_city(app: &TestApp, state_id: &str) -> Value {
 async fn test_create_country_success() {
     let app = common::spawn_app().await;
     let name = random_name("Brasil");
-    let code = random_code(3);
+    let iso2 = random_code(2);
+    let bacen_code = random_bacen_code();
 
     let response = app
         .api
@@ -129,7 +168,8 @@ async fn test_create_country_success() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": name,
-            "code": code
+            "iso2": iso2,
+            "bacen_code": bacen_code
         }))
         .await;
 
@@ -140,14 +180,16 @@ async fn test_create_country_success() {
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let body: Value = response.json();
     assert_eq!(body["name"], name);
-    assert_eq!(body["code"], code);
+    assert_eq!(body["iso2"], iso2);
+    assert_eq!(body["bacen_code"], bacen_code);
     assert!(body["id"].is_string());
 }
 
 #[tokio::test]
-async fn test_create_country_duplicate_code_returns_conflict() {
+async fn test_create_country_duplicate_iso2_returns_conflict() {
     let app = common::spawn_app().await;
-    let code = random_code(3);
+    let iso2 = random_code(2);
+    let bacen_code = random_bacen_code();
 
     // Create first country
     app.api
@@ -155,18 +197,20 @@ async fn test_create_country_duplicate_code_returns_conflict() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": random_name("Country1"),
-            "code": code
+            "iso2": iso2,
+            "bacen_code": bacen_code
         }))
         .await;
 
-    // Try to create duplicate
+    // Try to create duplicate with same iso2
     let response = app
         .api
         .post("/api/admin/locations/countries")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": random_name("Country2"),
-            "code": code
+            "iso2": iso2,
+            "bacen_code": random_bacen_code()
         }))
         .await;
 
@@ -188,7 +232,8 @@ async fn test_get_country_success() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["name"], country["name"]);
-    assert_eq!(body["code"], country["code"]);
+    assert_eq!(body["iso2"], country["iso2"]);
+    assert_eq!(body["bacen_code"], country["bacen_code"]);
 }
 
 #[tokio::test]
@@ -220,7 +265,8 @@ async fn test_create_state_success() {
     let country = create_unique_country(&app).await;
 
     let name = random_name("Sao Paulo");
-    let code = random_code(2);
+    let abbreviation = random_code(2);
+    let ibge_code = random_ibge_code_state();
 
     let response = app
         .api
@@ -228,7 +274,8 @@ async fn test_create_state_success() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": name,
-            "code": code,
+            "abbreviation": abbreviation,
+            "ibge_code": ibge_code,
             "country_id": country["id"]
         }))
         .await;
@@ -236,16 +283,17 @@ async fn test_create_state_success() {
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let body: Value = response.json();
     assert_eq!(body["name"], name);
-    assert_eq!(body["code"], code);
+    assert_eq!(body["abbreviation"], abbreviation);
+    assert_eq!(body["ibge_code"], ibge_code);
     assert_eq!(body["country_id"], country["id"]);
     assert!(body["id"].is_string());
 }
 
 #[tokio::test]
-async fn test_create_state_duplicate_code_returns_conflict() {
+async fn test_create_state_duplicate_abbreviation_returns_conflict() {
     let app = common::spawn_app().await;
     let country = create_unique_country(&app).await;
-    let code = random_code(2);
+    let abbreviation = random_code(2);
 
     // Create first state
     app.api
@@ -253,19 +301,21 @@ async fn test_create_state_duplicate_code_returns_conflict() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": random_name("State1"),
-            "code": code,
+            "abbreviation": abbreviation,
+            "ibge_code": random_ibge_code_state(),
             "country_id": country["id"]
         }))
         .await;
 
-    // Try to create duplicate
+    // Try to create duplicate with same abbreviation
     let response = app
         .api
         .post("/api/admin/locations/states")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": random_name("State2"),
-            "code": code,
+            "abbreviation": abbreviation,
+            "ibge_code": random_ibge_code_state(),
             "country_id": country["id"]
         }))
         .await;
@@ -274,7 +324,7 @@ async fn test_create_state_duplicate_code_returns_conflict() {
 }
 
 #[tokio::test]
-async fn test_create_state_invalid_code_returns_400() {
+async fn test_create_state_invalid_abbreviation_returns_400() {
     let app = common::spawn_app().await;
     let country = create_unique_country(&app).await;
 
@@ -284,7 +334,8 @@ async fn test_create_state_invalid_code_returns_400() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": random_name("Invalid"),
-            "code": "XYZ", // Invalid: 3 chars instead of 2
+            "abbreviation": "XYZ", // Invalid: 3 chars instead of 2
+            "ibge_code": random_ibge_code_state(),
             "country_id": country["id"]
         }))
         .await;
@@ -312,7 +363,8 @@ async fn test_get_state_success() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["name"], state["name"]);
-    assert_eq!(body["code"], state["code"]);
+    assert_eq!(body["abbreviation"], state["abbreviation"]);
+    assert_eq!(body["ibge_code"], state["ibge_code"]);
     assert_eq!(body["country_id"], country["id"]);
 }
 
@@ -352,7 +404,8 @@ async fn test_update_state_success() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["name"], new_name);
-    assert_eq!(body["code"], state["code"]);
+    assert_eq!(body["abbreviation"], state["abbreviation"]);
+    assert_eq!(body["ibge_code"], state["ibge_code"]);
 }
 
 #[tokio::test]
@@ -419,12 +472,13 @@ async fn test_list_states_with_search() {
     let mut attempts = 0;
     loop {
         attempts += 1;
-        let code = random_code(2);
+        let abbreviation = random_code(2);
+        let ibge_code = random_ibge_code_state();
         let response = app
             .api
             .post("/api/admin/locations/states")
             .add_header("Authorization", format!("Bearer {}", app.admin_token))
-            .json(&json!({"name": name_match, "code": code, "country_id": country_id}))
+            .json(&json!({"name": name_match, "abbreviation": abbreviation, "ibge_code": ibge_code, "country_id": country_id}))
             .await;
 
         if response.status_code() == StatusCode::CREATED {
@@ -439,12 +493,13 @@ async fn test_list_states_with_search() {
     attempts = 0;
     loop {
         attempts += 1;
-        let code = random_code(2);
+        let abbreviation = random_code(2);
+        let ibge_code = random_ibge_code_state();
         let response = app
             .api
             .post("/api/admin/locations/states")
             .add_header("Authorization", format!("Bearer {}", app.admin_token))
-            .json(&json!({"name": name_no_match, "code": code, "country_id": country_id}))
+            .json(&json!({"name": name_no_match, "abbreviation": abbreviation, "ibge_code": ibge_code, "country_id": country_id}))
             .await;
 
         if response.status_code() == StatusCode::CREATED {
@@ -485,7 +540,8 @@ async fn test_state_requires_admin_role() {
         .add_header("Authorization", format!("Bearer {}", app.user_token))
         .json(&json!({
             "name": random_name("Goias"),
-            "code": random_code(2),
+            "abbreviation": random_code(2),
+            "ibge_code": random_ibge_code_state(),
             "country_id": country["id"]
         }))
         .await;
@@ -503,6 +559,7 @@ async fn test_create_city_success() {
     let country = create_unique_country(&app).await;
     let state = create_unique_state(&app, country["id"].as_str().unwrap()).await;
     let name = random_name("Campinas");
+    let ibge_code = random_ibge_code_city();
 
     // Create city
     let response = app
@@ -511,6 +568,7 @@ async fn test_create_city_success() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": name,
+            "ibge_code": ibge_code,
             "state_id": state["id"]
         }))
         .await;
@@ -518,6 +576,7 @@ async fn test_create_city_success() {
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let body: Value = response.json();
     assert_eq!(body["name"], name);
+    assert_eq!(body["ibge_code"], ibge_code);
     assert_eq!(body["state_id"], state["id"]);
 }
 
@@ -532,6 +591,7 @@ async fn test_create_city_invalid_state_returns_404() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": "Cidade Fantasma",
+            "ibge_code": random_ibge_code_city(),
             "state_id": fake_state_id.to_string()
         }))
         .await;
@@ -559,8 +619,10 @@ async fn test_get_city_with_state_info() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["name"], city["name"]);
+    assert_eq!(body["ibge_code"], city["ibge_code"]);
     assert_eq!(body["state_name"], state["name"]);
-    assert_eq!(body["state_code"], state["code"]);
+    assert_eq!(body["state_abbreviation"], state["abbreviation"]);
+    assert_eq!(body["state_ibge_code"], state["ibge_code"]);
 }
 
 #[tokio::test]
