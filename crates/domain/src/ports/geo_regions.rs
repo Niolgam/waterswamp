@@ -75,6 +75,11 @@ pub trait StateRepositoryPort: Send + Sync {
 
     // Validation checks
     async fn exists_by_abbreviation(&self, abbreviation: &StateCode) -> Result<bool, RepositoryError>;
+    async fn exists_by_abbreviation_in_country(
+        &self,
+        abbreviation: &StateCode,
+        country_id: Uuid,
+    ) -> Result<bool, RepositoryError>;
     async fn exists_by_abbreviation_excluding(
         &self,
         abbreviation: &StateCode,

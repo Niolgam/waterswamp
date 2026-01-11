@@ -144,10 +144,10 @@ impl GeoRegionsService {
         &self,
         payload: CreateStatePayload,
     ) -> Result<StateWithCountryDto, ServiceError> {
-        // Check if state abbreviation already exists
-        if self.state_repo.exists_by_abbreviation(&payload.abbreviation).await? {
+        // Check if state abbreviation already exists in this country
+        if self.state_repo.exists_by_abbreviation_in_country(&payload.abbreviation, payload.country_id).await? {
             return Err(ServiceError::Conflict(format!(
-                "Estado com sigla '{}' já existe",
+                "Estado com sigla '{}' já existe neste país",
                 payload.abbreviation
             )));
         }

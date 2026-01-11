@@ -305,6 +305,22 @@ impl StateRepositoryPort for StateRepository {
         Ok(count > 0)
     }
 
+    async fn exists_by_abbreviation_in_country(
+        &self,
+        abbreviation: &StateCode,
+        country_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM states WHERE abbreviation = $1 AND country_id = $2"
+        )
+            .bind(abbreviation.as_str())
+            .bind(country_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(Self::map_err)?;
+        Ok(count > 0)
+    }
+
     async fn exists_by_abbreviation_excluding(
         &self,
         abbreviation: &StateCode,
