@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS siorg_history CASCADE;
+DROP TABLE IF EXISTS siorg_sync_queue CASCADE;
+DROP TABLE IF EXISTS siorg_mappings CASCADE;
