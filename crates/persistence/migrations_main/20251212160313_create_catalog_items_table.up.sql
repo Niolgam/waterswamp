@@ -45,3 +45,19 @@ CREATE TRIGGER set_timestamp_catalog_items
 BEFORE UPDATE ON catalog_items
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
+
+-- Impacto na Tabela catalog_items
+-- Previne que itens sejam vinculados a grupos que possuem filhos (grupos sintéticos)
+CREATE OR REPLACE FUNCTION fn_prevent_item_in_synthetic_group()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM catalog_groups WHERE parent_id = NEW.group_id) THEN
+        RAISE EXCEPTION 'Itens só podem ser vinculados a grupos folha (sem subgrupos).';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_catalog_item_leaf_only
+BEFORE INSERT OR UPDATE ON catalog_items
+FOR EACH ROW EXECUTE PROCEDURE fn_prevent_item_in_synthetic_group();
