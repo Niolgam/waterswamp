@@ -11,17 +11,24 @@ use tracing::info;
 // Imports de Portas e Serviços
 use application::services::{
     auth_service::AuthService, budget_classifications_service::BudgetClassificationsService,
-    geo_regions_service::GeoRegionsService, mfa_service::MfaService, user_service::UserService,
+    catalog_service::CatalogService, geo_regions_service::GeoRegionsService,
+    mfa_service::MfaService, user_service::UserService,
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
-    BuildingTypeRepositoryPort, CityRepositoryPort, CountryRepositoryPort, EmailServicePort,
-    FloorRepositoryPort, MfaRepositoryPort, SiteRepositoryPort, SpaceRepositoryPort,
-    SpaceTypeRepositoryPort, StateRepositoryPort, UserRepositoryPort,
+    BuildingTypeRepositoryPort, CatalogGroupRepositoryPort, CatalogItemRepositoryPort,
+    CityRepositoryPort, CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
+    MfaRepositoryPort, SiteRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    StateRepositoryPort, UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort,
+    UserRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
+    catalog_repository::{
+        CatalogGroupRepository, CatalogItemRepository, UnitConversionRepository,
+        UnitOfMeasureRepository,
+    },
     facilities_repository::{
         BuildingRepository, BuildingTypeRepository, FloorRepository, SiteRepository,
         SpaceRepository, SpaceTypeRepository,
@@ -124,6 +131,22 @@ pub fn build_application_state(
         budget_classifications_repo_port,
     ));
 
+    let unit_repo_port: Arc<dyn UnitOfMeasureRepositoryPort> =
+        Arc::new(UnitOfMeasureRepository::new(pool_auth.clone()));
+    let group_repo_port: Arc<dyn CatalogGroupRepositoryPort> =
+        Arc::new(CatalogGroupRepository::new(pool_auth.clone()));
+    let item_repo_port: Arc<dyn CatalogItemRepositoryPort> =
+        Arc::new(CatalogItemRepository::new(pool_auth.clone()));
+    let conversion_repo_port: Arc<dyn UnitConversionRepositoryPort> =
+        Arc::new(UnitConversionRepository::new(pool_auth.clone()));
+
+    let catalog_service = Arc::new(CatalogService::new(
+        unit_repo_port,
+        group_repo_port,
+        item_repo_port,
+        conversion_repo_port,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -143,6 +166,7 @@ pub fn build_application_state(
         mfa_service,
         location_service,
         budget_classifications_service,
+        catalog_service,
         config,
 
         site_repository: site_repo_port,

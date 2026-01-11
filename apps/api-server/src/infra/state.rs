@@ -2,6 +2,7 @@ use crate::infra::config::Config;
 use application::services::audit_services::AuditService;
 use application::services::auth_service::AuthService;
 use application::services::budget_classifications_service::BudgetClassificationsService;
+use application::services::catalog_service::CatalogService;
 use application::services::geo_regions_service::GeoRegionsService;
 use application::services::mfa_service::MfaService;
 use application::services::user_service::UserService;
@@ -34,6 +35,7 @@ pub struct AppState {
     pub mfa_service: Arc<MfaService>,
     pub location_service: Arc<GeoRegionsService>,
     pub budget_classifications_service: Arc<BudgetClassificationsService>,
+    pub catalog_service: Arc<CatalogService>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,

@@ -425,6 +425,80 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Budget Classifications carregadas");
 
+    // --- CATALOG POLICIES ---
+    // Units of Measure
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units/{id}", ACTION_DELETE])
+        .await?;
+
+    // Catalog Groups
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups/tree", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups/{id}", ACTION_DELETE])
+        .await?;
+
+    // Catalog Items
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items/{id}", ACTION_DELETE])
+        .await?;
+
+    // Unit Conversions
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Catalog carregadas");
+
     // --- WAREHOUSE POLICIES ---
     // Material Groups
     enforcer
