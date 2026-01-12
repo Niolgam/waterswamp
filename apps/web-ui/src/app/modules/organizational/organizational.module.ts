@@ -9,15 +9,20 @@ import { OrganizationalRoutingModule } from './organizational-routing.module';
 import { UnitsListComponent } from './components/units-list/units-list.component';
 import { UnitsTreeComponent } from './components/units-tree/units-tree.component';
 import { SiorgSyncComponent } from './components/siorg-sync/siorg-sync.component';
+import { ConflictsListComponent } from './components/conflicts-list/conflicts-list.component';
+import { ConflictResolverComponent } from './components/conflict-resolver/conflict-resolver.component';
 
 // Services
 import { OrganizationalService } from './services/organizational.service';
+import { SyncService } from './services/sync.service';
 
 @NgModule({
   declarations: [
     UnitsListComponent,
     UnitsTreeComponent,
-    SiorgSyncComponent
+    SiorgSyncComponent,
+    ConflictsListComponent,
+    ConflictResolverComponent
   ],
   imports: [
     CommonModule,
@@ -27,7 +32,8 @@ import { OrganizationalService } from './services/organizational.service';
     OrganizationalRoutingModule
   ],
   providers: [
-    OrganizationalService
+    OrganizationalService,
+    SyncService
   ]
 })
 export class OrganizationalModule { }

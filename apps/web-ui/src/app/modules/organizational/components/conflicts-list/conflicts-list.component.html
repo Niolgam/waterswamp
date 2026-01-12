@@ -1,0 +1,145 @@
+<div class="conflicts-list-container">
+  <div class="header">
+    <h2>Conflitos de Sincronização SIORG</h2>
+    <button class="btn-refresh" (click)="loadConflicts()" [disabled]="loading">
+      🔄 Atualizar
+    </button>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stats-grid" *ngIf="stats">
+    <div class="stat-card">
+      <div class="stat-value">{{ stats.pending }}</div>
+      <div class="stat-label">Pendentes</div>
+    </div>
+    <div class="stat-card warning">
+      <div class="stat-value">{{ stats.conflicts }}</div>
+      <div class="stat-label">Conflitos</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ stats.processing }}</div>
+      <div class="stat-label">Processando</div>
+    </div>
+    <div class="stat-card success">
+      <div class="stat-value">{{ stats.completed }}</div>
+      <div class="stat-label">Concluídos</div>
+    </div>
+    <div class="stat-card error">
+      <div class="stat-value">{{ stats.failed }}</div>
+      <div class="stat-label">Falhados</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ stats.skipped }}</div>
+      <div class="stat-label">Ignorados</div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading">
+    <div class="spinner"></div>
+    <p>Carregando conflitos...</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error" class="alert alert-error">
+    {{ error }}
+  </div>
+
+  <!-- Empty State -->
+  <div *ngIf="!loading && !error && conflicts.length === 0" class="empty-state">
+    <div class="empty-icon">✅</div>
+    <h3>Nenhum conflito pendente</h3>
+    <p>Todos os conflitos foram resolvidos.</p>
+  </div>
+
+  <!-- Conflicts Table -->
+  <div *ngIf="!loading && !error && conflicts.length > 0" class="table-container">
+    <table class="conflicts-table">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Código SIORG</th>
+          <th>Operação</th>
+          <th>Tentativas</th>
+          <th>Criado em</th>
+          <th>Última tentativa</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let conflict of conflicts"
+          class="conflict-row"
+          (click)="viewConflictDetail(conflict)"
+        >
+          <td>
+            <span class="badge badge-entity">
+              {{ getEntityTypeLabel(conflict.entity_type) }}
+            </span>
+          </td>
+          <td>
+            <strong>{{ conflict.siorg_code }}</strong>
+          </td>
+          <td>
+            <span class="badge badge-operation">
+              {{ getOperationLabel(conflict.operation) }}
+            </span>
+          </td>
+          <td>
+            <span class="attempts" [class.danger]="conflict.attempts >= conflict.max_attempts">
+              {{ conflict.attempts }} / {{ conflict.max_attempts }}
+            </span>
+          </td>
+          <td>
+            <small>{{ formatDate(conflict.created_at) }}</small>
+          </td>
+          <td>
+            <small *ngIf="conflict.last_attempt_at">
+              {{ formatDate(conflict.last_attempt_at) }}
+            </small>
+            <small *ngIf="!conflict.last_attempt_at" class="text-muted">
+              Nunca
+            </small>
+          </td>
+          <td>
+            <button
+              class="btn-icon btn-resolve"
+              (click)="viewConflictDetail(conflict)"
+              title="Resolver conflito"
+            >
+              🔍 Resolver
+            </button>
+            <button
+              class="btn-icon btn-delete"
+              (click)="deleteConflict(conflict, $event)"
+              title="Remover da fila"
+            >
+              🗑️
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="pagination">
+      <button
+        class="btn-page"
+        (click)="previousPage()"
+        [disabled]="!hasPreviousPage || loading"
+      >
+        ← Anterior
+      </button>
+      <span class="page-info">
+        Página {{ currentPage }} de {{ totalPages }} ({{ total }} conflitos)
+      </span>
+      <button
+        class="btn-page"
+        (click)="nextPage()"
+        [disabled]="!hasNextPage || loading"
+      >
+        Próxima →
+      </button>
+    </div>
+  </div>
+</div>
