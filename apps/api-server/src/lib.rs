@@ -184,11 +184,29 @@ pub fn build_application_state(
         unit_type_repo_port.clone(),
     ));
     let organizational_unit_service = Arc::new(OrganizationalUnitService::new(
-        organizational_unit_repo_port,
+        organizational_unit_repo_port.clone(),
+        organization_repo_port.clone(),
+        unit_category_repo_port.clone(),
+        unit_type_repo_port.clone(),
+        system_settings_repo_port.clone(),
+    ));
+
+    // SIORG Sync Service
+    let siorg_base_url = std::env::var("SIORG_API_URL")
+        .unwrap_or_else(|_| "https://api.siorg.gov.br".to_string());
+    let siorg_token = std::env::var("SIORG_API_TOKEN").ok();
+
+    let siorg_client = Arc::new(
+        application::external::SiorgClient::new(siorg_base_url, siorg_token)
+            .expect("Failed to create SIORG client")
+    );
+
+    let siorg_sync_service = Arc::new(application::external::SiorgSyncService::new(
+        siorg_client,
         organization_repo_port,
+        organizational_unit_repo_port,
         unit_category_repo_port,
         unit_type_repo_port,
-        system_settings_repo_port,
     ));
 
     // Cache com TTL e tamanho máximo para políticas do Casbin
@@ -216,6 +234,7 @@ pub fn build_application_state(
         organizational_unit_category_service,
         organizational_unit_type_service,
         organizational_unit_service,
+        siorg_sync_service,
         config,
 
         site_repository: site_repo_port,

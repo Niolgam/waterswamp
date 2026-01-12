@@ -10,6 +10,7 @@ use application::services::organizational_service::{
     OrganizationalUnitTypeService, SystemSettingsService,
 };
 use application::services::user_service::UserService;
+use application::external::SiorgSyncService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use domain::ports::{
@@ -45,6 +46,7 @@ pub struct AppState {
     pub organizational_unit_category_service: Arc<OrganizationalUnitCategoryService>,
     pub organizational_unit_type_service: Arc<OrganizationalUnitTypeService>,
     pub organizational_unit_service: Arc<OrganizationalUnitService>,
+    pub siorg_sync_service: Arc<SiorgSyncService>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,

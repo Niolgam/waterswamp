@@ -39,6 +39,7 @@ use utoipa::OpenApi;
         (name = "Organization - Unit Categories", description = "Categorias de unidades organizacionais"),
         (name = "Organization - Unit Types", description = "Tipos de unidades organizacionais"),
         (name = "Organization - Organizational Units", description = "Unidades organizacionais hierárquicas com sincronização SIORG"),
+        (name = "Organization - SIORG Sync", description = "Sincronização bidirecional com API do SIORG"),
     ),
     paths(
         // Health
@@ -165,6 +166,12 @@ use utoipa::OpenApi;
         crate::api::organizational::handlers::delete_organizational_unit,
         crate::api::organizational::handlers::deactivate_organizational_unit,
         crate::api::organizational::handlers::activate_organizational_unit,
+
+        // Organization - SIORG Sync
+        crate::api::organizational::handlers::sync_organization,
+        crate::api::organizational::handlers::sync_unit,
+        crate::api::organizational::handlers::sync_organization_units,
+        crate::api::organizational::handlers::check_siorg_health,
     ),
     components(
         schemas(

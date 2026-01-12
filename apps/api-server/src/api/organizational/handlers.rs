@@ -12,6 +12,7 @@ use axum::{
 };
 use domain::models::organizational::{ActivityArea, InternalUnitType};
 use serde::Deserialize;
+use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -955,4 +956,137 @@ pub async fn activate_organizational_unit(
         .await
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+// ============================
+// SIORG Sync Handlers
+// ============================
+
+#[derive(Debug, Deserialize)]
+pub struct SyncOrganizationRequest {
+    pub siorg_code: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncUnitRequest {
+    pub siorg_code: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncOrgUnitsRequest {
+    pub org_siorg_code: i32,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/admin/organizational/sync/organization",
+    tag = "Organization - SIORG Sync",
+    request_body = SyncOrganizationRequest,
+    responses(
+        (status = 200, description = "Organization synced successfully", body = OrganizationDto),
+        (status = 404, description = "Organization not found in SIORG"),
+        (status = 500, description = "Sync failed"),
+    )
+)]
+pub async fn sync_organization(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<SyncOrganizationRequest>,
+) -> Result<Json<OrganizationDto>, (StatusCode, String)> {
+    let sync_service = state.siorg_sync_service.clone();
+
+    sync_service
+        .sync_organization(payload.siorg_code)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/admin/organizational/sync/unit",
+    tag = "Organization - SIORG Sync",
+    request_body = SyncUnitRequest,
+    responses(
+        (status = 200, description = "Unit synced successfully", body = OrganizationalUnitDto),
+        (status = 404, description = "Unit not found in SIORG"),
+        (status = 500, description = "Sync failed"),
+    )
+)]
+pub async fn sync_unit(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<SyncUnitRequest>,
+) -> Result<Json<OrganizationalUnitDto>, (StatusCode, String)> {
+    let sync_service = state.siorg_sync_service.clone();
+
+    sync_service
+        .sync_unit(payload.siorg_code)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/admin/organizational/sync/org-units",
+    tag = "Organization - SIORG Sync",
+    request_body = SyncOrgUnitsRequest,
+    responses(
+        (status = 200, description = "Bulk sync completed", body = String),
+        (status = 500, description = "Sync failed"),
+    )
+)]
+pub async fn sync_organization_units(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<SyncOrgUnitsRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let sync_service = state.siorg_sync_service.clone();
+
+    let summary = sync_service
+        .sync_organization_units(payload.org_siorg_code)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(json!({
+        "total_processed": summary.total_processed,
+        "created": summary.created,
+        "updated": summary.updated,
+        "failed": summary.failed,
+        "errors": summary.errors
+    })))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/admin/organizational/sync/health",
+    tag = "Organization - SIORG Sync",
+    responses(
+        (status = 200, description = "SIORG API is healthy"),
+        (status = 503, description = "SIORG API is unavailable"),
+    )
+)]
+pub async fn check_siorg_health(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let sync_service = state.siorg_sync_service.clone();
+
+    let is_healthy = sync_service
+        .check_health()
+        .await
+        .unwrap_or(false);
+
+    if is_healthy {
+        Ok(Json(json!({
+            "status": "healthy",
+            "siorg_api": "available"
+        })))
+    } else {
+        Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "SIORG API is unavailable".to_string(),
+        ))
+    }
 }

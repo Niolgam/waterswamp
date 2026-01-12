@@ -2,7 +2,7 @@ pub mod contracts;
 pub mod handlers;
 
 use crate::infra::state::AppState;
-use axum::{routing::get, Router};
+use axum::{routing::{get, post}, Router};
 
 /// Creates the organizational router with all CRUD routes
 pub fn router() -> Router<AppState> {
@@ -73,10 +73,18 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/deactivate", get(handlers::deactivate_organizational_unit))
         .route("/{id}/activate", get(handlers::activate_organizational_unit));
 
+    // SIORG Sync routes
+    let sync_router = Router::new()
+        .route("/organization", post(handlers::sync_organization))
+        .route("/unit", post(handlers::sync_unit))
+        .route("/org-units", post(handlers::sync_organization_units))
+        .route("/health", get(handlers::check_siorg_health));
+
     Router::new()
         .nest("/settings", settings_router)
         .nest("/organizations", organizations_router)
         .nest("/unit-categories", unit_categories_router)
         .nest("/unit-types", unit_types_router)
         .nest("/units", units_router)
+        .nest("/sync", sync_router)
 }

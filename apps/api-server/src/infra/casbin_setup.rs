@@ -600,6 +600,20 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/{id}/activate", ACTION_POST])
         .await?;
 
+    // SIORG Sync
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/organization", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/unit", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/org-units", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/health", ACTION_GET])
+        .await?;
+
     info!("Políticas de Organizational Management carregadas");
 
     // --- WAREHOUSE POLICIES ---
