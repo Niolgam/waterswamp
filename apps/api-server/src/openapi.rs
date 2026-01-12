@@ -34,6 +34,11 @@ use utoipa::OpenApi;
         (name = "Catalog - Groups", description = "Grupos hierárquicos de catálogo (MATERIAL/SERVICE)"),
         (name = "Catalog - Items", description = "Itens de catálogo com especificações"),
         (name = "Catalog - Conversions", description = "Conversões entre unidades de medida"),
+        (name = "Organization - System Settings", description = "Configurações globais do sistema"),
+        (name = "Organization - Organizations", description = "Gerenciamento de organizações (CNPJ, SIORG)"),
+        (name = "Organization - Unit Categories", description = "Categorias de unidades organizacionais"),
+        (name = "Organization - Unit Types", description = "Tipos de unidades organizacionais"),
+        (name = "Organization - Organizational Units", description = "Unidades organizacionais hierárquicas com sincronização SIORG"),
     ),
     paths(
         // Health
@@ -120,6 +125,46 @@ use utoipa::OpenApi;
         crate::api::catalog::handlers::list_unit_conversions,
         crate::api::catalog::handlers::update_unit_conversion,
         crate::api::catalog::handlers::delete_unit_conversion,
+
+        // Organization - System Settings
+        crate::api::organizational::handlers::create_system_setting,
+        crate::api::organizational::handlers::list_system_settings,
+        crate::api::organizational::handlers::get_system_setting,
+        crate::api::organizational::handlers::update_system_setting,
+        crate::api::organizational::handlers::delete_system_setting,
+
+        // Organization - Organizations
+        crate::api::organizational::handlers::create_organization,
+        crate::api::organizational::handlers::list_organizations,
+        crate::api::organizational::handlers::get_organization,
+        crate::api::organizational::handlers::update_organization,
+        crate::api::organizational::handlers::delete_organization,
+
+        // Organization - Unit Categories
+        crate::api::organizational::handlers::create_unit_category,
+        crate::api::organizational::handlers::list_unit_categories,
+        crate::api::organizational::handlers::get_unit_category,
+        crate::api::organizational::handlers::update_unit_category,
+        crate::api::organizational::handlers::delete_unit_category,
+
+        // Organization - Unit Types
+        crate::api::organizational::handlers::create_unit_type,
+        crate::api::organizational::handlers::list_unit_types,
+        crate::api::organizational::handlers::get_unit_type,
+        crate::api::organizational::handlers::update_unit_type,
+        crate::api::organizational::handlers::delete_unit_type,
+
+        // Organization - Organizational Units
+        crate::api::organizational::handlers::create_organizational_unit,
+        crate::api::organizational::handlers::list_organizational_units,
+        crate::api::organizational::handlers::get_organizational_units_tree,
+        crate::api::organizational::handlers::get_organizational_unit,
+        crate::api::organizational::handlers::get_organizational_unit_children,
+        crate::api::organizational::handlers::get_organizational_unit_path,
+        crate::api::organizational::handlers::update_organizational_unit,
+        crate::api::organizational::handlers::delete_organizational_unit,
+        crate::api::organizational::handlers::deactivate_organizational_unit,
+        crate::api::organizational::handlers::activate_organizational_unit,
     ),
     components(
         schemas(
@@ -193,6 +238,35 @@ use utoipa::OpenApi;
             crate::api::catalog::contracts::CatalogGroupsListResponse,
             crate::api::catalog::contracts::CatalogItemsListResponse,
             crate::api::catalog::contracts::UnitConversionsListResponse,
+
+            // Organization - Domain Models
+            domain::models::organizational::ActivityArea,
+            domain::models::organizational::InternalUnitType,
+            domain::models::organizational::ContactInfo,
+            domain::models::organizational::SystemSettingDto,
+            domain::models::organizational::CreateSystemSettingPayload,
+            domain::models::organizational::UpdateSystemSettingPayload,
+            domain::models::organizational::OrganizationDto,
+            domain::models::organizational::CreateOrganizationPayload,
+            domain::models::organizational::UpdateOrganizationPayload,
+            domain::models::organizational::OrganizationalUnitCategoryDto,
+            domain::models::organizational::CreateOrganizationalUnitCategoryPayload,
+            domain::models::organizational::UpdateOrganizationalUnitCategoryPayload,
+            domain::models::organizational::OrganizationalUnitTypeDto,
+            domain::models::organizational::CreateOrganizationalUnitTypePayload,
+            domain::models::organizational::UpdateOrganizationalUnitTypePayload,
+            domain::models::organizational::OrganizationalUnitDto,
+            domain::models::organizational::OrganizationalUnitWithDetailsDto,
+            domain::models::organizational::OrganizationalUnitTreeNode,
+            domain::models::organizational::CreateOrganizationalUnitPayload,
+            domain::models::organizational::UpdateOrganizationalUnitPayload,
+
+            // Organization - API Contracts
+            crate::api::organizational::contracts::SystemSettingsListResponse,
+            crate::api::organizational::contracts::OrganizationsListResponse,
+            crate::api::organizational::contracts::OrganizationalUnitCategoriesListResponse,
+            crate::api::organizational::contracts::OrganizationalUnitTypesListResponse,
+            crate::api::organizational::contracts::OrganizationalUnitsListResponse,
 
         )
     ),
