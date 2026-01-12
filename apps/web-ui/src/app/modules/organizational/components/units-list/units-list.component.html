@@ -1,0 +1,194 @@
+<div class="units-list-container">
+  <div class="header">
+    <h1>Unidades Organizacionais</h1>
+    <div class="actions">
+      <button class="btn btn-secondary" (click)="viewTree()">
+        <i class="icon-tree"></i> Visualizar Árvore
+      </button>
+      <button class="btn btn-primary" (click)="syncWithSiorg()">
+        <i class="icon-sync"></i> Sincronizar SIORG
+      </button>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-panel">
+    <h3>Filtros</h3>
+    <div class="filters-grid">
+      <div class="filter-group">
+        <label for="org-filter">Organização</label>
+        <select id="org-filter" [(ngModel)]="selectedOrganization">
+          <option [value]="null">Todas</option>
+          <option *ngFor="let org of organizations" [value]="org.id">
+            {{ org.acronym }} - {{ org.name }}
+          </option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="area-filter">Área de Atuação</label>
+        <select id="area-filter" [(ngModel)]="selectedActivityArea">
+          <option [value]="null">Todas</option>
+          <option *ngFor="let area of activityAreas" [value]="area">
+            {{ getActivityAreaLabel(area) }}
+          </option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="type-filter">Tipo Interno</label>
+        <select id="type-filter" [(ngModel)]="selectedInternalType">
+          <option [value]="null">Todos</option>
+          <option *ngFor="let type of internalTypes" [value]="type">
+            {{ getInternalTypeLabel(type) }}
+          </option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="search-filter">Buscar</label>
+        <input
+          id="search-filter"
+          type="text"
+          [(ngModel)]="searchTerm"
+          placeholder="Nome da unidade..."
+          (keyup.enter)="applyFilters()"
+        />
+      </div>
+
+      <div class="filter-group checkbox-group">
+        <label>
+          <input type="checkbox" [(ngModel)]="isActiveFilter" [value]="true" />
+          Apenas ativas
+        </label>
+      </div>
+
+      <div class="filter-group checkbox-group">
+        <label>
+          <input type="checkbox" [(ngModel)]="isSiorgManagedFilter" [value]="true" />
+          Apenas gerenciadas pelo SIORG
+        </label>
+      </div>
+    </div>
+
+    <div class="filter-actions">
+      <button class="btn btn-primary" (click)="applyFilters()">Aplicar Filtros</button>
+      <button class="btn btn-secondary" (click)="clearFilters()">Limpar</button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="loading-spinner">
+    <div class="spinner"></div>
+    <p>Carregando...</p>
+  </div>
+
+  <!-- Error -->
+  <div *ngIf="error" class="error-message">
+    <i class="icon-error"></i>
+    <p>{{ error }}</p>
+  </div>
+
+  <!-- Results -->
+  <div *ngIf="!loading && !error" class="results-section">
+    <div class="results-header">
+      <p class="results-count">
+        Mostrando {{ units.length }} de {{ total }} unidades
+      </p>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+      <table class="units-table">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Organização</th>
+            <th>Tipo</th>
+            <th>Área</th>
+            <th>Nível</th>
+            <th>SIORG</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let unit of units" [class.inactive]="!unit.is_active">
+            <td>
+              <div class="unit-name">
+                <strong>{{ unit.name }}</strong>
+                <small *ngIf="unit.parent_name">↳ {{ unit.parent_name }}</small>
+              </div>
+            </td>
+            <td>{{ unit.organization_name }}</td>
+            <td>
+              <span class="badge badge-type">
+                {{ getInternalTypeLabel(unit.internal_type) }}
+              </span>
+            </td>
+            <td>
+              <span class="badge" [class.badge-support]="unit.activity_area === 'SUPPORT'"
+                                  [class.badge-core]="unit.activity_area === 'CORE'">
+                {{ getActivityAreaLabel(unit.activity_area) }}
+              </span>
+            </td>
+            <td>
+              <span class="level-indicator">Nível {{ unit.level }}</span>
+            </td>
+            <td>
+              <span *ngIf="unit.siorg_code" class="siorg-code">
+                {{ unit.siorg_code }}
+              </span>
+              <span *ngIf="!unit.siorg_code" class="no-siorg">
+                Local
+              </span>
+            </td>
+            <td>
+              <span class="status-badge" [class.active]="unit.is_active" [class.inactive]="!unit.is_active">
+                {{ unit.is_active ? 'Ativa' : 'Inativa' }}
+              </span>
+            </td>
+            <td class="actions-cell">
+              <button class="btn-icon" (click)="viewDetails(unit.id)" title="Ver detalhes">
+                <i class="icon-view"></i>
+              </button>
+              <button *ngIf="unit.is_active"
+                      class="btn-icon btn-warning"
+                      (click)="deactivateUnit(unit.id)"
+                      title="Desativar">
+                <i class="icon-deactivate"></i>
+              </button>
+              <button *ngIf="!unit.is_active"
+                      class="btn-icon btn-success"
+                      (click)="activateUnit(unit.id)"
+                      title="Ativar">
+                <i class="icon-activate"></i>
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="getTotalPages() > 1">
+      <button
+        class="btn btn-pagination"
+        [disabled]="currentPage === 1"
+        (click)="onPageChange(currentPage - 1)">
+        ‹ Anterior
+      </button>
+
+      <span class="page-info">
+        Página {{ currentPage }} de {{ getTotalPages() }}
+      </span>
+
+      <button
+        class="btn btn-pagination"
+        [disabled]="currentPage === getTotalPages()"
+        (click)="onPageChange(currentPage + 1)">
+        Próxima ›
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,188 @@
+<div class="siorg-sync-container">
+  <div class="header">
+    <h1>Sincronização SIORG</h1>
+    <button class="btn btn-secondary" (click)="checkSiorgHealth()">
+      <i class="icon-refresh"></i> Verificar Status
+    </button>
+  </div>
+
+  <!-- Health Status -->
+  <div class="health-status-card">
+    <h2>Status da API SIORG</h2>
+    <div class="health-indicator">
+      <div *ngIf="checkingHealth" class="checking">
+        <div class="spinner-small"></div>
+        <span>Verificando...</span>
+      </div>
+
+      <div *ngIf="!checkingHealth && siorgHealthy" class="healthy">
+        <i class="icon-check-circle"></i>
+        <span>API SIORG disponível e operacional</span>
+      </div>
+
+      <div *ngIf="!checkingHealth && !siorgHealthy" class="unhealthy">
+        <i class="icon-error-circle"></i>
+        <span>{{ healthError || 'API SIORG indisponível' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sync Operations -->
+  <div class="sync-operations-section">
+    <h2>Operações de Sincronização</h2>
+
+    <div class="operations-grid">
+      <!-- Sync Single Organization -->
+      <div class="operation-card">
+        <h3>Sincronizar Organização</h3>
+        <p class="description">Sincroniza uma organização específica do SIORG</p>
+
+        <div class="form-group">
+          <label for="org-siorg-code">Código SIORG da Organização</label>
+          <input
+            id="org-siorg-code"
+            type="number"
+            [(ngModel)]="orgSiorgCode"
+            placeholder="Ex: 123456"
+            [disabled]="!siorgHealthy"
+          />
+        </div>
+
+        <button
+          class="btn btn-primary"
+          (click)="syncOrganization()"
+          [disabled]="!siorgHealthy || !orgSiorgCode">
+          <i class="icon-sync"></i> Sincronizar Organização
+        </button>
+      </div>
+
+      <!-- Sync Single Unit -->
+      <div class="operation-card">
+        <h3>Sincronizar Unidade</h3>
+        <p class="description">Sincroniza uma unidade organizacional específica do SIORG</p>
+
+        <div class="form-group">
+          <label for="unit-siorg-code">Código SIORG da Unidade</label>
+          <input
+            id="unit-siorg-code"
+            type="number"
+            [(ngModel)]="unitSiorgCode"
+            placeholder="Ex: 789012"
+            [disabled]="!siorgHealthy"
+          />
+        </div>
+
+        <button
+          class="btn btn-primary"
+          (click)="syncUnit()"
+          [disabled]="!siorgHealthy || !unitSiorgCode">
+          <i class="icon-sync"></i> Sincronizar Unidade
+        </button>
+      </div>
+
+      <!-- Bulk Sync -->
+      <div class="operation-card">
+        <h3>Sincronização em Massa</h3>
+        <p class="description">Sincroniza todas as unidades de uma organização</p>
+
+        <div class="form-group">
+          <label for="org-bulk-select">Selecione a Organização</label>
+          <select
+            id="org-bulk-select"
+            [(ngModel)]="selectedOrgForBulk"
+            [disabled]="!siorgHealthy">
+            <option [value]="null">Selecione...</option>
+            <option *ngFor="let org of organizations" [value]="org.id">
+              {{ org.acronym }} - {{ org.name }}
+              <span *ngIf="org.siorg_code">(SIORG: {{ org.siorg_code }})</span>
+            </option>
+          </select>
+        </div>
+
+        <button
+          class="btn btn-primary"
+          (click)="syncBulk()"
+          [disabled]="!siorgHealthy || !selectedOrgForBulk">
+          <i class="icon-sync-bulk"></i> Sincronizar Todas
+        </button>
+
+        <p class="warning-text">
+          <i class="icon-warning"></i>
+          Esta operação pode levar vários minutos
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sync History -->
+  <div class="sync-history-section">
+    <div class="history-header">
+      <h2>Histórico de Sincronizações</h2>
+      <button
+        class="btn btn-secondary btn-sm"
+        (click)="clearHistory()"
+        [disabled]="syncOperations.length === 0">
+        Limpar Histórico
+      </button>
+    </div>
+
+    <div *ngIf="syncOperations.length === 0" class="empty-state">
+      <i class="icon-history"></i>
+      <p>Nenhuma sincronização realizada ainda</p>
+    </div>
+
+    <div *ngIf="syncOperations.length > 0" class="history-table-container">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Tipo</th>
+            <th>Alvo</th>
+            <th>Status</th>
+            <th>Início</th>
+            <th>Duração</th>
+            <th>Resultado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let operation of syncOperations" [class]="getStatusClass(operation.status)">
+            <td>
+              <span class="type-badge" [class]="'type-' + operation.type">
+                {{ operation.type === 'organization' ? 'Organização' :
+                   operation.type === 'unit' ? 'Unidade' : 'Em Massa' }}
+              </span>
+            </td>
+            <td>{{ operation.target }}</td>
+            <td>
+              <span class="status-badge" [class]="getStatusClass(operation.status)">
+                {{ getStatusLabel(operation.status) }}
+              </span>
+            </td>
+            <td>{{ operation.startedAt | date:'short' }}</td>
+            <td>{{ getDuration(operation) }}</td>
+            <td>
+              <div *ngIf="operation.status === 'completed' && operation.summary" class="summary">
+                <span class="summary-item">
+                  <i class="icon-add"></i> {{ operation.summary.created }} criadas
+                </span>
+                <span class="summary-item">
+                  <i class="icon-edit"></i> {{ operation.summary.updated }} atualizadas
+                </span>
+                <span class="summary-item" *ngIf="operation.summary.failed > 0">
+                  <i class="icon-error"></i> {{ operation.summary.failed }} falhas
+                </span>
+              </div>
+              <div *ngIf="operation.status === 'error'" class="error-message">
+                <i class="icon-error"></i>
+                {{ operation.error }}
+              </div>
+              <div *ngIf="operation.status === 'running'" class="running-indicator">
+                <div class="spinner-small"></div>
+                Processando...
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
