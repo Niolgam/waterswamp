@@ -5,6 +5,10 @@ use application::services::budget_classifications_service::BudgetClassifications
 use application::services::catalog_service::CatalogService;
 use application::services::geo_regions_service::GeoRegionsService;
 use application::services::mfa_service::MfaService;
+use application::services::organizational_service::{
+    OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
+    OrganizationalUnitTypeService, SystemSettingsService,
+};
 use application::services::user_service::UserService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
@@ -36,6 +40,11 @@ pub struct AppState {
     pub location_service: Arc<GeoRegionsService>,
     pub budget_classifications_service: Arc<BudgetClassificationsService>,
     pub catalog_service: Arc<CatalogService>,
+    pub system_settings_service: Arc<SystemSettingsService>,
+    pub organization_service: Arc<OrganizationService>,
+    pub organizational_unit_category_service: Arc<OrganizationalUnitCategoryService>,
+    pub organizational_unit_type_service: Arc<OrganizationalUnitTypeService>,
+    pub organizational_unit_service: Arc<OrganizationalUnitService>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,

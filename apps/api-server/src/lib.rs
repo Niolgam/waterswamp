@@ -12,14 +12,21 @@ use tracing::info;
 use application::services::{
     auth_service::AuthService, budget_classifications_service::BudgetClassificationsService,
     catalog_service::CatalogService, geo_regions_service::GeoRegionsService,
-    mfa_service::MfaService, user_service::UserService,
+    mfa_service::MfaService,
+    organizational_service::{
+        OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
+        OrganizationalUnitTypeService, SystemSettingsService,
+    },
+    user_service::UserService,
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
     BuildingTypeRepositoryPort, CatalogGroupRepositoryPort, CatalogItemRepositoryPort,
     CityRepositoryPort, CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
-    MfaRepositoryPort, SiteRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
-    StateRepositoryPort, UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort,
+    MfaRepositoryPort, OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
+    OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort, SiteRepositoryPort,
+    SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
+    SystemSettingsRepositoryPort, UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort,
     UserRepositoryPort,
 };
 use persistence::repositories::{
@@ -35,6 +42,10 @@ use persistence::repositories::{
     },
     geo_regions_repository::{CityRepository, CountryRepository, StateRepository},
     mfa_repository::MfaRepository,
+    organizational_repository::{
+        OrganizationRepository, OrganizationalUnitCategoryRepository,
+        OrganizationalUnitRepository, OrganizationalUnitTypeRepository, SystemSettingsRepository,
+    },
     user_repository::UserRepository,
 };
 
@@ -147,6 +158,39 @@ pub fn build_application_state(
         conversion_repo_port,
     ));
 
+    // Organizational repositories
+    let system_settings_repo_port: Arc<dyn SystemSettingsRepositoryPort> =
+        Arc::new(SystemSettingsRepository::new(pool_auth.clone()));
+    let organization_repo_port: Arc<dyn OrganizationRepositoryPort> =
+        Arc::new(OrganizationRepository::new(pool_auth.clone()));
+    let unit_category_repo_port: Arc<dyn OrganizationalUnitCategoryRepositoryPort> =
+        Arc::new(OrganizationalUnitCategoryRepository::new(pool_auth.clone()));
+    let unit_type_repo_port: Arc<dyn OrganizationalUnitTypeRepositoryPort> =
+        Arc::new(OrganizationalUnitTypeRepository::new(pool_auth.clone()));
+    let organizational_unit_repo_port: Arc<dyn OrganizationalUnitRepositoryPort> =
+        Arc::new(OrganizationalUnitRepository::new(pool_auth.clone()));
+
+    // Organizational services
+    let system_settings_service = Arc::new(SystemSettingsService::new(
+        system_settings_repo_port.clone(),
+    ));
+    let organization_service = Arc::new(OrganizationService::new(
+        organization_repo_port.clone(),
+    ));
+    let organizational_unit_category_service = Arc::new(OrganizationalUnitCategoryService::new(
+        unit_category_repo_port.clone(),
+    ));
+    let organizational_unit_type_service = Arc::new(OrganizationalUnitTypeService::new(
+        unit_type_repo_port.clone(),
+    ));
+    let organizational_unit_service = Arc::new(OrganizationalUnitService::new(
+        organizational_unit_repo_port,
+        organization_repo_port,
+        unit_category_repo_port,
+        unit_type_repo_port,
+        system_settings_repo_port,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -167,6 +211,11 @@ pub fn build_application_state(
         location_service,
         budget_classifications_service,
         catalog_service,
+        system_settings_service,
+        organization_service,
+        organizational_unit_category_service,
+        organizational_unit_type_service,
+        organizational_unit_service,
         config,
 
         site_repository: site_repo_port,

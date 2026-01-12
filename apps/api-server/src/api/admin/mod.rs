@@ -3,7 +3,7 @@ pub mod policies;
 pub mod users;
 
 use crate::{
-    api::{budget_classifications, catalog, geo_regions},
+    api::{budget_classifications, catalog, geo_regions, organizational},
     infra::state::AppState,
     middleware::rate_limit::admin_rate_limiter, // Certifique-se que existe ou use api_rate_limiter
 };
@@ -19,5 +19,6 @@ pub fn router() -> Router<AppState> {
         .nest("/geo_regions", geo_regions::router())
         .nest("/budget-classifications", budget_classifications::router())
         .nest("/catalog", catalog::router())
+        .nest("/organizational", organizational::router())
         .layer(admin_rate_limiter())
 }

@@ -11,6 +11,7 @@ pub mod email_verification;
 pub mod geo_regions;
 pub mod locations;
 pub mod mfa;
+pub mod organizational;
 pub mod users;
 
 use axum::Router;
