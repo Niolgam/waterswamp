@@ -7,4 +7,5 @@ pub mod email_verification_repository;
 pub mod facilities_repository;
 pub mod geo_regions_repository;
 pub mod mfa_repository;
+pub mod organizational_repository;
 pub mod user_repository;
