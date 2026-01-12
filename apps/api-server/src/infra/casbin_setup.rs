@@ -614,6 +614,45 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/health", ACTION_GET])
         .await?;
 
+    // Sync Queue Management
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/queue", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/queue/stats", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/queue/*", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/queue/*", ACTION_DELETE])
+        .await?;
+
+    // Conflict Resolution
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/conflicts", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/conflicts/*", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/conflicts/*/resolve", ACTION_POST])
+        .await?;
+
+    // Sync History
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/history", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/history/*", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/history/*/review", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/history/entity/*/*", ACTION_GET])
+        .await?;
+
     info!("Políticas de Organizational Management carregadas");
 
     // --- WAREHOUSE POLICIES ---

@@ -67,7 +67,7 @@ impl SystemSettingsService {
     }
 
     pub async fn get(&self, key: &str) -> Result<SystemSettingDto, ServiceError> {
-        self.repo
+        self.repository
             .get(key)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Setting '{}' not found", key)))
@@ -79,7 +79,7 @@ impl SystemSettingsService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<SystemSettingDto>, i64), ServiceError> {
-        Ok(self.repo.list(category, limit, offset).await?)
+        Ok(self.repository.list(category, limit, offset).await?)
     }
 
     pub async fn create(
@@ -93,7 +93,7 @@ impl SystemSettingsService {
             ));
         }
 
-        Ok(self.repo.create(payload).await?)
+        Ok(self.repository.create(payload).await?)
     }
 
     pub async fn update(
@@ -105,18 +105,18 @@ impl SystemSettingsService {
         // Ensure setting exists
         let _ = self.get(key).await?;
 
-        Ok(self.repo.update(key, payload, updated_by).await?)
+        Ok(self.repository.update(key, payload, updated_by).await?)
     }
 
     pub async fn delete(&self, key: &str) -> Result<(), ServiceError> {
-        Ok(self.repo.delete(key).await?)
+        Ok(self.repository.delete(key).await?)
     }
 
     pub async fn get_value<T>(&self, key: &str) -> Result<T, ServiceError>
     where
         T: serde::de::DeserializeOwned,
     {
-        self.repo
+        self.repository
             .get_value::<T>(key)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Setting '{}' not found", key)))
@@ -144,30 +144,30 @@ impl SystemSettingsService {
 // ============================================================================
 
 pub struct OrganizationService {
-    repo: Arc<dyn OrganizationRepositoryPort>,
+    pub repository: Arc<dyn OrganizationRepositoryPort>,
 }
 
 impl OrganizationService {
     pub fn new(repo: Arc<dyn OrganizationRepositoryPort>) -> Self {
-        Self { repo }
+        Self { repository: repo }
     }
 
     pub async fn get(&self, id: Uuid) -> Result<OrganizationDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Organization {} not found", id)))
     }
 
     pub async fn get_by_cnpj(&self, cnpj: &str) -> Result<OrganizationDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_cnpj(cnpj)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Organization with CNPJ {} not found", cnpj)))
     }
 
     pub async fn get_by_siorg_code(&self, siorg_code: i32) -> Result<OrganizationDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_siorg_code(siorg_code)
             .await?
             .ok_or_else(|| {
@@ -179,7 +179,7 @@ impl OrganizationService {
     }
 
     pub async fn get_main(&self) -> Result<OrganizationDto, ServiceError> {
-        self.repo
+        self.repository
             .find_main()
             .await?
             .ok_or_else(|| ServiceError::NotFound("Main organization not found".to_string()))
@@ -191,7 +191,7 @@ impl OrganizationService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<OrganizationDto>, i64), ServiceError> {
-        Ok(self.repo.list(is_active, limit, offset).await?)
+        Ok(self.repository.list(is_active, limit, offset).await?)
     }
 
     pub async fn create(
@@ -206,7 +206,7 @@ impl OrganizationService {
         }
 
         // Check if CNPJ already exists
-        if self.repo.find_by_cnpj(&payload.cnpj).await?.is_some() {
+        if self.repository.find_by_cnpj(&payload.cnpj).await?.is_some() {
             return Err(ServiceError::Conflict(format!(
                 "CNPJ {} already exists",
                 payload.cnpj
@@ -214,14 +214,14 @@ impl OrganizationService {
         }
 
         // Check if SIORG code already exists
-        if self.repo.find_by_siorg_code(payload.siorg_code).await?.is_some() {
+        if self.repository.find_by_siorg_code(payload.siorg_code).await?.is_some() {
             return Err(ServiceError::Conflict(format!(
                 "SIORG code {} already exists",
                 payload.siorg_code
             )));
         }
 
-        Ok(self.repo.create(payload).await?)
+        Ok(self.repository.create(payload).await?)
     }
 
     pub async fn update(
@@ -232,11 +232,11 @@ impl OrganizationService {
         // Ensure organization exists
         let _ = self.get(id).await?;
 
-        Ok(self.repo.update(id, payload).await?)
+        Ok(self.repository.update(id, payload).await?)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
-        Ok(self.repo.delete(id).await?)
+        Ok(self.repository.delete(id).await?)
     }
 }
 
@@ -254,7 +254,7 @@ impl OrganizationalUnitCategoryService {
     }
 
     pub async fn get(&self, id: Uuid) -> Result<OrganizationalUnitCategoryDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Category {} not found", id)))
@@ -264,7 +264,7 @@ impl OrganizationalUnitCategoryService {
         &self,
         name: &str,
     ) -> Result<OrganizationalUnitCategoryDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_name(name)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Category '{}' not found", name)))
@@ -277,7 +277,7 @@ impl OrganizationalUnitCategoryService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<OrganizationalUnitCategoryDto>, i64), ServiceError> {
-        Ok(self.repo.list(is_active, is_siorg_managed, limit, offset).await?)
+        Ok(self.repository.list(is_active, is_siorg_managed, limit, offset).await?)
     }
 
     pub async fn create(
@@ -285,7 +285,7 @@ impl OrganizationalUnitCategoryService {
         payload: CreateOrganizationalUnitCategoryPayload,
     ) -> Result<OrganizationalUnitCategoryDto, ServiceError> {
         // Check if name already exists
-        if self.repo.find_by_name(&payload.name).await?.is_some() {
+        if self.repository.find_by_name(&payload.name).await?.is_some() {
             return Err(ServiceError::Conflict(format!(
                 "Category '{}' already exists",
                 payload.name
@@ -294,7 +294,7 @@ impl OrganizationalUnitCategoryService {
 
         // Check if SIORG code already exists (if provided)
         if let Some(siorg_code) = payload.siorg_code {
-            if self.repo.find_by_siorg_code(siorg_code).await?.is_some() {
+            if self.repository.find_by_siorg_code(siorg_code).await?.is_some() {
                 return Err(ServiceError::Conflict(format!(
                     "SIORG code {} already exists",
                     siorg_code
@@ -302,7 +302,7 @@ impl OrganizationalUnitCategoryService {
             }
         }
 
-        Ok(self.repo.create(payload).await?)
+        Ok(self.repository.create(payload).await?)
     }
 
     pub async fn update(
@@ -315,7 +315,7 @@ impl OrganizationalUnitCategoryService {
 
         // If updating name, check uniqueness
         if let Some(ref new_name) = payload.name {
-            if let Some(existing) = self.repo.find_by_name(new_name).await? {
+            if let Some(existing) = self.repository.find_by_name(new_name).await? {
                 if existing.id != id {
                     return Err(ServiceError::Conflict(format!(
                         "Category '{}' already exists",
@@ -325,11 +325,11 @@ impl OrganizationalUnitCategoryService {
             }
         }
 
-        Ok(self.repo.update(id, payload).await?)
+        Ok(self.repository.update(id, payload).await?)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
-        Ok(self.repo.delete(id).await?)
+        Ok(self.repository.delete(id).await?)
     }
 }
 
@@ -347,14 +347,14 @@ impl OrganizationalUnitTypeService {
     }
 
     pub async fn get(&self, id: Uuid) -> Result<OrganizationalUnitTypeDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Unit type {} not found", id)))
     }
 
     pub async fn get_by_code(&self, code: &str) -> Result<OrganizationalUnitTypeDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_code(code)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Unit type '{}' not found", code)))
@@ -367,7 +367,7 @@ impl OrganizationalUnitTypeService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<OrganizationalUnitTypeDto>, i64), ServiceError> {
-        Ok(self.repo.list(is_active, is_siorg_managed, limit, offset).await?)
+        Ok(self.repository.list(is_active, is_siorg_managed, limit, offset).await?)
     }
 
     pub async fn create(
@@ -375,7 +375,7 @@ impl OrganizationalUnitTypeService {
         payload: CreateOrganizationalUnitTypePayload,
     ) -> Result<OrganizationalUnitTypeDto, ServiceError> {
         // Check if code already exists
-        if self.repo.find_by_code(&payload.code).await?.is_some() {
+        if self.repository.find_by_code(&payload.code).await?.is_some() {
             return Err(ServiceError::Conflict(format!(
                 "Unit type code '{}' already exists",
                 payload.code
@@ -384,7 +384,7 @@ impl OrganizationalUnitTypeService {
 
         // Check if SIORG code already exists (if provided)
         if let Some(siorg_code) = payload.siorg_code {
-            if self.repo.find_by_siorg_code(siorg_code).await?.is_some() {
+            if self.repository.find_by_siorg_code(siorg_code).await?.is_some() {
                 return Err(ServiceError::Conflict(format!(
                     "SIORG code {} already exists",
                     siorg_code
@@ -392,7 +392,7 @@ impl OrganizationalUnitTypeService {
             }
         }
 
-        Ok(self.repo.create(payload).await?)
+        Ok(self.repository.create(payload).await?)
     }
 
     pub async fn update(
@@ -403,11 +403,11 @@ impl OrganizationalUnitTypeService {
         // Ensure type exists
         let _ = self.get(id).await?;
 
-        Ok(self.repo.update(id, payload).await?)
+        Ok(self.repository.update(id, payload).await?)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
-        Ok(self.repo.delete(id).await?)
+        Ok(self.repository.delete(id).await?)
     }
 }
 
@@ -416,11 +416,11 @@ impl OrganizationalUnitTypeService {
 // ============================================================================
 
 pub struct OrganizationalUnitService {
-    unit_repo: Arc<dyn OrganizationalUnitRepositoryPort>,
-    org_repo: Arc<dyn OrganizationRepositoryPort>,
-    category_repo: Arc<dyn OrganizationalUnitCategoryRepositoryPort>,
-    type_repo: Arc<dyn OrganizationalUnitTypeRepositoryPort>,
-    settings_repo: Arc<dyn SystemSettingsRepositoryPort>,
+    pub unit_repository: Arc<dyn OrganizationalUnitRepositoryPort>,
+    pub org_repository: Arc<dyn OrganizationRepositoryPort>,
+    pub category_repository: Arc<dyn OrganizationalUnitCategoryRepositoryPort>,
+    pub type_repository: Arc<dyn OrganizationalUnitTypeRepositoryPort>,
+    pub settings_repository: Arc<dyn SystemSettingsRepositoryPort>,
 }
 
 impl OrganizationalUnitService {
@@ -432,16 +432,16 @@ impl OrganizationalUnitService {
         settings_repo: Arc<dyn SystemSettingsRepositoryPort>,
     ) -> Self {
         Self {
-            unit_repo,
-            org_repo,
-            category_repo,
-            type_repo,
-            settings_repo,
+            unit_repository: unit_repo,
+            org_repository: org_repo,
+            category_repository: category_repo,
+            type_repository: type_repo,
+            settings_repository: settings_repo,
         }
     }
 
     pub async fn get(&self, id: Uuid) -> Result<OrganizationalUnitDto, ServiceError> {
-        self.unit_repo
+        self.unit_repository
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Organizational unit {} not found", id)))
@@ -451,7 +451,7 @@ impl OrganizationalUnitService {
         &self,
         id: Uuid,
     ) -> Result<OrganizationalUnitWithDetailsDto, ServiceError> {
-        self.unit_repo
+        self.unit_repository
             .find_by_id_with_details(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Organizational unit {} not found", id)))
@@ -461,7 +461,7 @@ impl OrganizationalUnitService {
         &self,
         siorg_code: i32,
     ) -> Result<OrganizationalUnitDto, ServiceError> {
-        self.unit_repo
+        self.unit_repository
             .find_by_siorg_code(siorg_code)
             .await?
             .ok_or_else(|| {
@@ -506,21 +506,21 @@ impl OrganizationalUnitService {
         &self,
         organization_id: Option<Uuid>,
     ) -> Result<Vec<OrganizationalUnitTreeNode>, ServiceError> {
-        Ok(self.unit_repo.get_tree(organization_id).await?)
+        Ok(self.unit_repository.get_tree(organization_id).await?)
     }
 
     pub async fn get_children(
         &self,
         parent_id: Uuid,
     ) -> Result<Vec<OrganizationalUnitDto>, ServiceError> {
-        Ok(self.unit_repo.get_children(parent_id).await?)
+        Ok(self.unit_repository.get_children(parent_id).await?)
     }
 
     pub async fn get_path_to_root(
         &self,
         id: Uuid,
     ) -> Result<Vec<OrganizationalUnitDto>, ServiceError> {
-        Ok(self.unit_repo.get_path_to_root(id).await?)
+        Ok(self.unit_repository.get_path_to_root(id).await?)
     }
 
     pub async fn create(
@@ -528,7 +528,7 @@ impl OrganizationalUnitService {
         payload: CreateOrganizationalUnitPayload,
     ) -> Result<OrganizationalUnitDto, ServiceError> {
         // Validate organization exists
-        self.org_repo
+        self.org_repository
             .find_by_id(payload.organization_id)
             .await?
             .ok_or_else(|| {
@@ -537,27 +537,27 @@ impl OrganizationalUnitService {
 
         // Validate parent exists (if provided)
         if let Some(parent_id) = payload.parent_id {
-            self.unit_repo
+            self.unit_repository
                 .find_by_id(parent_id)
                 .await?
                 .ok_or_else(|| ServiceError::NotFound(format!("Parent unit {} not found", parent_id)))?;
         }
 
         // Validate category exists
-        self.category_repo
+        self.category_repository
             .find_by_id(payload.category_id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Category {} not found", payload.category_id)))?;
 
         // Validate unit type exists
-        self.type_repo
+        self.type_repository
             .find_by_id(payload.unit_type_id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Unit type {} not found", payload.unit_type_id)))?;
 
         // Check if SIORG code already exists (if provided)
         if let Some(siorg_code) = payload.siorg_code {
-            if self.unit_repo.find_by_siorg_code(siorg_code).await?.is_some() {
+            if self.unit_repository.find_by_siorg_code(siorg_code).await?.is_some() {
                 return Err(ServiceError::Conflict(format!(
                     "SIORG code {} already exists",
                     siorg_code
@@ -581,7 +581,7 @@ impl OrganizationalUnitService {
             }
         }
 
-        Ok(self.unit_repo.create(payload).await?)
+        Ok(self.unit_repository.create(payload).await?)
     }
 
     pub async fn update(
@@ -601,7 +601,7 @@ impl OrganizationalUnitService {
                 ));
             }
 
-            self.unit_repo
+            self.unit_repository
                 .find_by_id(parent_id)
                 .await?
                 .ok_or_else(|| ServiceError::NotFound(format!("Parent unit {} not found", parent_id)))?;
@@ -609,7 +609,7 @@ impl OrganizationalUnitService {
 
         // Validate category exists (if being updated)
         if let Some(category_id) = payload.category_id {
-            self.category_repo
+            self.category_repository
                 .find_by_id(category_id)
                 .await?
                 .ok_or_else(|| ServiceError::NotFound(format!("Category {} not found", category_id)))?;
@@ -617,37 +617,37 @@ impl OrganizationalUnitService {
 
         // Validate unit type exists (if being updated)
         if let Some(unit_type_id) = payload.unit_type_id {
-            self.type_repo
+            self.type_repository
                 .find_by_id(unit_type_id)
                 .await?
                 .ok_or_else(|| ServiceError::NotFound(format!("Unit type {} not found", unit_type_id)))?;
         }
 
-        Ok(self.unit_repo.update(id, payload).await?)
+        Ok(self.unit_repository.update(id, payload).await?)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
         // Check if has children
-        if self.unit_repo.has_children(id).await? {
+        if self.unit_repository.has_children(id).await? {
             return Err(ServiceError::Conflict(
                 "Cannot delete unit with children. Delete or reassign children first.".to_string(),
             ));
         }
 
-        Ok(self.unit_repo.delete(id).await?)
+        Ok(self.unit_repository.delete(id).await?)
     }
 
     pub async fn deactivate(&self, id: Uuid, reason: Option<String>) -> Result<(), ServiceError> {
         // Ensure unit exists
         let _ = self.get(id).await?;
 
-        Ok(self.unit_repo.deactivate(id, reason).await?)
+        Ok(self.unit_repository.deactivate(id, reason).await?)
     }
 
     pub async fn activate(&self, id: Uuid) -> Result<(), ServiceError> {
         // Ensure unit exists
         let _ = self.get(id).await?;
 
-        Ok(self.unit_repo.activate(id).await?)
+        Ok(self.unit_repository.activate(id).await?)
     }
 }

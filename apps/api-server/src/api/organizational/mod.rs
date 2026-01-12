@@ -1,8 +1,9 @@
 pub mod contracts;
 pub mod handlers;
+pub mod sync_handlers;
 
 use crate::infra::state::AppState;
-use axum::{routing::{get, post}, Router};
+use axum::{routing::{delete, get, post}, Router};
 
 /// Creates the organizational router with all CRUD routes
 pub fn router() -> Router<AppState> {
@@ -73,12 +74,40 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/deactivate", get(handlers::deactivate_organizational_unit))
         .route("/{id}/activate", get(handlers::activate_organizational_unit));
 
-    // SIORG Sync routes
+    // SIORG Sync routes (immediate operations)
     let sync_router = Router::new()
         .route("/organization", post(handlers::sync_organization))
         .route("/unit", post(handlers::sync_unit))
         .route("/org-units", post(handlers::sync_organization_units))
         .route("/health", get(handlers::check_siorg_health));
+
+    // Sync Queue Management routes
+    let queue_router = Router::new()
+        .route(
+            "/",
+            get(sync_handlers::list_queue_items),
+        )
+        .route("/stats", get(sync_handlers::get_queue_stats))
+        .route(
+            "/{id}",
+            get(sync_handlers::get_queue_item).delete(sync_handlers::delete_queue_item),
+        );
+
+    // Conflict Resolution routes
+    let conflicts_router = Router::new()
+        .route("/", get(sync_handlers::list_conflicts))
+        .route("/{id}", get(sync_handlers::get_conflict_detail))
+        .route("/{id}/resolve", post(sync_handlers::resolve_conflict));
+
+    // Sync History routes
+    let history_router = Router::new()
+        .route("/", get(sync_handlers::list_history))
+        .route("/{id}", get(sync_handlers::get_history_item))
+        .route("/{id}/review", post(sync_handlers::review_history_item))
+        .route(
+            "/entity/{entity_type}/{siorg_code}",
+            get(sync_handlers::get_entity_history),
+        );
 
     Router::new()
         .nest("/settings", settings_router)
@@ -87,4 +116,7 @@ pub fn router() -> Router<AppState> {
         .nest("/unit-types", unit_types_router)
         .nest("/units", units_router)
         .nest("/sync", sync_router)
+        .nest("/sync/queue", queue_router)
+        .nest("/sync/conflicts", conflicts_router)
+        .nest("/sync/history", history_router)
 }
