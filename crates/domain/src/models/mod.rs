@@ -7,6 +7,7 @@ pub mod email;
 pub mod facilities;
 pub mod geo_regions;
 pub mod mfa;
+pub mod organizational;
 pub mod policy;
 pub mod user;
 
@@ -19,5 +20,6 @@ pub use email::*;
 pub use facilities::*;
 pub use geo_regions::*;
 pub use mfa::*;
+pub use organizational::*;
 pub use policy::*;
 pub use user::*;
