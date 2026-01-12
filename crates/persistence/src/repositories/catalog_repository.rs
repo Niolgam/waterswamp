@@ -1,4 +1,3 @@
-use crate::mappers::map_db_error;
 use domain::{
     errors::RepositoryError,
     models::catalog::*,
@@ -22,7 +21,7 @@ impl UnitOfMeasureRepository {
     }
 
     fn map_err(e: sqlx::Error) -> RepositoryError {
-        map_db_error(e)
+        RepositoryError::Database(e.to_string())
     }
 }
 
@@ -192,7 +191,7 @@ impl CatalogGroupRepository {
     }
 
     fn map_err(e: sqlx::Error) -> RepositoryError {
-        map_db_error(e)
+        RepositoryError::Database(e.to_string())
     }
 }
 
@@ -575,7 +574,7 @@ impl CatalogItemRepository {
     }
 
     fn map_err(e: sqlx::Error) -> RepositoryError {
-        map_db_error(e)
+        RepositoryError::Database(e.to_string())
     }
 }
 
@@ -909,7 +908,7 @@ impl UnitConversionRepository {
     }
 
     fn map_err(e: sqlx::Error) -> RepositoryError {
-        map_db_error(e)
+        RepositoryError::Database(e.to_string())
     }
 }
 

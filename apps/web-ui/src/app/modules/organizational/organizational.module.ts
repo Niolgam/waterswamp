@@ -11,6 +11,7 @@ import { UnitsTreeComponent } from './components/units-tree/units-tree.component
 import { SiorgSyncComponent } from './components/siorg-sync/siorg-sync.component';
 import { ConflictsListComponent } from './components/conflicts-list/conflicts-list.component';
 import { ConflictResolverComponent } from './components/conflict-resolver/conflict-resolver.component';
+import { StatsDashboardComponent } from './components/stats-dashboard/stats-dashboard.component';
 
 // Services
 import { OrganizationalService } from './services/organizational.service';
@@ -22,7 +23,8 @@ import { SyncService } from './services/sync.service';
     UnitsTreeComponent,
     SiorgSyncComponent,
     ConflictsListComponent,
-    ConflictResolverComponent
+    ConflictResolverComponent,
+    StatsDashboardComponent
   ],
   imports: [
     CommonModule,

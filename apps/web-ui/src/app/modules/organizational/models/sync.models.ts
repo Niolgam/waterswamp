@@ -113,3 +113,64 @@ export interface HistoryListFilters {
   limit: number;
   offset: number;
 }
+
+// ============================================================================
+// Statistics Models
+// ============================================================================
+
+export interface DetailedStats {
+  queue: QueueStatistics;
+  processing: ProcessingStatistics;
+  conflicts: ConflictStatistics;
+  history: HistoryStatistics;
+  last_updated: string;
+}
+
+export interface QueueStatistics {
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  conflicts: number;
+  skipped: number;
+  total: number;
+  pending_rate: number;
+  completion_rate: number;
+}
+
+export interface ProcessingStatistics {
+  last_24h: TimeBasedStats;
+  last_7d: TimeBasedStats;
+  last_30d: TimeBasedStats;
+}
+
+export interface TimeBasedStats {
+  completed: number;
+  failed: number;
+  conflicts: number;
+  success_rate: number;
+  avg_duration_ms: number;
+}
+
+export interface ConflictStatistics {
+  total_unresolved: number;
+  by_entity_type: Record<string, number>;
+  oldest_conflict_age_hours?: number;
+  avg_resolution_time_hours?: number;
+}
+
+export interface HistoryStatistics {
+  total_entries: number;
+  pending_reviews: number;
+  last_24h_changes: number;
+  by_change_type: Record<string, number>;
+}
+
+export interface HealthStatus {
+  status: string;
+  queue_size: number;
+  conflicts_count: number;
+  failures_count: number;
+  message: string;
+  timestamp: string;
+}

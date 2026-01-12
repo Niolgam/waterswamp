@@ -8,7 +8,9 @@ domain = { path = "../domain" }
 
 sqlx = { workspace = true }
 uuid = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 rust_decimal = { workspace = true }
+tracing = { workspace = true }

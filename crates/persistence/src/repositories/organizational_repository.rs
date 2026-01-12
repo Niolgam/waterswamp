@@ -1,8 +1,9 @@
 use domain::models::organizational::*;
+use domain::errors::RepositoryError;
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
-    RepositoryError, SystemSettingsRepositoryPort,
+    SystemSettingsRepositoryPort,
 };
 use sqlx::PgPool;
 use std::sync::Arc;

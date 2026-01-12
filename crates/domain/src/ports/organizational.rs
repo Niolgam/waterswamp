@@ -1,5 +1,5 @@
 use crate::models::organizational::*;
-use crate::ports::RepositoryError;
+use crate::errors::RepositoryError;
 use async_trait::async_trait;
 use uuid::Uuid;
 

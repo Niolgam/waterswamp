@@ -5,6 +5,7 @@ import { UnitsTreeComponent } from './components/units-tree/units-tree.component
 import { SiorgSyncComponent } from './components/siorg-sync/siorg-sync.component';
 import { ConflictsListComponent } from './components/conflicts-list/conflicts-list.component';
 import { ConflictResolverComponent } from './components/conflict-resolver/conflict-resolver.component';
+import { StatsDashboardComponent } from './components/stats-dashboard/stats-dashboard.component';
 
 const routes: Routes = [
   {
@@ -36,6 +37,11 @@ const routes: Routes = [
     path: 'conflicts/:id',
     component: ConflictResolverComponent,
     data: { title: 'Resolver Conflito' }
+  },
+  {
+    path: 'stats',
+    component: StatsDashboardComponent,
+    data: { title: 'Estatísticas de Sincronização' }
   }
 ];
 

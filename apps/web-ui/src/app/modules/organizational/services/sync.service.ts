@@ -13,6 +13,8 @@ import {
   HistoryListFilters,
   SyncStatus,
   SiorgEntityType,
+  DetailedStats,
+  HealthStatus,
 } from '../models/sync.models';
 
 @Injectable({
@@ -123,5 +125,17 @@ export class SyncService {
 
   reviewHistoryItem(id: string, payload: ReviewHistoryPayload): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/history/${id}/review`, payload);
+  }
+
+  // ========================================================================
+  // Statistics
+  // ========================================================================
+
+  getDetailedStats(): Observable<DetailedStats> {
+    return this.http.get<DetailedStats>(`${this.baseUrl}/stats/detailed`);
+  }
+
+  getHealthStatus(): Observable<HealthStatus> {
+    return this.http.get<HealthStatus>(`${this.baseUrl}/stats/health`);
   }
 }

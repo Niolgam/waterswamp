@@ -1,5 +1,6 @@
 pub mod contracts;
 pub mod handlers;
+pub mod stats_handlers;
 pub mod sync_handlers;
 
 use crate::infra::state::AppState;
@@ -109,6 +110,11 @@ pub fn router() -> Router<AppState> {
             get(sync_handlers::get_entity_history),
         );
 
+    // Statistics routes
+    let stats_router = Router::new()
+        .route("/detailed", get(stats_handlers::get_detailed_stats))
+        .route("/health", get(stats_handlers::get_health_status));
+
     Router::new()
         .nest("/settings", settings_router)
         .nest("/organizations", organizations_router)
@@ -119,4 +125,5 @@ pub fn router() -> Router<AppState> {
         .nest("/sync/queue", queue_router)
         .nest("/sync/conflicts", conflicts_router)
         .nest("/sync/history", history_router)
+        .nest("/sync/stats", stats_router)
 }

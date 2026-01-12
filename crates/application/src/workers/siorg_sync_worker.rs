@@ -1,4 +1,5 @@
 use crate::external::{SiorgClient, SiorgSyncService};
+use crate::metrics;
 use domain::models::organizational::*;
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
@@ -6,7 +7,7 @@ use domain::ports::{
     SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort,
 };
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -110,6 +111,7 @@ impl SiorgSyncWorkerCore {
 
     /// Process next batch of pending items from queue
     pub async fn process_next_batch(&self) -> Result<ProcessingStats, String> {
+        let batch_start = Instant::now();
         let mut stats = ProcessingStats::default();
 
         // Poll next batch with FOR UPDATE SKIP LOCKED
@@ -125,6 +127,8 @@ impl SiorgSyncWorkerCore {
         }
 
         info!("Processing {} items from sync queue", items.len());
+
+        let batch_size = items.len();
 
         // Process each item
         for item in items {
@@ -181,6 +185,10 @@ impl SiorgSyncWorkerCore {
             "Batch complete: {} processed, {} succeeded, {} failed, {} conflicts, {} skipped",
             stats.processed, stats.succeeded, stats.failed, stats.conflicts, stats.skipped
         );
+
+        // Record batch metrics
+        let batch_duration = batch_start.elapsed().as_secs_f64();
+        metrics::record_worker_batch("default", batch_size, batch_duration);
 
         Ok(stats)
     }
