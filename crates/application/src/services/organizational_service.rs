@@ -32,7 +32,7 @@ impl From<RepositoryError> for ServiceError {
         match err {
             RepositoryError::NotFound => ServiceError::NotFound("Resource not found".to_string()),
             RepositoryError::Duplicate(msg) => ServiceError::Conflict(msg),
-            RepositoryError::Database(msg) => ServiceError::Repository(RepositoryError::Database(msg)),
+            RepositoryError::Database(msg) => ServiceError::Repository(msg),
         }
     }
 }
@@ -159,21 +159,21 @@ impl OrganizationService {
     }
 
     pub async fn get(&self, id: Uuid) -> Result<OrganizationDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Organization {} not found", id)))
     }
 
     pub async fn get_by_cnpj(&self, cnpj: &str) -> Result<OrganizationDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_cnpj(cnpj)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Organization with CNPJ {} not found", cnpj)))
     }
 
     pub async fn get_by_siorg_code(&self, siorg_code: i32) -> Result<OrganizationDto, ServiceError> {
-        self.repo
+        self.repository
             .find_by_siorg_code(siorg_code)
             .await?
             .ok_or_else(|| {
@@ -185,7 +185,7 @@ impl OrganizationService {
     }
 
     pub async fn get_main(&self) -> Result<OrganizationDto, ServiceError> {
-        self.repo
+        self.repository
             .find_main()
             .await?
             .ok_or_else(|| ServiceError::NotFound("Main organization not found".to_string()))
@@ -197,7 +197,7 @@ impl OrganizationService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<OrganizationDto>, i64), ServiceError> {
-        Ok(self.repo.list(is_active, limit, offset).await?)
+        Ok(self.repository.list(is_active, limit, offset).await?)
     }
 
     pub async fn create(
@@ -227,7 +227,7 @@ impl OrganizationService {
             )));
         }
 
-        Ok(self.repo.create(payload).await?)
+        Ok(self.repository.create(payload).await?)
     }
 
     pub async fn update(
@@ -238,11 +238,11 @@ impl OrganizationService {
         // Ensure organization exists
         let _ = self.get(id).await?;
 
-        Ok(self.repo.update(id, payload).await?)
+        Ok(self.repository.update(id, payload).await?)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
-        Ok(self.repo.delete(id).await?)
+        Ok(self.repository.delete(id).await?)
     }
 }
 
@@ -291,7 +291,7 @@ impl OrganizationalUnitCategoryService {
         payload: CreateOrganizationalUnitCategoryPayload,
     ) -> Result<OrganizationalUnitCategoryDto, ServiceError> {
         // Check if name already exists
-        if self.repository.find_by_name(&payload.name).await?.is_some() {
+        if self.repo.find_by_name(&payload.name).await?.is_some() {
             return Err(ServiceError::Conflict(format!(
                 "Category '{}' already exists",
                 payload.name
@@ -300,7 +300,7 @@ impl OrganizationalUnitCategoryService {
 
         // Check if SIORG code already exists (if provided)
         if let Some(siorg_code) = payload.siorg_code {
-            if self.repository.find_by_siorg_code(siorg_code).await?.is_some() {
+            if self.repo.find_by_siorg_code(siorg_code).await?.is_some() {
                 return Err(ServiceError::Conflict(format!(
                     "SIORG code {} already exists",
                     siorg_code
@@ -321,7 +321,7 @@ impl OrganizationalUnitCategoryService {
 
         // If updating name, check uniqueness
         if let Some(ref new_name) = payload.name {
-            if let Some(existing) = self.repository.find_by_name(new_name).await? {
+            if let Some(existing) = self.repo.find_by_name(new_name).await? {
                 if existing.id != id {
                     return Err(ServiceError::Conflict(format!(
                         "Category '{}' already exists",
@@ -381,7 +381,7 @@ impl OrganizationalUnitTypeService {
         payload: CreateOrganizationalUnitTypePayload,
     ) -> Result<OrganizationalUnitTypeDto, ServiceError> {
         // Check if code already exists
-        if self.repository.find_by_code(&payload.code).await?.is_some() {
+        if self.repo.find_by_code(&payload.code).await?.is_some() {
             return Err(ServiceError::Conflict(format!(
                 "Unit type code '{}' already exists",
                 payload.code
@@ -390,7 +390,7 @@ impl OrganizationalUnitTypeService {
 
         // Check if SIORG code already exists (if provided)
         if let Some(siorg_code) = payload.siorg_code {
-            if self.repository.find_by_siorg_code(siorg_code).await?.is_some() {
+            if self.repo.find_by_siorg_code(siorg_code).await?.is_some() {
                 return Err(ServiceError::Conflict(format!(
                     "SIORG code {} already exists",
                     siorg_code
