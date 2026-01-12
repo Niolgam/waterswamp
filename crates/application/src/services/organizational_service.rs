@@ -31,8 +31,8 @@ impl From<RepositoryError> for ServiceError {
     fn from(err: RepositoryError) -> Self {
         match err {
             RepositoryError::NotFound => ServiceError::NotFound("Resource not found".to_string()),
-            RepositoryError::Database(msg) => ServiceError::Repository(msg),
-            RepositoryError::Conflict(msg) => ServiceError::Conflict(msg),
+            RepositoryError::Duplicate(msg) => ServiceError::Conflict(msg),
+            RepositoryError::Database(msg) => ServiceError::Repository(RepositoryError::Database(msg)),
         }
     }
 }
@@ -68,7 +68,7 @@ impl SystemSettingsService {
     }
 
     pub async fn get(&self, key: &str) -> Result<SystemSettingDto, ServiceError> {
-        self.repository
+        self.repo
             .get(key)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Setting '{}' not found", key)))
@@ -80,7 +80,7 @@ impl SystemSettingsService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<SystemSettingDto>, i64), ServiceError> {
-        Ok(self.repository.list(category, limit, offset).await?)
+        Ok(self.repo.list(category, limit, offset).await?)
     }
 
     pub async fn create(
@@ -94,7 +94,7 @@ impl SystemSettingsService {
             ));
         }
 
-        Ok(self.repository.create(payload).await?)
+        Ok(self.repo.create(payload).await?)
     }
 
     pub async fn update(
@@ -106,18 +106,18 @@ impl SystemSettingsService {
         // Ensure setting exists
         let _ = self.get(key).await?;
 
-        Ok(self.repository.update(key, payload, updated_by).await?)
+        Ok(self.repo.update(key, payload, updated_by).await?)
     }
 
     pub async fn delete(&self, key: &str) -> Result<(), ServiceError> {
-        Ok(self.repository.delete(key).await?)
+        Ok(self.repo.delete(key).await?)
     }
 
     pub async fn get_value<T>(&self, key: &str) -> Result<T, ServiceError>
     where
         T: serde::de::DeserializeOwned,
     {
-        let setting = self.repository
+        let setting = self.repo
             .get(key)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Setting '{}' not found", key)))?;
@@ -159,21 +159,21 @@ impl OrganizationService {
     }
 
     pub async fn get(&self, id: Uuid) -> Result<OrganizationDto, ServiceError> {
-        self.repository
+        self.repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Organization {} not found", id)))
     }
 
     pub async fn get_by_cnpj(&self, cnpj: &str) -> Result<OrganizationDto, ServiceError> {
-        self.repository
+        self.repo
             .find_by_cnpj(cnpj)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Organization with CNPJ {} not found", cnpj)))
     }
 
     pub async fn get_by_siorg_code(&self, siorg_code: i32) -> Result<OrganizationDto, ServiceError> {
-        self.repository
+        self.repo
             .find_by_siorg_code(siorg_code)
             .await?
             .ok_or_else(|| {
@@ -185,7 +185,7 @@ impl OrganizationService {
     }
 
     pub async fn get_main(&self) -> Result<OrganizationDto, ServiceError> {
-        self.repository
+        self.repo
             .find_main()
             .await?
             .ok_or_else(|| ServiceError::NotFound("Main organization not found".to_string()))
@@ -197,7 +197,7 @@ impl OrganizationService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<OrganizationDto>, i64), ServiceError> {
-        Ok(self.repository.list(is_active, limit, offset).await?)
+        Ok(self.repo.list(is_active, limit, offset).await?)
     }
 
     pub async fn create(
@@ -227,7 +227,7 @@ impl OrganizationService {
             )));
         }
 
-        Ok(self.repository.create(payload).await?)
+        Ok(self.repo.create(payload).await?)
     }
 
     pub async fn update(
@@ -238,11 +238,11 @@ impl OrganizationService {
         // Ensure organization exists
         let _ = self.get(id).await?;
 
-        Ok(self.repository.update(id, payload).await?)
+        Ok(self.repo.update(id, payload).await?)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
-        Ok(self.repository.delete(id).await?)
+        Ok(self.repo.delete(id).await?)
     }
 }
 
@@ -260,7 +260,7 @@ impl OrganizationalUnitCategoryService {
     }
 
     pub async fn get(&self, id: Uuid) -> Result<OrganizationalUnitCategoryDto, ServiceError> {
-        self.repository
+        self.repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Category {} not found", id)))
@@ -270,7 +270,7 @@ impl OrganizationalUnitCategoryService {
         &self,
         name: &str,
     ) -> Result<OrganizationalUnitCategoryDto, ServiceError> {
-        self.repository
+        self.repo
             .find_by_name(name)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Category '{}' not found", name)))
@@ -283,7 +283,7 @@ impl OrganizationalUnitCategoryService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<OrganizationalUnitCategoryDto>, i64), ServiceError> {
-        Ok(self.repository.list(is_active, is_siorg_managed, limit, offset).await?)
+        Ok(self.repo.list(is_active, is_siorg_managed, limit, offset).await?)
     }
 
     pub async fn create(
@@ -308,7 +308,7 @@ impl OrganizationalUnitCategoryService {
             }
         }
 
-        Ok(self.repository.create(payload).await?)
+        Ok(self.repo.create(payload).await?)
     }
 
     pub async fn update(
@@ -331,11 +331,11 @@ impl OrganizationalUnitCategoryService {
             }
         }
 
-        Ok(self.repository.update(id, payload).await?)
+        Ok(self.repo.update(id, payload).await?)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
-        Ok(self.repository.delete(id).await?)
+        Ok(self.repo.delete(id).await?)
     }
 }
 
@@ -353,14 +353,14 @@ impl OrganizationalUnitTypeService {
     }
 
     pub async fn get(&self, id: Uuid) -> Result<OrganizationalUnitTypeDto, ServiceError> {
-        self.repository
+        self.repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Unit type {} not found", id)))
     }
 
     pub async fn get_by_code(&self, code: &str) -> Result<OrganizationalUnitTypeDto, ServiceError> {
-        self.repository
+        self.repo
             .find_by_code(code)
             .await?
             .ok_or_else(|| ServiceError::NotFound(format!("Unit type '{}' not found", code)))
@@ -373,7 +373,7 @@ impl OrganizationalUnitTypeService {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<OrganizationalUnitTypeDto>, i64), ServiceError> {
-        Ok(self.repository.list(is_active, is_siorg_managed, limit, offset).await?)
+        Ok(self.repo.list(is_active, is_siorg_managed, limit, offset).await?)
     }
 
     pub async fn create(
@@ -398,7 +398,7 @@ impl OrganizationalUnitTypeService {
             }
         }
 
-        Ok(self.repository.create(payload).await?)
+        Ok(self.repo.create(payload).await?)
     }
 
     pub async fn update(
@@ -409,11 +409,11 @@ impl OrganizationalUnitTypeService {
         // Ensure type exists
         let _ = self.get(id).await?;
 
-        Ok(self.repository.update(id, payload).await?)
+        Ok(self.repo.update(id, payload).await?)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
-        Ok(self.repository.delete(id).await?)
+        Ok(self.repo.delete(id).await?)
     }
 }
 
@@ -491,7 +491,7 @@ impl OrganizationalUnitService {
         offset: i64,
     ) -> Result<(Vec<OrganizationalUnitWithDetailsDto>, i64), ServiceError> {
         Ok(self
-            .unit_repo
+            .unit_repository
             .list(
                 organization_id,
                 parent_id,
@@ -573,7 +573,7 @@ impl OrganizationalUnitService {
 
         // Check if allow_custom_units is enabled (if no SIORG code)
         if payload.siorg_code.is_none() {
-            let allow_custom: bool = if let Some(setting) = self.settings_repo.get("units.allow_custom_units").await? {
+            let allow_custom: bool = if let Some(setting) = self.settings_repository.get("units.allow_custom_units").await? {
                 serde_json::from_value(setting.value).unwrap_or(true)
             } else {
                 true

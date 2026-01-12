@@ -135,13 +135,13 @@ impl ConflictResolutionService {
         })?;
 
         // Compare field by field
-        let fields = self.compare_unit_fields(&local_unit.unit, &siorg_unit);
+        let fields = self.compare_unit_fields(&local_unit, &siorg_unit);
 
         Ok(ConflictDetail {
             queue_item,
             entity_type: SiorgEntityType::Unit,
             fields,
-            local_entity_name: Some(local_unit.unit.name.clone()),
+            local_entity_name: Some(local_unit.name.clone()),
             siorg_entity_name: Some(siorg_unit.nome.clone()),
         })
     }
@@ -239,27 +239,7 @@ impl ConflictResolutionService {
             metadata: None,
         });
 
-        // Formal name
-        let formal_conflict = local.formal_name.as_deref() != siorg.nome_formal.as_deref();
-        fields.push(ConflictDiff {
-            field: "formal_name".to_string(),
-            local_value: local.formal_name.as_ref().map(|v| json!(v)),
-            siorg_value: siorg.nome_formal.as_ref().map(|v| json!(v)),
-            field_type: "string".to_string(),
-            has_conflict: formal_conflict,
-            metadata: None,
-        });
-
-        // Acronym
-        let acronym_conflict = local.acronym.as_deref() != siorg.sigla.as_deref();
-        fields.push(ConflictDiff {
-            field: "acronym".to_string(),
-            local_value: local.acronym.as_ref().map(|v| json!(v)),
-            siorg_value: siorg.sigla.as_ref().map(|v| json!(v)),
-            field_type: "string".to_string(),
-            has_conflict: acronym_conflict,
-            metadata: None,
-        });
+        // Note: formal_name and acronym not available in SIORG API data
 
         // Active status
         let active_conflict = local.is_active != siorg.ativo;
@@ -273,7 +253,7 @@ impl ConflictResolutionService {
         });
 
         // Parent (hierarchy) - this is complex and requires metadata
-        if let Some(siorg_parent) = siorg.codigo_pai {
+        if let Some(siorg_parent) = siorg.codigo_unidade_pai {
             let parent_conflict = true; // Always show as potential conflict
             fields.push(ConflictDiff {
                 field: "parent".to_string(),

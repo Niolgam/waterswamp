@@ -223,7 +223,7 @@ impl SiorgSyncService {
             internal_type,
             name: siorg_unit.nome.clone(),
             formal_name: None,
-            acronym: siorg_unit.sigla.clone(),
+            acronym: None,
             siorg_code: Some(siorg_unit.codigo_siorg),
             activity_area,
             contact_info: ContactInfo::default(),
@@ -253,7 +253,7 @@ impl SiorgSyncService {
         };
 
         let payload = UpdateOrganizationalUnitPayload {
-            parent_id: Some(parent_id),
+            parent_id,
             category_id: None,
             unit_type_id: None,
             internal_type: None,
@@ -304,6 +304,8 @@ impl SiorgSyncService {
                 .await
                 .map_err(|e| SyncError::ApiError(e.to_string()))?;
 
+            let data_len = response.data.len();
+
             for siorg_unit in response.data {
                 summary.total_processed += 1;
 
@@ -329,7 +331,7 @@ impl SiorgSyncService {
             }
 
             // Check if there are more pages
-            if response.data.len() < page_size as usize {
+            if data_len < page_size as usize {
                 break;
             }
 
