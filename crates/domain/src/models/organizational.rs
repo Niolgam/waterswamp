@@ -367,3 +367,167 @@ impl Default for ContactInfo {
         }
     }
 }
+
+// ============================================================================
+// SIORG Sync Queue
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SiorgSyncQueueItem {
+    pub id: Uuid,
+    pub entity_type: SiorgEntityType,
+    pub siorg_code: i32,
+    pub local_id: Option<Uuid>,
+    pub operation: SiorgChangeType,
+    pub priority: i32,
+    #[schema(value_type = Object)]
+    pub payload: serde_json::Value,
+    #[schema(value_type = Option<Object>)]
+    pub detected_changes: Option<serde_json::Value>,
+    pub status: SyncStatus,
+    pub attempts: i32,
+    pub max_attempts: i32,
+    pub last_attempt_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    #[schema(value_type = Option<Object>)]
+    pub error_details: Option<serde_json::Value>,
+    pub processed_at: Option<DateTime<Utc>>,
+    pub processed_by: Option<Uuid>,
+    pub resolution_notes: Option<String>,
+    pub scheduled_for: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateSyncQueueItemPayload {
+    pub entity_type: SiorgEntityType,
+    pub siorg_code: i32,
+    pub local_id: Option<Uuid>,
+    pub operation: SiorgChangeType,
+    #[serde(default = "default_priority")]
+    pub priority: i32,
+    #[schema(value_type = Object)]
+    pub payload: serde_json::Value,
+    #[schema(value_type = Option<Object>)]
+    pub detected_changes: Option<serde_json::Value>,
+    pub scheduled_for: Option<DateTime<Utc>>,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateSyncQueueItemPayload {
+    pub status: Option<SyncStatus>,
+    pub last_error: Option<String>,
+    #[schema(value_type = Option<Object>)]
+    pub error_details: Option<serde_json::Value>,
+    pub resolution_notes: Option<String>,
+}
+
+fn default_priority() -> i32 {
+    5
+}
+
+// ============================================================================
+// SIORG History
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SiorgHistoryItem {
+    pub id: Uuid,
+    pub entity_type: SiorgEntityType,
+    pub siorg_code: i32,
+    pub local_id: Option<Uuid>,
+    pub change_type: SiorgChangeType,
+    #[schema(value_type = Option<Object>)]
+    pub previous_data: Option<serde_json::Value>,
+    #[schema(value_type = Option<Object>)]
+    pub new_data: Option<serde_json::Value>,
+    pub affected_fields: Vec<String>,
+    pub siorg_version: Option<String>,
+    pub source: String,
+    pub sync_queue_id: Option<Uuid>,
+    pub requires_review: bool,
+    pub reviewed_at: Option<DateTime<Utc>>,
+    pub reviewed_by: Option<Uuid>,
+    pub review_notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub created_by: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateHistoryItemPayload {
+    pub entity_type: SiorgEntityType,
+    pub siorg_code: i32,
+    pub local_id: Option<Uuid>,
+    pub change_type: SiorgChangeType,
+    #[schema(value_type = Option<Object>)]
+    pub previous_data: Option<serde_json::Value>,
+    #[schema(value_type = Option<Object>)]
+    pub new_data: Option<serde_json::Value>,
+    pub affected_fields: Vec<String>,
+    pub siorg_version: Option<String>,
+    #[serde(default = "default_source")]
+    pub source: String,
+    pub sync_queue_id: Option<Uuid>,
+    #[serde(default)]
+    pub requires_review: bool,
+    pub created_by: Option<Uuid>,
+}
+
+fn default_source() -> String {
+    "SYNC".to_string()
+}
+
+// ============================================================================
+// Conflict Resolution
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ConflictDiff {
+    pub field: String,
+    #[schema(value_type = Option<Object>)]
+    pub local_value: Option<serde_json::Value>,
+    #[schema(value_type = Option<Object>)]
+    pub siorg_value: Option<serde_json::Value>,
+    pub field_type: String,
+    pub has_conflict: bool,
+    #[schema(value_type = Option<Object>)]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ConflictDetail {
+    pub queue_item: SiorgSyncQueueItem,
+    pub entity_type: SiorgEntityType,
+    pub fields: Vec<ConflictDiff>,
+    pub local_entity_name: Option<String>,
+    pub siorg_entity_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub enum ResolutionAction {
+    #[serde(rename = "ACCEPT_SIORG")]
+    AcceptSiorg,
+    #[serde(rename = "KEEP_LOCAL")]
+    KeepLocal,
+    #[serde(rename = "MERGE")]
+    Merge,
+    #[serde(rename = "SKIP")]
+    Skip,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub enum FieldResolution {
+    #[serde(rename = "LOCAL")]
+    Local,
+    #[serde(rename = "SIORG")]
+    Siorg,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ResolveConflictPayload {
+    pub action: ResolutionAction,
+    pub field_resolutions: Option<std::collections::HashMap<String, FieldResolution>>,
+    pub notes: Option<String>,
+}

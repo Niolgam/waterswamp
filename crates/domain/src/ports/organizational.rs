@@ -161,3 +161,115 @@ pub trait OrganizationalUnitRepositoryPort: Send + Sync {
 
     async fn activate(&self, id: Uuid) -> Result<(), RepositoryError>;
 }
+
+// ============================================================================
+// SIORG Sync Queue Repository Port
+// ============================================================================
+
+#[async_trait]
+pub trait SiorgSyncQueueRepositoryPort: Send + Sync {
+    /// Poll next pending items from queue (with FOR UPDATE SKIP LOCKED)
+    async fn poll_next_batch(&self, batch_size: i32) -> Result<Vec<SiorgSyncQueueItem>, RepositoryError>;
+
+    /// Get queue item by ID
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgSyncQueueItem>, RepositoryError>;
+
+    /// List queue items with filters
+    async fn list(
+        &self,
+        status: Option<SyncStatus>,
+        entity_type: Option<SiorgEntityType>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<SiorgSyncQueueItem>, RepositoryError>;
+
+    /// Count items by status
+    async fn count_by_status(&self, status: SyncStatus) -> Result<i64, RepositoryError>;
+
+    /// Get conflicts (items with CONFLICT status)
+    async fn get_conflicts(&self, limit: i64, offset: i64) -> Result<Vec<SiorgSyncQueueItem>, RepositoryError>;
+
+    /// Create queue item
+    async fn create(&self, payload: CreateSyncQueueItemPayload) -> Result<SiorgSyncQueueItem, RepositoryError>;
+
+    /// Update queue item status
+    async fn update_status(
+        &self,
+        id: Uuid,
+        status: SyncStatus,
+        error: Option<String>,
+        error_details: Option<serde_json::Value>,
+    ) -> Result<(), RepositoryError>;
+
+    /// Mark as processing (sets status and last_attempt_at)
+    async fn mark_processing(&self, id: Uuid) -> Result<(), RepositoryError>;
+
+    /// Mark as completed
+    async fn mark_completed(&self, id: Uuid, processed_by: Option<Uuid>) -> Result<(), RepositoryError>;
+
+    /// Mark as failed (increments attempts)
+    async fn mark_failed(&self, id: Uuid, error: String, error_details: Option<serde_json::Value>) -> Result<(), RepositoryError>;
+
+    /// Mark as conflict
+    async fn mark_conflict(&self, id: Uuid, detected_changes: serde_json::Value) -> Result<(), RepositoryError>;
+
+    /// Resolve conflict
+    async fn resolve(
+        &self,
+        id: Uuid,
+        resolution_notes: String,
+        processed_by: Option<Uuid>,
+    ) -> Result<(), RepositoryError>;
+
+    /// Delete queue item
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
+
+    /// Clean expired items
+    async fn clean_expired(&self) -> Result<i64, RepositoryError>;
+}
+
+// ============================================================================
+// SIORG History Repository Port
+// ============================================================================
+
+#[async_trait]
+pub trait SiorgHistoryRepositoryPort: Send + Sync {
+    /// Get history item by ID
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgHistoryItem>, RepositoryError>;
+
+    /// List history with filters
+    async fn list(
+        &self,
+        entity_type: Option<SiorgEntityType>,
+        siorg_code: Option<i32>,
+        change_type: Option<SiorgChangeType>,
+        requires_review: Option<bool>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<SiorgHistoryItem>, RepositoryError>;
+
+    /// Get history for a specific entity
+    async fn get_entity_history(
+        &self,
+        entity_type: SiorgEntityType,
+        siorg_code: i32,
+        limit: i64,
+    ) -> Result<Vec<SiorgHistoryItem>, RepositoryError>;
+
+    /// Get pending reviews
+    async fn get_pending_reviews(&self, limit: i64, offset: i64) -> Result<Vec<SiorgHistoryItem>, RepositoryError>;
+
+    /// Create history entry
+    async fn create(&self, payload: CreateHistoryItemPayload) -> Result<SiorgHistoryItem, RepositoryError>;
+
+    /// Mark as reviewed
+    async fn mark_reviewed(
+        &self,
+        id: Uuid,
+        reviewed_by: Uuid,
+        notes: Option<String>,
+    ) -> Result<(), RepositoryError>;
+
+    /// Count history entries
+    async fn count(&self, entity_type: Option<SiorgEntityType>) -> Result<i64, RepositoryError>;
+}

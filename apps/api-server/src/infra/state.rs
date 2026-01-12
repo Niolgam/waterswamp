@@ -15,7 +15,8 @@ use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use domain::ports::{
     BuildingRepositoryPort, BuildingTypeRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
-    SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort, SpaceRepositoryPort,
+    SpaceTypeRepositoryPort,
 };
 use email_service::EmailSender;
 use moka::future::Cache;
@@ -47,6 +48,8 @@ pub struct AppState {
     pub organizational_unit_type_service: Arc<OrganizationalUnitTypeService>,
     pub organizational_unit_service: Arc<OrganizationalUnitService>,
     pub siorg_sync_service: Arc<SiorgSyncService>,
+    pub siorg_sync_queue_repository: Arc<dyn SiorgSyncQueueRepositoryPort>,
+    pub siorg_history_repository: Arc<dyn SiorgHistoryRepositoryPort>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,

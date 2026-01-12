@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tracing::info;
+use tracing::{error, info};
 
 // Imports de Portas e Serviços
 use application::services::{
@@ -24,7 +24,8 @@ use domain::ports::{
     BuildingTypeRepositoryPort, CatalogGroupRepositoryPort, CatalogItemRepositoryPort,
     CityRepositoryPort, CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
     MfaRepositoryPort, OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
-    OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort, SiteRepositoryPort,
+    OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
+    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort, SiteRepositoryPort,
     SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
     SystemSettingsRepositoryPort, UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort,
     UserRepositoryPort,
@@ -170,6 +171,12 @@ pub fn build_application_state(
     let organizational_unit_repo_port: Arc<dyn OrganizationalUnitRepositoryPort> =
         Arc::new(OrganizationalUnitRepository::new(pool_auth.clone()));
 
+    // SIORG Sync repositories
+    let siorg_sync_queue_repo_port: Arc<dyn SiorgSyncQueueRepositoryPort> =
+        Arc::new(persistence::repositories::siorg_sync_repository::SiorgSyncQueueRepository::new(pool_auth.clone()));
+    let siorg_history_repo_port: Arc<dyn SiorgHistoryRepositoryPort> =
+        Arc::new(persistence::repositories::siorg_sync_repository::SiorgHistoryRepository::new(pool_auth.clone()));
+
     // Organizational services
     let system_settings_service = Arc::new(SystemSettingsService::new(
         system_settings_repo_port.clone(),
@@ -235,6 +242,8 @@ pub fn build_application_state(
         organizational_unit_type_service,
         organizational_unit_service,
         siorg_sync_service,
+        siorg_sync_queue_repository: siorg_sync_queue_repo_port,
+        siorg_history_repository: siorg_history_repo_port,
         config,
 
         site_repository: site_repo_port,
@@ -294,14 +303,65 @@ pub async fn run(addr: SocketAddr) -> Result<()> {
         Arc::new(EmailService::new(email_config).context("Falha ao criar serviço de email")?);
 
     let app_state = build_application_state(
-        config_arc,
-        pool_auth,
+        config_arc.clone(),
+        pool_auth.clone(),
         pool_logs,
         enforcer,
         jwt_service,
         email_service.clone(),
         email_service.clone(),
     );
+
+    // Optional embedded SIORG sync worker
+    let enable_worker = std::env::var("ENABLE_EMBEDDED_WORKER")
+        .unwrap_or_else(|_| "false".to_string())
+        .parse::<bool>()
+        .unwrap_or(false);
+
+    if enable_worker {
+        info!("🔄 Inicializando worker embutido de sincronização SIORG...");
+
+        // Clone necessary dependencies for worker
+        let sync_queue_repo = app_state.siorg_sync_queue_repository.clone();
+        let history_repo = app_state.siorg_history_repository.clone();
+        let sync_service = app_state.siorg_sync_service.clone();
+
+        // Create worker config
+        let worker_config = application::workers::siorg_sync_worker::WorkerConfig {
+            batch_size: std::env::var("WORKER_BATCH_SIZE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10),
+            poll_interval_secs: std::env::var("WORKER_POLL_INTERVAL_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(5),
+            max_retries: 3,
+            retry_base_delay_ms: 1000,
+            retry_max_delay_ms: 60000,
+            enable_cleanup: true,
+            cleanup_interval_secs: 3600,
+        };
+
+        let worker = application::workers::SiorgSyncWorkerCore::new(
+            worker_config,
+            sync_queue_repo,
+            history_repo,
+            sync_service,
+        );
+
+        // Spawn worker task
+        tokio::spawn(async move {
+            info!("Worker de sincronização iniciado");
+            if let Err(e) = worker.run_forever().await {
+                error!("Worker de sincronização falhou: {}", e);
+            }
+        });
+
+        info!("✅ Worker embutido iniciado com sucesso");
+    } else {
+        info!("⏭️  Worker embutido desabilitado (ENABLE_EMBEDDED_WORKER=false)");
+    }
 
     info!("📡 Construindo rotas...");
     let app = routes::build(app_state);
