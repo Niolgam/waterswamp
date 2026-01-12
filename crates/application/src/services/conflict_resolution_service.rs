@@ -1,4 +1,4 @@
-use crate::external::{SiorgOrganization, SiorgUnit};
+use crate::external::siorg_client::{SiorgOrganization, SiorgUnit};
 use domain::errors::RepositoryError;
 use domain::models::organizational::*;
 use domain::ports::{

@@ -1,8 +1,9 @@
+use domain::errors::RepositoryError;
 use domain::models::organizational::*;
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
-    RepositoryError, SystemSettingsRepositoryPort,
+    SystemSettingsRepositoryPort,
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -116,10 +117,15 @@ impl SystemSettingsService {
     where
         T: serde::de::DeserializeOwned,
     {
-        self.repository
-            .get_value::<T>(key)
+        let setting = self.repository
+            .get(key)
             .await?
-            .ok_or_else(|| ServiceError::NotFound(format!("Setting '{}' not found", key)))
+            .ok_or_else(|| ServiceError::NotFound(format!("Setting '{}' not found", key)))?;
+
+        let value: T = serde_json::from_value(setting.value)
+            .map_err(|e| ServiceError::BadRequest(format!("Failed to deserialize value: {}", e)))?;
+
+        Ok(value)
     }
 
     pub async fn get_bool(&self, key: &str) -> Result<bool, ServiceError> {
@@ -567,11 +573,11 @@ impl OrganizationalUnitService {
 
         // Check if allow_custom_units is enabled (if no SIORG code)
         if payload.siorg_code.is_none() {
-            let allow_custom: bool = self
-                .settings_repo
-                .get_value("units.allow_custom_units")
-                .await?
-                .unwrap_or(true);
+            let allow_custom: bool = if let Some(setting) = self.settings_repo.get("units.allow_custom_units").await? {
+                serde_json::from_value(setting.value).unwrap_or(true)
+            } else {
+                true
+            };
 
             if !allow_custom {
                 return Err(ServiceError::BadRequest(

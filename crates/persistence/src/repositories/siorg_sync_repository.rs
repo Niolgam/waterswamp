@@ -73,7 +73,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to poll next batch from sync queue: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -113,7 +113,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to find sync queue item by id {}: {}", id, e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -165,7 +165,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to list sync queue items: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -184,7 +184,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to count sync queue items by status: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -231,7 +231,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to get conflicts: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -287,7 +287,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to create sync queue item: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -317,7 +317,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to update sync queue item status: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -338,7 +338,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to mark sync queue item as processing: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -364,7 +364,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to mark sync queue item as completed: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -404,7 +404,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to mark sync queue item as failed: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -429,7 +429,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to mark sync queue item as conflict: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -458,7 +458,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to resolve sync queue item: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -476,7 +476,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to delete sync queue item: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -494,7 +494,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         .await
         .map_err(|e| {
             error!("Failed to clean expired sync queue items: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result.rows_affected() as i64)
@@ -548,7 +548,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         .await
         .map_err(|e| {
             error!("Failed to find history item by id {}: {}", id, e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -603,7 +603,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         .await
         .map_err(|e| {
             error!("Failed to list history items: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -652,7 +652,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
                 "Failed to get entity history for {:?} code {}: {}",
                 entity_type, siorg_code, e
             );
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -696,7 +696,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         .await
         .map_err(|e| {
             error!("Failed to get pending reviews: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -752,7 +752,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         .await
         .map_err(|e| {
             error!("Failed to create history item: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)
@@ -780,7 +780,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         .await
         .map_err(|e| {
             error!("Failed to mark history item as reviewed: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -802,7 +802,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         .await
         .map_err(|e| {
             error!("Failed to count history items: {}", e);
-            RepositoryError::DatabaseError(e.to_string())
+            RepositoryError::Database(e.to_string())
         })?;
 
         Ok(result)

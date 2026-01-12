@@ -167,22 +167,6 @@ impl SystemSettingsRepositoryPort for SystemSettingsRepository {
 
         Ok(())
     }
-
-    async fn get_value<T>(&self, key: &str) -> Result<Option<T>, RepositoryError>
-    where
-        T: serde::de::DeserializeOwned,
-    {
-        let setting = self.get(key).await?;
-
-        match setting {
-            Some(s) => {
-                let value: T = serde_json::from_value(s.value)
-                    .map_err(|e| RepositoryError::Database(format!("Failed to deserialize value: {}", e)))?;
-                Ok(Some(value))
-            }
-            None => Ok(None),
-        }
-    }
 }
 
 // ============================================================================

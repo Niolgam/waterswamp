@@ -88,10 +88,16 @@ impl SiorgSyncService {
             name: siorg_org.nome.clone(),
             cnpj,
             ug_code,
-            siorg_code: Some(siorg_org.codigo_siorg),
-            is_main_organization: false,
+            siorg_code: siorg_org.codigo_siorg,
+            address: None,
+            city: None,
+            state: None,
+            zip_code: None,
+            phone: None,
+            email: None,
+            website: None,
+            logo_url: None,
             is_active: siorg_org.ativo,
-            last_siorg_sync: Some(chrono::Utc::now()),
         };
 
         self.organization_repo
@@ -108,9 +114,15 @@ impl SiorgSyncService {
         let payload = UpdateOrganizationPayload {
             acronym: Some(siorg_org.sigla.clone()),
             name: Some(siorg_org.nome.clone()),
+            address: None,
+            city: None,
+            state: None,
+            zip_code: None,
+            phone: None,
+            email: None,
+            website: None,
+            logo_url: None,
             is_active: Some(siorg_org.ativo),
-            last_siorg_sync: Some(chrono::Utc::now()),
-            ..Default::default()
         };
 
         self.organization_repo
@@ -210,11 +222,12 @@ impl SiorgSyncService {
             unit_type_id: unit_type.id,
             internal_type,
             name: siorg_unit.nome.clone(),
+            formal_name: None,
+            acronym: siorg_unit.sigla.clone(),
             siorg_code: Some(siorg_unit.codigo_siorg),
             activity_area,
             contact_info: ContactInfo::default(),
             is_active: siorg_unit.ativo,
-            last_siorg_sync: Some(chrono::Utc::now()),
         };
 
         self.unit_repo
@@ -240,11 +253,17 @@ impl SiorgSyncService {
         };
 
         let payload = UpdateOrganizationalUnitPayload {
-            name: Some(siorg_unit.nome.clone()),
             parent_id: Some(parent_id),
+            category_id: None,
+            unit_type_id: None,
+            internal_type: None,
+            name: Some(siorg_unit.nome.clone()),
+            formal_name: None,
+            acronym: None,
+            activity_area: None,
+            contact_info: None,
             is_active: Some(siorg_unit.ativo),
-            last_siorg_sync: Some(chrono::Utc::now()),
-            ..Default::default()
+            deactivation_reason: None,
         };
 
         self.unit_repo
@@ -344,9 +363,9 @@ impl SiorgSyncService {
         let payload = CreateOrganizationalUnitCategoryPayload {
             name: name.to_string(),
             description: Some("Auto-created from SIORG sync".to_string()),
-            is_active: true,
-            is_siorg_managed: true,
             siorg_code: None,
+            display_order: 0,
+            is_active: true,
         };
 
         self.category_repo
@@ -374,9 +393,8 @@ impl SiorgSyncService {
             code: code.to_string(),
             name: code.to_string(),
             description: Some("Auto-created from SIORG sync".to_string()),
-            is_active: true,
-            is_siorg_managed: true,
             siorg_code: None,
+            is_active: true,
         };
 
         self.type_repo

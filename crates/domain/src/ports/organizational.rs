@@ -28,10 +28,6 @@ pub trait SystemSettingsRepositoryPort: Send + Sync {
     ) -> Result<SystemSettingDto, RepositoryError>;
 
     async fn delete(&self, key: &str) -> Result<(), RepositoryError>;
-
-    async fn get_value<T>(&self, key: &str) -> Result<Option<T>, RepositoryError>
-    where
-        T: serde::de::DeserializeOwned;
 }
 
 // ============================================================================

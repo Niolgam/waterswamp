@@ -1,8 +1,9 @@
 use domain::{
-    errors::{RepositoryError, ServiceError},
+    errors::RepositoryError,
     models::catalog::*,
     ports::catalog::*,
 };
+use crate::errors::ServiceError;
 use std::sync::Arc;
 use uuid::Uuid;
 
