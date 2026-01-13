@@ -160,16 +160,17 @@ pub fn build_application_state(
     ));
 
     // Organizational repositories
+    let pool_auth_arc = Arc::new(pool_auth.clone());
     let system_settings_repo_port: Arc<dyn SystemSettingsRepositoryPort> =
-        Arc::new(SystemSettingsRepository::new(pool_auth.clone()));
+        Arc::new(SystemSettingsRepository::new(pool_auth_arc.clone()));
     let organization_repo_port: Arc<dyn OrganizationRepositoryPort> =
-        Arc::new(OrganizationRepository::new(pool_auth.clone()));
+        Arc::new(OrganizationRepository::new(pool_auth_arc.clone()));
     let unit_category_repo_port: Arc<dyn OrganizationalUnitCategoryRepositoryPort> =
-        Arc::new(OrganizationalUnitCategoryRepository::new(pool_auth.clone()));
+        Arc::new(OrganizationalUnitCategoryRepository::new(pool_auth_arc.clone()));
     let unit_type_repo_port: Arc<dyn OrganizationalUnitTypeRepositoryPort> =
-        Arc::new(OrganizationalUnitTypeRepository::new(pool_auth.clone()));
+        Arc::new(OrganizationalUnitTypeRepository::new(pool_auth_arc.clone()));
     let organizational_unit_repo_port: Arc<dyn OrganizationalUnitRepositoryPort> =
-        Arc::new(OrganizationalUnitRepository::new(pool_auth.clone()));
+        Arc::new(OrganizationalUnitRepository::new(pool_auth_arc.clone()));
 
     // SIORG Sync repositories
     let siorg_sync_queue_repo_port: Arc<dyn SiorgSyncQueueRepositoryPort> =

@@ -13,6 +13,7 @@ use axum::{
 use domain::models::organizational::{ActivityArea, InternalUnitType};
 use serde::Deserialize;
 use serde_json::json;
+use utoipa::ToSchema;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -209,7 +210,7 @@ pub async fn update_system_setting(
     let service = get_settings_service(&state);
 
     service
-        .update(&key, payload, Some(user.user_id))
+        .update(&key, payload, Some(user.id))
         .await
         .map(Json)
         .map_err(|e| (e.status_code(), e.to_string()))
@@ -322,7 +323,7 @@ pub async fn get_organization(
     let service = get_organization_service(&state);
 
     service
-        .get_by_id(id)
+        .get(id)
         .await
         .map(Json)
         .map_err(|e| (e.status_code(), e.to_string()))
@@ -464,7 +465,7 @@ pub async fn get_unit_category(
     let service = get_unit_category_service(&state);
 
     service
-        .get_by_id(id)
+        .get(id)
         .await
         .map(Json)
         .map_err(|e| (e.status_code(), e.to_string()))
@@ -606,7 +607,7 @@ pub async fn get_unit_type(
     let service = get_unit_type_service(&state);
 
     service
-        .get_by_id(id)
+        .get(id)
         .await
         .map(Json)
         .map_err(|e| (e.status_code(), e.to_string()))
@@ -794,7 +795,7 @@ pub async fn get_organizational_unit(
     let service = get_unit_service(&state);
 
     service
-        .get_by_id_with_details(id)
+        .get_with_details(id)
         .await
         .map(Json)
         .map_err(|e| (e.status_code(), e.to_string()))
@@ -962,17 +963,17 @@ pub async fn activate_organizational_unit(
 // SIORG Sync Handlers
 // ============================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SyncOrganizationRequest {
     pub siorg_code: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SyncUnitRequest {
     pub siorg_code: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SyncOrgUnitsRequest {
     pub org_siorg_code: i32,
 }

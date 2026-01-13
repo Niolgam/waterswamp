@@ -5,7 +5,7 @@ use axum::{
 };
 use domain::models::organizational::*;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::extractors::current_user::CurrentUser;
@@ -15,7 +15,7 @@ use crate::infra::state::AppState;
 // Query Parameters
 // ============================================================================
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct ListQueueParams {
     pub status: Option<SyncStatus>,
     pub entity_type: Option<SiorgEntityType>,
@@ -25,7 +25,7 @@ pub struct ListQueueParams {
     pub offset: i64,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct ListHistoryParams {
     pub entity_type: Option<SiorgEntityType>,
     pub siorg_code: Option<i32>,

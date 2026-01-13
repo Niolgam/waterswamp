@@ -25,7 +25,7 @@ pub async fn metrics() -> impl IntoResponse {
 
             (
                 StatusCode::OK,
-                [("content-type", encoder.format_type())],
+                [("content-type", "text/plain; version=0.0.4")],
                 metrics_text,
             )
         }

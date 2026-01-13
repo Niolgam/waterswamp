@@ -10,13 +10,14 @@ use axum::{
 use domain::models::catalog::{ItemType};
 use serde::Deserialize;
 use std::sync::Arc;
+use utoipa::IntoParams;
 use uuid::Uuid;
 
 // ============================
 // Query Parameters
 // ============================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct ListQuery {
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -25,7 +26,7 @@ pub struct ListQuery {
     pub search: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct GroupListQuery {
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -37,7 +38,7 @@ pub struct GroupListQuery {
     pub is_active: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct ItemListQuery {
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -50,7 +51,7 @@ pub struct ItemListQuery {
     pub is_active: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct ConversionListQuery {
     #[serde(default = "default_limit")]
     pub limit: i64,

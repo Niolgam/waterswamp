@@ -24,3 +24,23 @@ pub enum ServiceError {
     #[error("Erro interno: {0}")]
     Internal(#[from] anyhow::Error),
 }
+
+impl ServiceError {
+    pub fn status_code(&self) -> http::StatusCode {
+        match self {
+            ServiceError::UserAlreadyExists => http::StatusCode::CONFLICT,
+            ServiceError::InvalidCredentials => http::StatusCode::UNAUTHORIZED,
+            ServiceError::BadRequest(_) => http::StatusCode::BAD_REQUEST,
+            ServiceError::NotFound(_) => http::StatusCode::NOT_FOUND,
+            ServiceError::Conflict(_) => http::StatusCode::CONFLICT,
+            ServiceError::Repository(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
+            ServiceError::Internal(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl From<&ServiceError> for http::StatusCode {
+    fn from(err: &ServiceError) -> Self {
+        err.status_code()
+    }
+}
