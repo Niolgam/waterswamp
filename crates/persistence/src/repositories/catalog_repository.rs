@@ -4,7 +4,7 @@ use domain::{
     ports::catalog::*,
 };
 use async_trait::async_trait;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 // ============================
@@ -151,7 +151,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
             LIMIT $2 OFFSET $3
             "#
         )
-        .bind(search_pattern)
+        .bind(&search_pattern)
         .bind(limit)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -164,7 +164,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
             WHERE ($1::TEXT IS NULL OR name ILIKE $1 OR symbol ILIKE $1)
             "#
         )
-        .bind(search_pattern)
+        .bind(&search_pattern)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)?;
@@ -428,9 +428,9 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             LIMIT $5 OFFSET $6
             "#
         )
-        .bind(search_pattern)
+        .bind(&search_pattern)
         .bind(parent_id)
-        .bind(item_type as Option<ItemType>)
+        .bind(&item_type)
         .bind(is_active)
         .bind(limit)
         .bind(offset)
@@ -439,18 +439,18 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .map_err(Self::map_err)?;
 
         let groups = records.into_iter().map(|r| CatalogGroupWithDetailsDto {
-            id: r.id,
-            parent_id: r.parent_id,
-            name: r.name,
-            code: r.code,
-            item_type: r.item_type,
-            budget_classification_id: r.budget_classification_id,
-            budget_classification_name: r.budget_classification_name,
-            budget_classification_code: r.budget_classification_code,
-            parent_name: r.parent_name,
-            is_active: r.is_active,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            id: r.get("id"),
+            parent_id: r.get("parent_id"),
+            name: r.get("name"),
+            code: r.get("code"),
+            item_type: r.get("item_type"),
+            budget_classification_id: r.get("budget_classification_id"),
+            budget_classification_name: r.get("budget_classification_name"),
+            budget_classification_code: r.get("budget_classification_code"),
+            parent_name: r.get("parent_name"),
+            is_active: r.get("is_active"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
         }).collect();
 
         let total: i64 = sqlx::query_scalar(
@@ -462,9 +462,9 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
               AND ($4::BOOLEAN IS NULL OR cg.is_active = $4)
             "#
         )
-        .bind(search_pattern)
+        .bind(&search_pattern)
         .bind(parent_id)
-        .bind(item_type as Option<ItemType>)
+        .bind(&item_type)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
@@ -510,19 +510,19 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
 
         // Build hierarchical structure
         let mut nodes: Vec<CatalogGroupTreeNode> = all_groups.iter().map(|r| CatalogGroupTreeNode {
-            id: r.id,
-            parent_id: r.parent_id,
-            name: r.name.clone(),
-            code: r.code.clone(),
-            item_type: r.item_type.clone(),
-            budget_classification_id: r.budget_classification_id,
-            budget_classification_name: r.budget_classification_name.clone(),
-            budget_classification_code: r.budget_classification_code.clone(),
-            is_active: r.is_active,
+            id: r.get("id"),
+            parent_id: r.get("parent_id"),
+            name: r.get::<String, _>("name"),
+            code: r.get::<String, _>("code"),
+            item_type: r.get::<ItemType, _>("item_type"),
+            budget_classification_id: r.get("budget_classification_id"),
+            budget_classification_name: r.get::<String, _>("budget_classification_name"),
+            budget_classification_code: r.get::<String, _>("budget_classification_code"),
+            is_active: r.get("is_active"),
             children: Vec::new(),
-            item_count: r.item_count,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            item_count: r.get("item_count"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
         }).collect();
 
         // Build tree structure (root nodes only)
@@ -601,26 +601,26 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .map_err(Self::map_err)?;
 
         Ok(result.map(|r| CatalogItemWithDetailsDto {
-            id: r.id,
-            group_id: r.group_id,
-            group_name: r.group_name,
-            group_code: r.group_code,
-            unit_of_measure_id: r.unit_of_measure_id,
-            unit_name: r.unit_name,
-            unit_symbol: r.unit_symbol,
-            name: r.name,
-            catmat_code: r.catmat_code,
-            specification: r.specification,
-            estimated_value: r.estimated_value,
-            search_links: r.search_links,
-            photo_url: r.photo_url,
-            is_stockable: r.is_stockable,
-            is_permanent: r.is_permanent,
-            shelf_life_days: r.shelf_life_days,
-            requires_batch_control: r.requires_batch_control,
-            is_active: r.is_active,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            id: r.get("id"),
+            group_id: r.get("group_id"),
+            group_name: r.get("group_name"),
+            group_code: r.get("group_code"),
+            unit_of_measure_id: r.get("unit_of_measure_id"),
+            unit_name: r.get("unit_name"),
+            unit_symbol: r.get("unit_symbol"),
+            name: r.get("name"),
+            catmat_code: r.get("catmat_code"),
+            specification: r.get("specification"),
+            estimated_value: r.get("estimated_value"),
+            search_links: r.get("search_links"),
+            photo_url: r.get("photo_url"),
+            is_stockable: r.get("is_stockable"),
+            is_permanent: r.get("is_permanent"),
+            shelf_life_days: r.get("shelf_life_days"),
+            requires_batch_control: r.get("requires_batch_control"),
+            is_active: r.get("is_active"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
         }))
     }
 
@@ -826,7 +826,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
             LIMIT $6 OFFSET $7
             "#
         )
-        .bind(search_pattern)
+        .bind(&search_pattern)
         .bind(group_id)
         .bind(is_stockable)
         .bind(is_permanent)
@@ -838,26 +838,26 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .map_err(Self::map_err)?;
 
         let items = records.into_iter().map(|r| CatalogItemWithDetailsDto {
-            id: r.id,
-            group_id: r.group_id,
-            group_name: r.group_name,
-            group_code: r.group_code,
-            unit_of_measure_id: r.unit_of_measure_id,
-            unit_name: r.unit_name,
-            unit_symbol: r.unit_symbol,
-            name: r.name,
-            catmat_code: r.catmat_code,
-            specification: r.specification,
-            estimated_value: r.estimated_value,
-            search_links: r.search_links,
-            photo_url: r.photo_url,
-            is_stockable: r.is_stockable,
-            is_permanent: r.is_permanent,
-            shelf_life_days: r.shelf_life_days,
-            requires_batch_control: r.requires_batch_control,
-            is_active: r.is_active,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            id: r.get("id"),
+            group_id: r.get("group_id"),
+            group_name: r.get("group_name"),
+            group_code: r.get("group_code"),
+            unit_of_measure_id: r.get("unit_of_measure_id"),
+            unit_name: r.get("unit_name"),
+            unit_symbol: r.get("unit_symbol"),
+            name: r.get("name"),
+            catmat_code: r.get("catmat_code"),
+            specification: r.get("specification"),
+            estimated_value: r.get("estimated_value"),
+            search_links: r.get("search_links"),
+            photo_url: r.get("photo_url"),
+            is_stockable: r.get("is_stockable"),
+            is_permanent: r.get("is_permanent"),
+            shelf_life_days: r.get("shelf_life_days"),
+            requires_batch_control: r.get("requires_batch_control"),
+            is_active: r.get("is_active"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
         }).collect();
 
         let total: i64 = sqlx::query_scalar(
@@ -870,7 +870,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
               AND ($5::BOOLEAN IS NULL OR ci.is_active = $5)
             "#
         )
-        .bind(search_pattern)
+        .bind(&search_pattern)
         .bind(group_id)
         .bind(is_stockable)
         .bind(is_permanent)
@@ -934,16 +934,16 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .map_err(Self::map_err)?;
 
         Ok(result.map(|r| UnitConversionWithDetailsDto {
-            id: r.id,
-            from_unit_id: r.from_unit_id,
-            from_unit_name: r.from_unit_name,
-            from_unit_symbol: r.from_unit_symbol,
-            to_unit_id: r.to_unit_id,
-            to_unit_name: r.to_unit_name,
-            to_unit_symbol: r.to_unit_symbol,
-            conversion_factor: r.conversion_factor,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            id: r.get("id"),
+            from_unit_id: r.get("from_unit_id"),
+            from_unit_name: r.get("from_unit_name"),
+            from_unit_symbol: r.get("from_unit_symbol"),
+            to_unit_id: r.get("to_unit_id"),
+            to_unit_name: r.get("to_unit_name"),
+            to_unit_symbol: r.get("to_unit_symbol"),
+            conversion_factor: r.get("conversion_factor"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
         }))
     }
 
@@ -1053,16 +1053,16 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .map_err(Self::map_err)?;
 
         let conversions = records.into_iter().map(|r| UnitConversionWithDetailsDto {
-            id: r.id,
-            from_unit_id: r.from_unit_id,
-            from_unit_name: r.from_unit_name,
-            from_unit_symbol: r.from_unit_symbol,
-            to_unit_id: r.to_unit_id,
-            to_unit_name: r.to_unit_name,
-            to_unit_symbol: r.to_unit_symbol,
-            conversion_factor: r.conversion_factor,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            id: r.get("id"),
+            from_unit_id: r.get("from_unit_id"),
+            from_unit_name: r.get("from_unit_name"),
+            from_unit_symbol: r.get("from_unit_symbol"),
+            to_unit_id: r.get("to_unit_id"),
+            to_unit_name: r.get("to_unit_name"),
+            to_unit_symbol: r.get("to_unit_symbol"),
+            conversion_factor: r.get("conversion_factor"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
         }).collect();
 
         let total: i64 = sqlx::query_scalar(

@@ -5,7 +5,7 @@ use domain::ports::{
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
     SystemSettingsRepositoryPort,
 };
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -917,40 +917,40 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
 
         Ok(result.map(|r| OrganizationalUnitWithDetailsDto {
             unit: OrganizationalUnitDto {
-                id: r.id,
-                organization_id: r.organization_id,
-                parent_id: r.parent_id,
-                category_id: r.category_id,
-                unit_type_id: r.unit_type_id,
-                internal_type: r.internal_type,
-                name: r.name,
-                formal_name: r.formal_name,
-                acronym: r.acronym,
-                siorg_code: r.siorg_code,
-                siorg_parent_code: r.siorg_parent_code,
-                siorg_url: r.siorg_url,
-                siorg_last_version: r.siorg_last_version,
-                is_siorg_managed: r.is_siorg_managed,
-                activity_area: r.activity_area,
-                contact_info: r.contact_info,
-                level: r.level,
-                path_ids: r.path_ids,
-                path_names: r.path_names,
-                is_active: r.is_active,
-                deactivated_at: r.deactivated_at,
-                deactivation_reason: r.deactivation_reason,
-                siorg_synced_at: r.siorg_synced_at,
-                siorg_sync_status: r.siorg_sync_status,
-                siorg_raw_data: r.siorg_raw_data,
-                created_at: r.created_at,
-                updated_at: r.updated_at,
+                id: r.get("id"),
+                organization_id: r.get("organization_id"),
+                parent_id: r.get("parent_id"),
+                category_id: r.get("category_id"),
+                unit_type_id: r.get("unit_type_id"),
+                internal_type: r.get("internal_type"),
+                name: r.get("name"),
+                formal_name: r.get("formal_name"),
+                acronym: r.get("acronym"),
+                siorg_code: r.get("siorg_code"),
+                siorg_parent_code: r.get("siorg_parent_code"),
+                siorg_url: r.get("siorg_url"),
+                siorg_last_version: r.get("siorg_last_version"),
+                is_siorg_managed: r.get("is_siorg_managed"),
+                activity_area: r.get("activity_area"),
+                contact_info: r.get("contact_info"),
+                level: r.get("level"),
+                path_ids: r.get("path_ids"),
+                path_names: r.get("path_names"),
+                is_active: r.get("is_active"),
+                deactivated_at: r.get("deactivated_at"),
+                deactivation_reason: r.get("deactivation_reason"),
+                siorg_synced_at: r.get("siorg_synced_at"),
+                siorg_sync_status: r.get("siorg_sync_status"),
+                siorg_raw_data: r.get("siorg_raw_data"),
+                created_at: r.get("created_at"),
+                updated_at: r.get("updated_at"),
             },
-            organization_name: r.organization_name,
-            organization_acronym: r.organization_acronym,
-            parent_name: r.parent_name,
-            parent_acronym: r.parent_acronym,
-            category_name: r.category_name,
-            unit_type_name: r.unit_type_name,
+            organization_name: r.get("organization_name"),
+            organization_acronym: r.get("organization_acronym"),
+            parent_name: r.get("parent_name"),
+            parent_acronym: r.get("parent_acronym"),
+            category_name: r.get("category_name"),
+            unit_type_name: r.get("unit_type_name"),
         }))
     }
 
@@ -1039,7 +1039,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .bind(internal_type as Option<InternalUnitType>)
         .bind(is_active)
         .bind(is_siorg_managed)
-        .bind(search_pattern)
+        .bind(&search_pattern)
         .bind(limit)
         .bind(offset)
         .fetch_all(&*self.pool)
@@ -1069,7 +1069,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .bind(internal_type as Option<InternalUnitType>)
         .bind(is_active)
         .bind(is_siorg_managed)
-        .bind(search_pattern)
+        .bind(&search_pattern)
         .fetch_one(&*self.pool)
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -1078,40 +1078,40 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             .into_iter()
             .map(|r| OrganizationalUnitWithDetailsDto {
                 unit: OrganizationalUnitDto {
-                    id: r.id,
-                    organization_id: r.organization_id,
-                    parent_id: r.parent_id,
-                    category_id: r.category_id,
-                    unit_type_id: r.unit_type_id,
-                    internal_type: r.internal_type,
-                    name: r.name,
-                    formal_name: r.formal_name,
-                    acronym: r.acronym,
-                    siorg_code: r.siorg_code,
-                    siorg_parent_code: r.siorg_parent_code,
-                    siorg_url: r.siorg_url,
-                    siorg_last_version: r.siorg_last_version,
-                    is_siorg_managed: r.is_siorg_managed,
-                    activity_area: r.activity_area,
-                    contact_info: r.contact_info,
-                    level: r.level,
-                    path_ids: r.path_ids,
-                    path_names: r.path_names,
-                    is_active: r.is_active,
-                    deactivated_at: r.deactivated_at,
-                    deactivation_reason: r.deactivation_reason,
-                    siorg_synced_at: r.siorg_synced_at,
-                    siorg_sync_status: r.siorg_sync_status,
-                    siorg_raw_data: r.siorg_raw_data,
-                    created_at: r.created_at,
-                    updated_at: r.updated_at,
+                    id: r.get("id"),
+                    organization_id: r.get("organization_id"),
+                    parent_id: r.get("parent_id"),
+                    category_id: r.get("category_id"),
+                    unit_type_id: r.get("unit_type_id"),
+                    internal_type: r.get("internal_type"),
+                    name: r.get("name"),
+                    formal_name: r.get("formal_name"),
+                    acronym: r.get("acronym"),
+                    siorg_code: r.get("siorg_code"),
+                    siorg_parent_code: r.get("siorg_parent_code"),
+                    siorg_url: r.get("siorg_url"),
+                    siorg_last_version: r.get("siorg_last_version"),
+                    is_siorg_managed: r.get("is_siorg_managed"),
+                    activity_area: r.get("activity_area"),
+                    contact_info: r.get("contact_info"),
+                    level: r.get("level"),
+                    path_ids: r.get("path_ids"),
+                    path_names: r.get("path_names"),
+                    is_active: r.get("is_active"),
+                    deactivated_at: r.get("deactivated_at"),
+                    deactivation_reason: r.get("deactivation_reason"),
+                    siorg_synced_at: r.get("siorg_synced_at"),
+                    siorg_sync_status: r.get("siorg_sync_status"),
+                    siorg_raw_data: r.get("siorg_raw_data"),
+                    created_at: r.get("created_at"),
+                    updated_at: r.get("updated_at"),
                 },
-                organization_name: r.organization_name,
-                organization_acronym: r.organization_acronym,
-                parent_name: r.parent_name,
-                parent_acronym: r.parent_acronym,
-                category_name: r.category_name,
-                unit_type_name: r.unit_type_name,
+                organization_name: r.get("organization_name"),
+                organization_acronym: r.get("organization_acronym"),
+                parent_name: r.get("parent_name"),
+                parent_acronym: r.get("parent_acronym"),
+                category_name: r.get("category_name"),
+                unit_type_name: r.get("unit_type_name"),
             })
             .collect();
 
