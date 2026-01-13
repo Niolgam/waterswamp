@@ -1,14 +1,22 @@
 use crate::infra::config::Config;
 use application::services::audit_services::AuditService;
 use application::services::auth_service::AuthService;
+use application::services::budget_classifications_service::BudgetClassificationsService;
+use application::services::catalog_service::CatalogService;
 use application::services::geo_regions_service::GeoRegionsService;
 use application::services::mfa_service::MfaService;
+use application::services::organizational_service::{
+    OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
+    OrganizationalUnitTypeService, SystemSettingsService,
+};
 use application::services::user_service::UserService;
+use application::external::SiorgSyncService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
 use domain::ports::{
     BuildingRepositoryPort, BuildingTypeRepositoryPort, FloorRepositoryPort, SiteRepositoryPort,
-    SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort, SpaceRepositoryPort,
+    SpaceTypeRepositoryPort,
 };
 use email_service::EmailSender;
 use moka::future::Cache;
@@ -32,6 +40,16 @@ pub struct AppState {
     pub user_service: Arc<UserService>,
     pub mfa_service: Arc<MfaService>,
     pub location_service: Arc<GeoRegionsService>,
+    pub budget_classifications_service: Arc<BudgetClassificationsService>,
+    pub catalog_service: Arc<CatalogService>,
+    pub system_settings_service: Arc<SystemSettingsService>,
+    pub organization_service: Arc<OrganizationService>,
+    pub organizational_unit_category_service: Arc<OrganizationalUnitCategoryService>,
+    pub organizational_unit_type_service: Arc<OrganizationalUnitTypeService>,
+    pub organizational_unit_service: Arc<OrganizationalUnitService>,
+    pub siorg_sync_service: Arc<SiorgSyncService>,
+    pub siorg_sync_queue_repository: Arc<dyn SiorgSyncQueueRepositoryPort>,
+    pub siorg_history_repository: Arc<dyn SiorgHistoryRepositoryPort>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,

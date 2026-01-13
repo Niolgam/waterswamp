@@ -1,8 +1,12 @@
 pub mod audit_logs_repository;
 pub mod auth_repository;
+pub mod budget_classifications_repository;
+pub mod catalog_repository;
 pub mod departments_repository;
 pub mod email_verification_repository;
 pub mod facilities_repository;
 pub mod geo_regions_repository;
 pub mod mfa_repository;
+pub mod organizational_repository;
+pub mod siorg_sync_repository;
 pub mod user_repository;

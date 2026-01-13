@@ -81,7 +81,8 @@ pub async fn get_country(
     Ok(Json(CountryResponse {
         id: country_dto.id,
         name: country_dto.name,
-        code: country_dto.code,
+        iso2: country_dto.iso2,
+        bacen_code: country_dto.bacen_code,
         created_at: country_dto.created_at,
         updated_at: country_dto.updated_at,
     }))
@@ -118,7 +119,8 @@ pub async fn create_country(
         Json(CountryResponse {
             id: country_dto.id,
             name: country_dto.name,
-            code: country_dto.code,
+            iso2: country_dto.iso2,
+            bacen_code: country_dto.bacen_code,
             created_at: country_dto.created_at,
             updated_at: country_dto.updated_at,
         }),
@@ -159,7 +161,8 @@ pub async fn update_country(
     Ok(Json(CountryResponse {
         id: country_dto.id,
         name: country_dto.name,
-        code: country_dto.code,
+        iso2: country_dto.iso2,
+        bacen_code: country_dto.bacen_code,
         created_at: country_dto.created_at,
         updated_at: country_dto.updated_at,
     }))
@@ -254,7 +257,8 @@ pub async fn get_state(
     Ok(Json(StateResponse {
         id: state_dto.id,
         name: state_dto.name,
-        code: state_dto.code,
+        abbreviation: state_dto.abbreviation,
+        ibge_code: state_dto.ibge_code,
         country_id: state_dto.country_id,
         created_at: state_dto.created_at,
         updated_at: state_dto.updated_at,
@@ -292,7 +296,8 @@ pub async fn create_state(
         Json(StateResponse {
             id: state_dto.id,
             name: state_dto.name,
-            code: state_dto.code,
+            abbreviation: state_dto.abbreviation,
+            ibge_code: state_dto.ibge_code,
             country_id: state_dto.country_id,
             created_at: state_dto.created_at,
             updated_at: state_dto.updated_at,
@@ -334,7 +339,8 @@ pub async fn update_state(
     Ok(Json(StateResponse {
         id: state_dto.id,
         name: state_dto.name,
-        code: state_dto.code,
+        abbreviation: state_dto.abbreviation,
+        ibge_code: state_dto.ibge_code,
         country_id: state_dto.country_id,
         created_at: state_dto.created_at,
         updated_at: state_dto.updated_at,
@@ -430,12 +436,15 @@ pub async fn get_city(
     Ok(Json(CityWithStateResponse {
         id: city_dto.id,
         name: city_dto.name,
+        ibge_code: city_dto.ibge_code,
         state_id: city_dto.state_id,
         state_name: city_dto.state_name,
-        state_code: city_dto.state_code,
+        state_abbreviation: city_dto.state_abbreviation,
+        state_ibge_code: city_dto.state_ibge_code,
         country_id: city_dto.country_id,
         country_name: city_dto.country_name,
-        country_code: city_dto.country_code,
+        country_iso2: city_dto.country_iso2,
+        country_bacen_code: city_dto.country_bacen_code,
         created_at: city_dto.created_at,
         updated_at: city_dto.updated_at,
     }))
@@ -472,6 +481,7 @@ pub async fn create_city(
         Json(CityResponse {
             id: city_dto.id,
             name: city_dto.name,
+            ibge_code: city_dto.ibge_code,
             state_id: city_dto.state_id,
             created_at: city_dto.created_at,
             updated_at: city_dto.updated_at,
@@ -513,6 +523,7 @@ pub async fn update_city(
     Ok(Json(CityResponse {
         id: city_dto.id,
         name: city_dto.name,
+        ibge_code: city_dto.ibge_code,
         state_id: city_dto.state_id,
         created_at: city_dto.created_at,
         updated_at: city_dto.updated_at,

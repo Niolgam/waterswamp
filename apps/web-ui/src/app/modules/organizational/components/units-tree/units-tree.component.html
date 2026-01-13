@@ -1,0 +1,117 @@
+<div class="units-tree-container">
+  <div class="header">
+    <h1>Árvore Organizacional</h1>
+    <div class="actions">
+      <button class="btn btn-secondary" (click)="expandAll()">
+        <i class="icon-expand"></i> Expandir Tudo
+      </button>
+      <button class="btn btn-secondary" (click)="collapseAll()">
+        <i class="icon-collapse"></i> Recolher Tudo
+      </button>
+    </div>
+  </div>
+
+  <!-- Organization Filter -->
+  <div class="filter-section">
+    <div class="form-group">
+      <label for="org-select">Filtrar por Organização</label>
+      <select id="org-select" [(ngModel)]="selectedOrganization" (change)="onOrganizationChange()">
+        <option [value]="null">Todas as organizações</option>
+        <option *ngFor="let org of organizations" [value]="org.id">
+          {{ org.acronym }} - {{ org.name }}
+        </option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="loading-spinner">
+    <div class="spinner"></div>
+    <p>Carregando árvore organizacional...</p>
+  </div>
+
+  <!-- Error -->
+  <div *ngIf="error" class="error-message">
+    <i class="icon-error"></i>
+    <p>{{ error }}</p>
+  </div>
+
+  <!-- Tree -->
+  <div *ngIf="!loading && !error" class="tree-view">
+    <div *ngIf="treeData.length === 0" class="empty-state">
+      <i class="icon-tree"></i>
+      <p>Nenhuma unidade encontrada</p>
+    </div>
+
+    <div *ngIf="treeData.length > 0" class="tree-container">
+      <ng-container *ngFor="let node of treeData">
+        <app-tree-node
+          [node]="node"
+          [isExpanded]="isExpanded(node.unit.id)"
+          [expandedNodes]="expandedNodes"
+          (toggle)="toggleNode($event)"
+          (viewDetails)="viewUnitDetails($event)">
+        </app-tree-node>
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend" *ngIf="!loading && !error && treeData.length > 0">
+    <h3>Legenda</h3>
+    <div class="legend-items">
+      <div class="legend-item">
+        <span class="legend-icon siorg-icon"></span>
+        <span>Gerenciada pelo SIORG</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-icon local-icon"></span>
+        <span>Unidade Local</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-icon inactive-icon"></span>
+        <span>Inativa</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tree Node Component (Recursive) -->
+<ng-template #treeNode let-node>
+  <div [class]="getNodeClass(node)" [style.margin-left.px]="level * 20">
+    <div class="node-header">
+      <button
+        *ngIf="node.children && node.children.length > 0"
+        class="expand-button"
+        (click)="toggleNode(node.unit.id)">
+        <i [class]="isExpanded(node.unit.id) ? 'icon-chevron-down' : 'icon-chevron-right'"></i>
+      </button>
+      <span *ngIf="!node.children || node.children.length === 0" class="no-children-spacer"></span>
+
+      <div class="node-content" (click)="viewUnitDetails(node.unit.id)">
+        <div class="node-info">
+          <span class="node-name">{{ node.unit.name }}</span>
+          <span *ngIf="node.unit.siorg_code" class="siorg-badge" title="SIORG: {{ node.unit.siorg_code }}">
+            SIORG
+          </span>
+          <span *ngIf="!node.unit.is_active" class="inactive-badge">
+            Inativa
+          </span>
+        </div>
+        <div class="node-meta">
+          <span class="node-type">{{ node.unit.internal_type }}</span>
+          <span class="node-level">Nível {{ node.unit.level }}</span>
+          <span *ngIf="node.child_count > 0" class="node-children">
+            {{ node.child_count }} {{ node.child_count === 1 ? 'filho' : 'filhos' }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="isExpanded(node.unit.id) && node.children && node.children.length > 0" class="node-children">
+      <ng-container *ngFor="let child of node.children">
+        <ng-container *ngTemplateOutlet="treeNode; context: { $implicit: child }"></ng-container>
+      </ng-container>
+    </div>
+  </div>
+</ng-template>

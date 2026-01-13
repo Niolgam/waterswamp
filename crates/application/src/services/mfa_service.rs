@@ -53,7 +53,7 @@ impl MfaService {
             .mfa_repo
             .is_mfa_enabled(user_id)
             .await
-            .map_err(ServiceError::Repository)?
+            ?
         {
             return Err(ServiceError::BadRequest(
                 "MFA já está ativado para este usuário.".to_string(),
@@ -65,7 +65,7 @@ impl MfaService {
 
         let secret_bytes = Secret::Encoded(secret.clone())
             .to_bytes()
-            .map_err(|e| ServiceError::Internal(anyhow::anyhow!(e)))?;
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         let totp = TOTP::new(
             Algorithm::SHA1,
@@ -76,11 +76,11 @@ impl MfaService {
             Some("WaterSwamp".to_string()),
             username.to_string(),
         )
-        .map_err(|e| ServiceError::Internal(anyhow::anyhow!(e)))?;
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         let qr_code = totp
             .get_qr_base64()
-            .map_err(|e| ServiceError::Internal(anyhow::anyhow!(e)))?;
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         // 3. Save temp setup token
         let setup_token_raw = Uuid::new_v4().to_string();
@@ -90,7 +90,7 @@ impl MfaService {
         self.mfa_repo
             .save_setup_token(user_id, &secret, &setup_token_hash, expires_at)
             .await
-            .map_err(ServiceError::Repository)?;
+?;
 
         Ok(MfaSetupResponse {
             secret,
@@ -111,13 +111,13 @@ impl MfaService {
             .mfa_repo
             .find_setup_token(&setup_hash)
             .await
-            .map_err(ServiceError::Repository)?
+            ?
             .ok_or(ServiceError::InvalidCredentials)?;
 
         // 2. Validate TOTP
         let secret_bytes = Secret::Encoded(secret.clone())
             .to_bytes()
-            .map_err(|_| ServiceError::Internal(anyhow::anyhow!("Invalid secret format")))?;
+            .map_err(|_| ServiceError::Internal("Invalid secret format".to_string()))?;
 
         let totp = TOTP::new(
             Algorithm::SHA1,
@@ -138,7 +138,7 @@ impl MfaService {
         self.mfa_repo
             .enable_mfa(user_id, &secret)
             .await
-            .map_err(ServiceError::Repository)?;
+?;
 
         // 4. Generate backup codes
         let (backup_codes, hashed_codes) = self.generate_backup_codes();
@@ -146,7 +146,7 @@ impl MfaService {
         self.mfa_repo
             .save_backup_codes(user_id, &hashed_codes)
             .await
-            .map_err(ServiceError::Repository)?;
+?;
 
         // 5. Notify
         if let Ok(Some(user)) = self.user_repo.find_extended_by_id(user_id).await {
@@ -180,7 +180,7 @@ impl MfaService {
             .mfa_repo
             .get_mfa_secret(user_id)
             .await
-            .map_err(ServiceError::Repository)?;
+?;
 
         let mut valid = false;
         let mut backup_used = false;
@@ -212,7 +212,7 @@ impl MfaService {
                 .mfa_repo
                 .verify_and_consume_backup_code(user_id, &code_hash)
                 .await
-                .map_err(ServiceError::Repository)?
+                ?
             {
                 valid = true;
                 backup_used = true;
@@ -228,14 +228,14 @@ impl MfaService {
             .user_repo
             .find_by_id(user_id)
             .await
-            .map_err(ServiceError::Repository)?
-            .ok_or(ServiceError::Internal(anyhow::anyhow!("Usuário não encontrado")))?;
+            ?
+            .ok_or(ServiceError::Internal("Usuário não encontrado".to_string()))?;
 
         // 5. Generate Tokens
         let access_token = self
             .jwt_service
             .generate_token(user_id, user.username.as_str(), TokenType::Access, 3600)
-            .map_err(|e| ServiceError::Internal(e))?;
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         let refresh_token = Uuid::new_v4().to_string();
         let refresh_hash = hash_string(&refresh_token);
@@ -245,7 +245,7 @@ impl MfaService {
         self.auth_repo
             .save_refresh_token(user_id, &refresh_hash, family_id, expires_at)
             .await
-            .map_err(ServiceError::Repository)?;
+?;
 
         Ok(MfaVerifyResponse::new(
             access_token,
@@ -267,7 +267,7 @@ impl MfaService {
         self.mfa_repo
             .save_backup_codes(user_id, &hashed_codes)
             .await
-            .map_err(ServiceError::Repository)?;
+?;
 
         Ok(MfaBackupCodesResponse {
             backup_codes,

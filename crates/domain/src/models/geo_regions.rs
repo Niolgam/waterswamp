@@ -14,7 +14,8 @@ use crate::value_objects::{LocationName, StateCode};
 pub struct CountryDto {
     pub id: Uuid,
     pub name: LocationName,
-    pub code: String, // ISO 3166-1 alpha-3 code (BRA, USA, etc)
+    pub iso2: String, // ISO 3166-1 alpha-2 code (BR, US, etc)
+    pub bacen_code: i32, // Código Bacen (Brasil é 1058)
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -37,15 +38,17 @@ pub struct ListCountriesQuery {
 #[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateCountryPayload {
     pub name: LocationName,
-    #[validate(length(equal = 3))]
-    pub code: String, // ISO 3166-1 alpha-3 code
+    #[validate(length(equal = 2))]
+    pub iso2: String, // ISO 3166-1 alpha-2 code
+    pub bacen_code: i32, // Código Bacen
 }
 
 #[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateCountryPayload {
     pub name: Option<LocationName>,
-    #[validate(length(equal = 3))]
-    pub code: Option<String>,
+    #[validate(length(equal = 2))]
+    pub iso2: Option<String>,
+    pub bacen_code: Option<i32>,
 }
 
 // ============================
@@ -56,7 +59,8 @@ pub struct UpdateCountryPayload {
 pub struct StateDto {
     pub id: Uuid,
     pub name: LocationName,
-    pub code: StateCode,
+    pub abbreviation: StateCode,
+    pub ibge_code: i32, // Código IBGE (cUF da NF-e)
     pub country_id: Uuid,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -66,10 +70,12 @@ pub struct StateDto {
 pub struct StateWithCountryDto {
     pub id: Uuid,
     pub name: LocationName,
-    pub code: StateCode,
+    pub abbreviation: StateCode,
+    pub ibge_code: i32,
     pub country_id: Uuid,
     pub country_name: LocationName,
-    pub country_code: String,
+    pub country_iso2: String,
+    pub country_bacen_code: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -93,14 +99,16 @@ pub struct ListStatesQuery {
 #[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateStatePayload {
     pub name: LocationName,
-    pub code: StateCode,
+    pub abbreviation: StateCode,
+    pub ibge_code: i32,
     pub country_id: Uuid,
 }
 
 #[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateStatePayload {
     pub name: Option<LocationName>,
-    pub code: Option<StateCode>,
+    pub abbreviation: Option<StateCode>,
+    pub ibge_code: Option<i32>,
     pub country_id: Option<Uuid>,
 }
 
@@ -112,6 +120,7 @@ pub struct UpdateStatePayload {
 pub struct CityDto {
     pub id: Uuid,
     pub name: LocationName,
+    pub ibge_code: i32, // Código IBGE do município
     pub state_id: Uuid,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -121,12 +130,15 @@ pub struct CityDto {
 pub struct CityWithStateDto {
     pub id: Uuid,
     pub name: LocationName,
+    pub ibge_code: i32,
     pub state_id: Uuid,
     pub state_name: LocationName,
-    pub state_code: StateCode,
+    pub state_abbreviation: StateCode,
+    pub state_ibge_code: i32,
     pub country_id: Uuid,
     pub country_name: LocationName,
-    pub country_code: String,
+    pub country_iso2: String,
+    pub country_bacen_code: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -150,11 +162,13 @@ pub struct ListCitiesQuery {
 #[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct CreateCityPayload {
     pub name: LocationName,
+    pub ibge_code: i32,
     pub state_id: Uuid,
 }
 
 #[derive(Debug, Validate, Deserialize, ToSchema)]
 pub struct UpdateCityPayload {
     pub name: Option<LocationName>,
+    pub ibge_code: Option<i32>,
     pub state_id: Option<Uuid>,
 }

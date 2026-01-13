@@ -1,0 +1,199 @@
+<div class="conflict-resolver-container">
+  <!-- Loading State -->
+  <div *ngIf="loading" class="loading">
+    <div class="spinner"></div>
+    <p>Carregando detalhes do conflito...</p>
+  </div>
+
+  <!-- Error State -->
+  <div *ngIf="error" class="alert alert-error">
+    {{ error }}
+  </div>
+
+  <!-- Conflict Detail -->
+  <div *ngIf="!loading && conflict" class="conflict-detail">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-info">
+        <h2>Resolver Conflito</h2>
+        <div class="meta">
+          <span class="badge">{{ getEntityTypeLabel(conflict.entity_type) }}</span>
+          <span class="siorg-code">SIORG: {{ conflict.queue_item.siorg_code }}</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn-secondary" (click)="cancel()" [disabled]="resolving">
+          Cancelar
+        </button>
+      </div>
+    </div>
+
+    <!-- Entity Names -->
+    <div class="entity-names">
+      <div class="local-name">
+        <strong>Local:</strong> {{ conflict.local_entity_name || 'N/A' }}
+      </div>
+      <div class="siorg-name">
+        <strong>SIORG:</strong> {{ conflict.siorg_entity_name || 'N/A' }}
+      </div>
+    </div>
+
+    <!-- Conflict Summary -->
+    <div class="conflict-summary">
+      <div class="summary-item">
+        <span class="label">Campos com conflito:</span>
+        <span class="value warning">{{ conflictingFieldsCount }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="label">Campos sem conflito:</span>
+        <span class="value success">{{ nonConflictingFieldsCount }}</span>
+      </div>
+      <div class="summary-item">
+        <span class="label">Tentativas:</span>
+        <span class="value">
+          {{ conflict.queue_item.attempts }} / {{ conflict.queue_item.max_attempts }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Action Selection -->
+    <div class="action-selection">
+      <h3>Escolha a Ação</h3>
+      <div class="action-buttons">
+        <button
+          *ngFor="let action of ['ACCEPT_SIORG', 'KEEP_LOCAL', 'MERGE', 'SKIP']"
+          class="action-btn"
+          [class.selected]="selectedAction === action"
+          (click)="selectAction(action)"
+        >
+          <div class="action-title">{{ getActionLabel(action) }}</div>
+          <div class="action-desc">{{ getActionDescription(action) }}</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Field-by-Field Comparison (for MERGE action) -->
+    <div *ngIf="selectedAction === 'MERGE'" class="fields-comparison">
+      <h3>Compare os Campos</h3>
+      <p class="help-text">
+        Clique em "Usar Local" ou "Usar SIORG" para cada campo conflitante.
+      </p>
+
+      <div class="fields-list">
+        <!-- Conflicting Fields -->
+        <div *ngFor="let field of conflict.fields">
+          <div
+            class="field-row"
+            [class.conflicting]="field.has_conflict"
+            [class.expanded]="isFieldExpanded(field.field)"
+          >
+            <div class="field-header" (click)="toggleField(field.field)">
+              <div class="field-name">
+                <span class="expand-icon">
+                  {{ isFieldExpanded(field.field) ? '▼' : '▶' }}
+                </span>
+                <strong>{{ getFieldLabel(field.field) }}</strong>
+                <span class="field-type">({{ field.field_type }})</span>
+                <span *ngIf="field.has_conflict" class="conflict-badge">Conflito</span>
+                <span *ngIf="!field.has_conflict" class="ok-badge">OK</span>
+              </div>
+              <div *ngIf="field.has_conflict" class="field-choice">
+                <span *ngIf="getFieldChoice(field.field) === 'LOCAL'" class="choice-label success">
+                  ✓ Local escolhido
+                </span>
+                <span *ngIf="getFieldChoice(field.field) === 'SIORG'" class="choice-label success">
+                  ✓ SIORG escolhido
+                </span>
+                <span *ngIf="!getFieldChoice(field.field)" class="choice-label warning">
+                  ⚠ Escolha necessária
+                </span>
+              </div>
+            </div>
+
+            <!-- Field Details (3 Columns) -->
+            <div *ngIf="isFieldExpanded(field.field)" class="field-detail">
+              <div class="three-column-layout">
+                <!-- Local Value Column -->
+                <div class="column local-column">
+                  <div class="column-header">Valor Local</div>
+                  <div class="column-content">
+                    <pre>{{ formatValue(field.local_value) }}</pre>
+                  </div>
+                  <button
+                    *ngIf="field.has_conflict"
+                    class="btn-choose local"
+                    [class.selected]="getFieldChoice(field.field) === 'LOCAL'"
+                    (click)="chooseField(field.field, 'LOCAL')"
+                  >
+                    <span *ngIf="getFieldChoice(field.field) !== 'LOCAL'">Usar Local</span>
+                    <span *ngIf="getFieldChoice(field.field) === 'LOCAL'">✓ Selecionado</span>
+                  </button>
+                </div>
+
+                <!-- Conflict Indicator Column -->
+                <div class="column conflict-column">
+                  <div class="conflict-indicator">
+                    <span *ngIf="field.has_conflict" class="conflict-icon">⚠️</span>
+                    <span *ngIf="!field.has_conflict" class="ok-icon">✅</span>
+                  </div>
+                  <div class="metadata" *ngIf="field.metadata">
+                    <strong>Metadados:</strong>
+                    <pre>{{ formatValue(field.metadata) }}</pre>
+                  </div>
+                </div>
+
+                <!-- SIORG Value Column -->
+                <div class="column siorg-column">
+                  <div class="column-header">Valor SIORG</div>
+                  <div class="column-content">
+                    <pre>{{ formatValue(field.siorg_value) }}</pre>
+                  </div>
+                  <button
+                    *ngIf="field.has_conflict"
+                    class="btn-choose siorg"
+                    [class.selected]="getFieldChoice(field.field) === 'SIORG'"
+                    (click)="chooseField(field.field, 'SIORG')"
+                  >
+                    <span *ngIf="getFieldChoice(field.field) !== 'SIORG'">Usar SIORG</span>
+                    <span *ngIf="getFieldChoice(field.field) === 'SIORG'">✓ Selecionado</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resolution Notes -->
+    <div *ngIf="selectedAction" class="resolution-notes">
+      <h3>Notas (Opcional)</h3>
+      <textarea
+        [(ngModel)]="resolutionNotes"
+        placeholder="Adicione notas sobre a resolução deste conflito..."
+        rows="3"
+        [disabled]="resolving"
+      ></textarea>
+    </div>
+
+    <!-- Resolve Button -->
+    <div *ngIf="selectedAction" class="resolve-section">
+      <button
+        class="btn-resolve"
+        [disabled]="!canResolve() || resolving"
+        (click)="resolve()"
+      >
+        <span *ngIf="!resolving">
+          {{ selectedAction === 'MERGE' ? 'Aplicar Mesclagem' : 'Resolver Conflito' }}
+        </span>
+        <span *ngIf="resolving">
+          Resolvendo...
+        </span>
+      </button>
+
+      <p *ngIf="selectedAction === 'MERGE' && !canResolve()" class="warning-text">
+        ⚠️ Você precisa escolher um valor para todos os campos conflitantes.
+      </p>
+    </div>
+  </div>
+</div>

@@ -1,5 +1,6 @@
 //! User Self-Service Handlers
 use axum::{extract::State, http::StatusCode, Json};
+use domain::errors::RepositoryError;
 use tracing::{info, instrument};
 use validator::Validate;
 
@@ -100,7 +101,7 @@ pub async fn update_profile(
                 ServiceError::UserAlreadyExists => {
                     AppError::Conflict("Username ou Email já está em uso".to_string())
                 }
-                ServiceError::Repository(r) => AppError::Repository(r),
+                ServiceError::Repository(r) => AppError::Repository(RepositoryError::Database(r)),
                 _ => AppError::Anyhow(anyhow::anyhow!(e)),
             }
         })?;

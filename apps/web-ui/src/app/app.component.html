@@ -1,0 +1,23 @@
+<div class="app-container">
+  <header class="app-header">
+    <div class="container">
+      <h1>{{ title }}</h1>
+      <nav class="main-nav">
+        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">Home</a>
+        <a routerLink="/organizational/units" routerLinkActive="active">Unidades</a>
+        <a routerLink="/organizational/tree" routerLinkActive="active">Árvore</a>
+        <a routerLink="/organizational/sync" routerLinkActive="active">Sincronização</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <router-outlet></router-outlet>
+  </main>
+
+  <footer class="app-footer">
+    <div class="container">
+      <p>&copy; 2025 Waterswamp. Todos os direitos reservados.</p>
+    </div>
+  </footer>
+</div>

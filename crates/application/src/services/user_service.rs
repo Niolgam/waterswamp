@@ -34,10 +34,10 @@ impl UserService {
         self.user_repo
             .find_extended_by_id(user_id)
             .await
-            .map_err(ServiceError::Repository)?
-            .ok_or(ServiceError::Internal(anyhow::anyhow!(
-                "Usuário não encontrado"
-            )))
+?
+            .ok_or(ServiceError::Internal(
+                "Usuário não encontrado".to_string()
+            ))
     }
 
     pub async fn update_profile(
@@ -89,7 +89,7 @@ impl UserService {
                         TokenType::EmailVerification,
                         EMAIL_VERIFICATION_EXPIRY,
                     )
-                    .map_err(|e| ServiceError::Internal(e))?;
+                    .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
                 // Enviar email com log de erro
                 if let Err(e) = self
@@ -123,9 +123,9 @@ impl UserService {
             self.user_repo
                 .get_password_hash(user_id)
                 .await?
-                .ok_or(ServiceError::Internal(anyhow::anyhow!(
-                    "Usuário sem senha ou não encontrado"
-                )))?;
+                .ok_or(ServiceError::Internal(
+                    "Usuário sem senha ou não encontrado".to_string()
+                ))?;
 
         let is_valid = verify_password(current_password, &stored_hash)
             .map_err(|_| ServiceError::InvalidCredentials)?;
@@ -142,7 +142,7 @@ impl UserService {
         // }
 
         let new_hash =
-            hash_password(new_password).map_err(|e| ServiceError::Internal(anyhow::anyhow!(e)))?;
+            hash_password(new_password).map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         self.user_repo.update_password(user_id, &new_hash).await?;
 

@@ -349,6 +349,320 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Location Management carregadas");
 
+    // --- GEO REGIONS POLICIES ---
+    // Countries
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/countries/{id}", ACTION_DELETE])
+        .await?;
+
+    // States
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/states/{id}", ACTION_DELETE])
+        .await?;
+
+    // Cities
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/geo_regions/cities/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Geo Regions carregadas");
+
+    // --- BUDGET CLASSIFICATIONS POLICIES ---
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications/tree", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/budget-classifications/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Budget Classifications carregadas");
+
+    // --- CATALOG POLICIES ---
+    // Units of Measure
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/units/{id}", ACTION_DELETE])
+        .await?;
+
+    // Catalog Groups
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups/tree", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/groups/{id}", ACTION_DELETE])
+        .await?;
+
+    // Catalog Items
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/items/{id}", ACTION_DELETE])
+        .await?;
+
+    // Unit Conversions
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/conversions/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Catalog carregadas");
+
+    // --- ORGANIZATIONAL POLICIES ---
+    // System Settings
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/settings", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/settings", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/settings/{key}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/settings/{key}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/settings/{key}", ACTION_DELETE])
+        .await?;
+
+    // Organizations
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/organizations", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/organizations", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/organizations/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/organizations/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/organizations/{id}", ACTION_DELETE])
+        .await?;
+
+    // Unit Categories
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-categories", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-categories", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-categories/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-categories/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-categories/{id}", ACTION_DELETE])
+        .await?;
+
+    // Unit Types
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-types", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-types", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-types/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-types/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/unit-types/{id}", ACTION_DELETE])
+        .await?;
+
+    // Organizational Units
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/tree", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/{id}", ACTION_DELETE])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/{id}/children", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/{id}/path", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/{id}/deactivate", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/units/{id}/activate", ACTION_POST])
+        .await?;
+
+    // SIORG Sync
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/organization", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/unit", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/org-units", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/health", ACTION_GET])
+        .await?;
+
+    // Sync Queue Management
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/queue", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/queue/stats", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/queue/*", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/queue/*", ACTION_DELETE])
+        .await?;
+
+    // Conflict Resolution
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/conflicts", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/conflicts/*", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/conflicts/*/resolve", ACTION_POST])
+        .await?;
+
+    // Sync History
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/history", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/history/*", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/history/*/review", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/history/entity/*/*", ACTION_GET])
+        .await?;
+
+    // Sync Statistics
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/stats/detailed", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/stats/health", ACTION_GET])
+        .await?;
+
+    info!("Políticas de Organizational Management carregadas");
+
     // --- WAREHOUSE POLICIES ---
     // Material Groups
     enforcer

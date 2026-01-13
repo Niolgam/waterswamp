@@ -35,17 +35,25 @@ impl GeoRegionsService {
         &self,
         payload: CreateCountryPayload,
     ) -> Result<CountryDto, ServiceError> {
-        // Check if country code already exists
-        if self.country_repo.exists_by_code(&payload.code).await? {
+        // Check if country iso2 already exists
+        if self.country_repo.exists_by_iso2(&payload.iso2).await? {
             return Err(ServiceError::Conflict(format!(
-                "País com código '{}' já existe",
-                payload.code
+                "País com código ISO2 '{}' já existe",
+                payload.iso2
+            )));
+        }
+
+        // Check if bacen_code already exists
+        if self.country_repo.exists_by_bacen_code(payload.bacen_code).await? {
+            return Err(ServiceError::Conflict(format!(
+                "País com código Bacen '{}' já existe",
+                payload.bacen_code
             )));
         }
 
         let country = self
             .country_repo
-            .create(&payload.name, &payload.code)
+            .create(&payload.name, &payload.iso2, payload.bacen_code)
             .await?;
 
         Ok(country)
@@ -66,23 +74,37 @@ impl GeoRegionsService {
         // Check if country exists
         let _ = self.get_country(id).await?;
 
-        // If updating code, check for duplicates
-        if let Some(ref new_code) = payload.code {
+        // If updating iso2, check for duplicates
+        if let Some(ref new_iso2) = payload.iso2 {
             if self
                 .country_repo
-                .exists_by_code_excluding(new_code, id)
+                .exists_by_iso2_excluding(new_iso2, id)
                 .await?
             {
                 return Err(ServiceError::Conflict(format!(
-                    "País com código '{}' já existe",
-                    new_code
+                    "País com código ISO2 '{}' já existe",
+                    new_iso2
+                )));
+            }
+        }
+
+        // If updating bacen_code, check for duplicates
+        if let Some(new_bacen_code) = payload.bacen_code {
+            if self
+                .country_repo
+                .exists_by_bacen_code_excluding(new_bacen_code, id)
+                .await?
+            {
+                return Err(ServiceError::Conflict(format!(
+                    "País com código Bacen '{}' já existe",
+                    new_bacen_code
                 )));
             }
         }
 
         let country = self
             .country_repo
-            .update(id, payload.name.as_ref(), payload.code.as_deref())
+            .update(id, payload.name.as_ref(), payload.iso2.as_deref(), payload.bacen_code)
             .await?;
 
         Ok(country)
@@ -122,11 +144,19 @@ impl GeoRegionsService {
         &self,
         payload: CreateStatePayload,
     ) -> Result<StateWithCountryDto, ServiceError> {
-        // Check if state code already exists
-        if self.state_repo.exists_by_code(&payload.code).await? {
+        // Check if state abbreviation already exists in this country
+        if self.state_repo.exists_by_abbreviation_in_country(&payload.abbreviation, payload.country_id).await? {
             return Err(ServiceError::Conflict(format!(
-                "Estado com código '{}' já existe",
-                payload.code
+                "Estado com sigla '{}' já existe neste país",
+                payload.abbreviation
+            )));
+        }
+
+        // Check if ibge_code already exists
+        if self.state_repo.exists_by_ibge_code(payload.ibge_code).await? {
+            return Err(ServiceError::Conflict(format!(
+                "Estado com código IBGE '{}' já existe",
+                payload.ibge_code
             )));
         }
 
@@ -142,7 +172,7 @@ impl GeoRegionsService {
 
         let state = self
             .state_repo
-            .create(&payload.name, &payload.code, payload.country_id)
+            .create(&payload.name, &payload.abbreviation, payload.ibge_code, payload.country_id)
             .await?;
 
         // Return state with country information
@@ -180,16 +210,30 @@ impl GeoRegionsService {
         // Check if state exists
         let _ = self.get_state(id).await?;
 
-        // If updating code, check for duplicates
-        if let Some(ref new_code) = payload.code {
+        // If updating abbreviation, check for duplicates
+        if let Some(ref new_abbreviation) = payload.abbreviation {
             if self
                 .state_repo
-                .exists_by_code_excluding(new_code, id)
+                .exists_by_abbreviation_excluding(new_abbreviation, id)
                 .await?
             {
                 return Err(ServiceError::Conflict(format!(
-                    "Estado com código '{}' já existe",
-                    new_code
+                    "Estado com sigla '{}' já existe",
+                    new_abbreviation
+                )));
+            }
+        }
+
+        // If updating ibge_code, check for duplicates
+        if let Some(new_ibge_code) = payload.ibge_code {
+            if self
+                .state_repo
+                .exists_by_ibge_code_excluding(new_ibge_code, id)
+                .await?
+            {
+                return Err(ServiceError::Conflict(format!(
+                    "Estado com código IBGE '{}' já existe",
+                    new_ibge_code
                 )));
             }
         }
@@ -206,7 +250,8 @@ impl GeoRegionsService {
             .update(
                 id,
                 payload.name.as_ref(),
-                payload.code.as_ref(),
+                payload.abbreviation.as_ref(),
+                payload.ibge_code,
                 payload.country_id,
             )
             .await?;
@@ -259,12 +304,20 @@ impl GeoRegionsService {
     // ============================
 
     pub async fn create_city(&self, payload: CreateCityPayload) -> Result<CityDto, ServiceError> {
+        // Check if ibge_code already exists
+        if self.city_repo.exists_by_ibge_code(payload.ibge_code).await? {
+            return Err(ServiceError::Conflict(format!(
+                "Cidade com código IBGE '{}' já existe",
+                payload.ibge_code
+            )));
+        }
+
         // Verify that state exists
         let _ = self.get_state(payload.state_id).await?;
 
         let city = self
             .city_repo
-            .create(&payload.name, payload.state_id)
+            .create(&payload.name, payload.ibge_code, payload.state_id)
             .await?;
 
         Ok(city)
@@ -285,6 +338,20 @@ impl GeoRegionsService {
         // Check if city exists
         let _ = self.get_city(id).await?;
 
+        // If updating ibge_code, check for duplicates
+        if let Some(new_ibge_code) = payload.ibge_code {
+            if self
+                .city_repo
+                .exists_by_ibge_code_excluding(new_ibge_code, id)
+                .await?
+            {
+                return Err(ServiceError::Conflict(format!(
+                    "Cidade com código IBGE '{}' já existe",
+                    new_ibge_code
+                )));
+            }
+        }
+
         // If updating state_id, verify that new state exists
         if let Some(new_state_id) = payload.state_id {
             let _ = self.get_state(new_state_id).await?;
@@ -292,7 +359,7 @@ impl GeoRegionsService {
 
         let city = self
             .city_repo
-            .update(id, payload.name.as_ref(), payload.state_id)
+            .update(id, payload.name.as_ref(), payload.ibge_code, payload.state_id)
             .await?;
 
         Ok(city)

@@ -76,7 +76,7 @@ impl AuthService {
         }
 
         let password_hash =
-            hash_password(&req.password).map_err(|e| ServiceError::Internal(anyhow::anyhow!(e)))?;
+            hash_password(&req.password).map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         let user = self
             .user_repo
@@ -95,7 +95,7 @@ impl AuthService {
                 TokenType::EmailVerification,
                 EMAIL_VERIFICATION_EXPIRY,
             )
-            .map_err(|e| ServiceError::Internal(e))?;
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         // Enviar Emails (fire-and-forget com log de erros)
         if let Err(e) = self
@@ -165,16 +165,16 @@ impl AuthService {
             self.user_repo
                 .find_extended_by_id(user.id)
                 .await?
-                .ok_or(ServiceError::Internal(anyhow::anyhow!(
-                    "User lost after login"
-                )))?;
+                .ok_or(ServiceError::Internal(
+                    "User lost after login".to_string()
+                ))?;
 
         if user_ext.mfa_enabled {
             // Gerar token MFA
             let mfa_token = self
                 .jwt_service
                 .generate_mfa_token(user.id, MFA_CHALLENGE_EXPIRY)
-                .map_err(|e| ServiceError::Internal(e))?;
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
             return Ok(AuthResult {
                 user,
@@ -238,13 +238,13 @@ impl AuthService {
             .user_repo
             .find_by_id(token.user_id)
             .await?
-            .ok_or(ServiceError::Internal(anyhow::anyhow!("Usuário não encontrado")))?;
+            .ok_or(ServiceError::Internal("Usuário não encontrado".to_string()))?;
 
         // Access Token
         let access_token = self
             .jwt_service
             .generate_token(token.user_id, user.username.as_str(), TokenType::Access, ACCESS_TOKEN_EXPIRY)
-            .map_err(|e| ServiceError::Internal(e))?;
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         // Operação atômica no repo
         self.auth_repo
@@ -283,7 +283,7 @@ impl AuthService {
             let token = self
                 .jwt_service
                 .generate_token(user.id, user.username.as_str(), TokenType::PasswordReset, RESET_TOKEN_EXPIRY)
-                .map_err(|e| ServiceError::Internal(e))?;
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
             // Enviar email com log de erro
             if let Err(e) = self
@@ -318,7 +318,7 @@ impl AuthService {
 
         // 2. Hash senha
         let password_hash =
-            hash_password(new_password).map_err(|e| ServiceError::Internal(anyhow::anyhow!(e)))?;
+            hash_password(new_password).map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         // 3. Atualizar senha e revogar sessões
         self.user_repo
@@ -338,7 +338,7 @@ impl AuthService {
         let access_token = self
             .jwt_service
             .generate_token(user_id, username, TokenType::Access, ACCESS_TOKEN_EXPIRY)
-            .map_err(|e| ServiceError::Internal(e))?;
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         let refresh_token_raw = uuid::Uuid::new_v4().to_string();
         let refresh_hash = hash_token(&refresh_token_raw);
