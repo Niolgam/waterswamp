@@ -548,5 +548,15 @@ pub enum ServiceError {
     InvalidData(String),
 
     #[error("Repository error: {0}")]
-    RepositoryError(#[from] RepositoryError),
+    RepositoryError(String),
+}
+
+impl From<RepositoryError> for ServiceError {
+    fn from(err: RepositoryError) -> Self {
+        match err {
+            RepositoryError::NotFound => ServiceError::NotFound("Resource not found".to_string()),
+            RepositoryError::Duplicate(msg) => ServiceError::InvalidOperation(format!("Duplicate: {}", msg)),
+            RepositoryError::Database(msg) => ServiceError::RepositoryError(msg),
+        }
+    }
 }

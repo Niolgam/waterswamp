@@ -98,16 +98,10 @@ impl IntoResponse for AppError {
                 ServiceError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
                 ServiceError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
                 ServiceError::Conflict(msg) => (StatusCode::CONFLICT, msg),
-                ServiceError::Repository(repo_err) => match repo_err {
-                    RepositoryError::NotFound => {
-                        (StatusCode::NOT_FOUND, "Recurso não encontrado.".to_string())
-                    }
-                    RepositoryError::Duplicate(msg) => (StatusCode::CONFLICT, msg),
-                    RepositoryError::Database(_) => (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Erro interno de persistência.".to_string(),
-                    ),
-                },
+                ServiceError::Repository(msg) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Erro de repositório: {}", msg),
+                ),
                 ServiceError::Internal(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Erro interno no serviço.".to_string(),

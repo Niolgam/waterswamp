@@ -19,10 +19,10 @@ pub enum ServiceError {
     Conflict(String),
 
     #[error("Erro de repositório: {0}")]
-    Repository(#[from] RepositoryError),
+    Repository(String),
 
     #[error("Erro interno: {0}")]
-    Internal(#[from] anyhow::Error),
+    Internal(String),
 }
 
 impl ServiceError {
@@ -42,5 +42,21 @@ impl ServiceError {
 impl From<&ServiceError> for http::StatusCode {
     fn from(err: &ServiceError) -> Self {
         err.status_code()
+    }
+}
+
+impl From<RepositoryError> for ServiceError {
+    fn from(err: RepositoryError) -> Self {
+        match err {
+            RepositoryError::NotFound => ServiceError::NotFound("Resource not found".to_string()),
+            RepositoryError::Duplicate(msg) => ServiceError::Conflict(msg),
+            RepositoryError::Database(msg) => ServiceError::Repository(msg),
+        }
+    }
+}
+
+impl From<anyhow::Error> for ServiceError {
+    fn from(err: anyhow::Error) -> Self {
+        ServiceError::Internal(err.to_string())
     }
 }
