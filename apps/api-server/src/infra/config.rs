@@ -8,16 +8,16 @@ pub struct DatabaseConfig {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    #[serde(rename = "auth_database_url")]
+    #[serde(rename = "main_database_url")]
     pub main_db: String,
 
     #[serde(rename = "logs_database_url")]
     pub logs_db: String,
 
-    #[serde(rename = "jwt_private_key", default)]
+    #[serde(rename = "jwt_private_key")]
     pub jwt_private_key: String,
 
-    #[serde(rename = "jwt_public_key", default)]
+    #[serde(rename = "jwt_public_key")]
     pub jwt_public_key: String,
 }
 

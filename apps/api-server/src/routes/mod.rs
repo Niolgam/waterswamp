@@ -19,13 +19,13 @@ pub mod protected;
 pub mod public;
 
 pub fn build(app_state: AppState) -> Router {
+    // 1. Rotas Públicas
     let public_routes = public::router()
         .merge(auth::router())
         .merge(email_verification::router())
         .merge(mfa::router());
 
-    // Routes that require authentication but NOT Casbin authorization
-    // (any authenticated user can access these)
+    // 2. Rotas Autenticadas (requerem apenas JWT)
     let authenticated_routes = auth::protected_router()
         .merge(email_verification::protected_router())
         .merge(mfa::protected_router())
@@ -36,8 +36,7 @@ pub fn build(app_state: AppState) -> Router {
         ))
         .layer(api_rate_limiter());
 
-    // Routes that require authentication AND Casbin authorization
-    // (role-based access control)
+    // 3. Rotas Protegidas (requerem JWT + Autorização Casbin)
     let protected_routes = protected::router()
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
@@ -49,24 +48,24 @@ pub fn build(app_state: AppState) -> Router {
         ))
         .layer(api_rate_limiter());
 
+    // 4. Rotas Administrativas (com prefixo /api/admin)
     let admin_routes = Router::new()
-        .nest("/api/admin", admin::router())
+        .nest("/api/admin", admin::router()) // Aqui o admin::router já deve ter o geo_regions corrigido
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
-            mw_authorize, // Verifica permissões Casbin
+            mw_authorize,
         ))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
-            mw_authenticate, // Verifica JWT
+            mw_authenticate,
         ))
-        // Rate limit para admin pode ser diferente, usando o padrão por enquanto
         .layer(api_rate_limiter());
 
-    // Swagger UI routes - public, no authentication required
-    let swagger_routes: Router<()> = SwaggerUi::new("/swagger-ui")
-        .url("/api-docs/openapi.json", ApiDoc::openapi())
-        .into();
+    // 5. Swagger UI
+    let swagger_routes =
+        SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi());
 
+    // Montagem do router base
     let router = Router::new()
         .merge(public_routes)
         .merge(authenticated_routes)
@@ -75,6 +74,7 @@ pub fn build(app_state: AppState) -> Router {
         .with_state(app_state.clone())
         .merge(swagger_routes);
 
+    // Aplicação das camadas globais (CORS, Headers, Audit, etc.)
     apply_global_middleware(router, app_state)
 }
 
