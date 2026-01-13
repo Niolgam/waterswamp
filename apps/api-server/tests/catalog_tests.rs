@@ -975,7 +975,9 @@ async fn test_create_unit_conversion_success() {
     assert!(body["id"].is_string());
     assert_eq!(body["from_unit_id"], from_unit["id"]);
     assert_eq!(body["to_unit_id"], to_unit["id"]);
-    assert_eq!(body["conversion_factor"], "100");
+    // Decimal serialization may include trailing zeros (e.g., "100.0000")
+    let factor: f64 = body["conversion_factor"].as_str().unwrap().parse().unwrap();
+    assert!((factor - 100.0).abs() < 0.001);
 }
 
 #[tokio::test]
@@ -1063,7 +1065,9 @@ async fn test_update_unit_conversion_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["conversion_factor"], "59.5");
+    // Decimal serialization may include trailing zeros (e.g., "59.5000")
+    let factor: f64 = body["conversion_factor"].as_str().unwrap().parse().unwrap();
+    assert!((factor - 59.5).abs() < 0.001);
 }
 
 #[tokio::test]
