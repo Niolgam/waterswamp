@@ -433,8 +433,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
             SELECT
                 id, name, description, siorg_code, siorg_name, is_siorg_managed,
                 display_order, is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
-                siorg_raw_data, created_at, updated_at
+                siorg_sync_status, siorg_raw_data, created_at, updated_at
             FROM organizational_unit_categories
             WHERE id = $1
             "#
@@ -456,7 +455,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
             SELECT
                 id, name, description, siorg_code, siorg_name, is_siorg_managed,
                 display_order, is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_categories
             WHERE name = $1
@@ -479,7 +478,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
             SELECT
                 id, name, description, siorg_code, siorg_name, is_siorg_managed,
                 display_order, is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_categories
             WHERE siorg_code = $1
@@ -505,7 +504,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
             SELECT
                 id, name, description, siorg_code, siorg_name, is_siorg_managed,
                 display_order, is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_categories
             WHERE ($1::BOOLEAN IS NULL OR is_active = $1)
@@ -552,7 +551,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
             RETURNING
                 id, name, description, siorg_code, siorg_name, is_siorg_managed,
                 display_order, is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             "#
         )
@@ -586,7 +585,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
             RETURNING
                 id, name, description, siorg_code, siorg_name, is_siorg_managed,
                 display_order, is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             "#
         )
@@ -642,7 +641,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
             SELECT
                 id, code, name, description, siorg_code, siorg_name, is_siorg_managed,
                 is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_types
             WHERE id = $1
@@ -665,7 +664,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
             SELECT
                 id, code, name, description, siorg_code, siorg_name, is_siorg_managed,
                 is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_types
             WHERE code = $1
@@ -688,7 +687,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
             SELECT
                 id, code, name, description, siorg_code, siorg_name, is_siorg_managed,
                 is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_types
             WHERE siorg_code = $1
@@ -714,7 +713,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
             SELECT
                 id, code, name, description, siorg_code, siorg_name, is_siorg_managed,
                 is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_types
             WHERE ($1::BOOLEAN IS NULL OR is_active = $1)
@@ -761,7 +760,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
             RETURNING
                 id, code, name, description, siorg_code, siorg_name, is_siorg_managed,
                 is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             "#
         )
@@ -794,7 +793,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
             RETURNING
                 id, code, name, description, siorg_code, siorg_name, is_siorg_managed,
                 is_active, siorg_synced_at,
-                siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             "#
         )
@@ -863,13 +862,13 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type as "internal_type: InternalUnitType",
+                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
-                activity_area as "activity_area: ActivityArea",
-                contact_info as "contact_info: ContactInfo",
+                activity_area,
+                contact_info,
                 level, path_ids, path_names, is_active, deactivated_at, deactivation_reason,
-                siorg_synced_at, siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_synced_at, siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_units
             WHERE id = $1
@@ -891,13 +890,13 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 ou.id, ou.organization_id, ou.parent_id, ou.category_id, ou.unit_type_id,
-                ou.internal_type as "internal_type: InternalUnitType",
+                ou.internal_type,
                 ou.name, ou.formal_name, ou.acronym,
                 ou.siorg_code, ou.siorg_parent_code, ou.siorg_url, ou.siorg_last_version, ou.is_siorg_managed,
-                ou.activity_area as "activity_area: ActivityArea",
-                ou.contact_info as "contact_info: ContactInfo",
+                ou.activity_area,
+                ou.contact_info,
                 ou.level, ou.path_ids, ou.path_names, ou.is_active, ou.deactivated_at, ou.deactivation_reason,
-                ou.siorg_synced_at, ou.siorg_sync_status as "siorg_sync_status: SyncStatus",
+                ou.siorg_synced_at, ou.siorg_sync_status,
                 ou.siorg_raw_data, ou.created_at, ou.updated_at,
                 org.name as organization_name, org.acronym as organization_acronym,
                 p.name as parent_name, p.acronym as parent_acronym,
@@ -962,13 +961,13 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type as "internal_type: InternalUnitType",
+                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
-                activity_area as "activity_area: ActivityArea",
-                contact_info as "contact_info: ContactInfo",
+                activity_area,
+                contact_info,
                 level, path_ids, path_names, is_active, deactivated_at, deactivation_reason,
-                siorg_synced_at, siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_synced_at, siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_units
             WHERE siorg_code = $1
@@ -1002,13 +1001,13 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 ou.id, ou.organization_id, ou.parent_id, ou.category_id, ou.unit_type_id,
-                ou.internal_type as "internal_type: InternalUnitType",
+                ou.internal_type,
                 ou.name, ou.formal_name, ou.acronym,
                 ou.siorg_code, ou.siorg_parent_code, ou.siorg_url, ou.siorg_last_version, ou.is_siorg_managed,
-                ou.activity_area as "activity_area: ActivityArea",
-                ou.contact_info as "contact_info: ContactInfo",
+                ou.activity_area,
+                ou.contact_info,
                 ou.level, ou.path_ids, ou.path_names, ou.is_active, ou.deactivated_at, ou.deactivation_reason,
-                ou.siorg_synced_at, ou.siorg_sync_status as "siorg_sync_status: SyncStatus",
+                ou.siorg_synced_at, ou.siorg_sync_status,
                 ou.siorg_raw_data, ou.created_at, ou.updated_at,
                 org.name as organization_name, org.acronym as organization_acronym,
                 p.name as parent_name, p.acronym as parent_acronym,
@@ -1126,13 +1125,13 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type as "internal_type: InternalUnitType",
+                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
-                activity_area as "activity_area: ActivityArea",
-                contact_info as "contact_info: ContactInfo",
+                activity_area,
+                contact_info,
                 level, path_ids, path_names, is_active, deactivated_at, deactivation_reason,
-                siorg_synced_at, siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_synced_at, siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_units
             WHERE ($1::UUID IS NULL OR organization_id = $1)
@@ -1176,13 +1175,13 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type as "internal_type: InternalUnitType",
+                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
-                activity_area as "activity_area: ActivityArea",
-                contact_info as "contact_info: ContactInfo",
+                activity_area,
+                contact_info,
                 level, path_ids, path_names, is_active, deactivated_at, deactivation_reason,
-                siorg_synced_at, siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_synced_at, siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             FROM organizational_units
             WHERE parent_id = $1
@@ -1243,13 +1242,13 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type as "internal_type: InternalUnitType",
+                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
-                activity_area as "activity_area: ActivityArea",
-                contact_info as "contact_info: ContactInfo",
+                activity_area,
+                contact_info,
                 level, path_ids, path_names, is_active, deactivated_at, deactivation_reason,
-                siorg_synced_at, siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_synced_at, siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             "#
         )
@@ -1298,13 +1297,13 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             WHERE id = $1
             RETURNING
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type as "internal_type: InternalUnitType",
+                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
-                activity_area as "activity_area: ActivityArea",
-                contact_info as "contact_info: ContactInfo",
+                activity_area,
+                contact_info,
                 level, path_ids, path_names, is_active, deactivated_at, deactivation_reason,
-                siorg_synced_at, siorg_sync_status as "siorg_sync_status: SyncStatus",
+                siorg_synced_at, siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
             "#
         )
