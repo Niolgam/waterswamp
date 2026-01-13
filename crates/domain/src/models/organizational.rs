@@ -317,6 +317,7 @@ pub struct OrganizationalUnitWithDetailsDto {
 pub struct OrganizationalUnitTreeNode {
     #[serde(flatten)]
     pub unit: OrganizationalUnitDto,
+    #[schema(no_recursion)]
     pub children: Vec<OrganizationalUnitTreeNode>,
     pub child_count: i64,
 }
