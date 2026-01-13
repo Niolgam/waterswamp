@@ -10,7 +10,7 @@ use axum::{routing::get, Router};
 
 /// Creates the geo_regions router with all Country, State, and City routes
 pub fn router() -> Router<AppState> {
-    let countries_router = Router::new()
+    let countries = Router::new()
         .route(
             "/",
             get(handlers::list_countries).post(handlers::create_country),
@@ -22,7 +22,7 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_country),
         );
 
-    let states_router = Router::new()
+    let states = Router::new()
         .route("/", get(handlers::list_states).post(handlers::create_state))
         .route(
             "/{id}",
@@ -31,7 +31,7 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_state),
         );
 
-    let cities_router = Router::new()
+    let cities = Router::new()
         .route("/", get(handlers::list_cities).post(handlers::create_city))
         .route(
             "/{id}",
@@ -41,7 +41,7 @@ pub fn router() -> Router<AppState> {
         );
 
     Router::new()
-        .nest("/countries", countries_router)
-        .nest("/states", states_router)
-        .nest("/cities", cities_router)
+        .nest("/countries", countries)
+        .nest("/states", states)
+        .nest("/cities", cities)
 }
