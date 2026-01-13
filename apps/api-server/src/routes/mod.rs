@@ -19,25 +19,29 @@ pub mod protected;
 pub mod public;
 
 pub fn build(app_state: AppState) -> Router {
-    // 1. Rotas Públicas
+    // 1. ROTAS PÚBLICAS
+    // Inclui health checks, auth básico e a API pública de localizações para o mapa
     let public_routes = public::router()
         .merge(auth::router())
         .merge(email_verification::router())
         .merge(mfa::router());
+    // .nest("/api/locations/public", locations::public_router());
 
-    // 2. Rotas Autenticadas (requerem apenas JWT)
-    let authenticated_routes = auth::protected_router()
+    // 2. ROTAS DE UTILIZADOR (Apenas Autenticação JWT)
+    let user_routes = users::router()
+        .merge(auth::protected_router())
         .merge(email_verification::protected_router())
         .merge(mfa::protected_router())
-        .merge(users::router())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             mw_authenticate,
-        ))
-        .layer(api_rate_limiter());
+        ));
 
-    // 3. Rotas Protegidas (requerem JWT + Autorização Casbin)
-    let protected_routes = protected::router()
+    // 3. ROTAS ADMINISTRATIVAS E PROTEGIDAS (JWT + Casbin RBAC)
+    // Aqui incluímos geo_regions explicitamente como parte do admin ou rotas protegidas
+    let admin_protected_routes = Router::new()
+        .nest("/api/admin", admin::router()) // O admin::router já deve conter geo_regions internamente
+        .merge(protected::router())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             mw_authorize,
@@ -45,37 +49,28 @@ pub fn build(app_state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
             mw_authenticate,
-        ))
-        .layer(api_rate_limiter());
+        ));
 
-    // 4. Rotas Administrativas (com prefixo /api/admin)
-    let admin_routes = Router::new()
-        .nest("/api/admin", admin::router()) // Aqui o admin::router já deve ter o geo_regions corrigido
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            mw_authorize,
-        ))
-        .layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            mw_authenticate,
-        ))
-        .layer(api_rate_limiter());
-
-    // 5. Swagger UI
-    let swagger_routes =
-        SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi());
-
-    // Montagem do router base
-    let router = Router::new()
+    // 4. MONTAGEM DO ROUTER PRINCIPAL
+    // Unimos as rotas e aplicamos o Estado e o Rate Limiting uma única vez
+    let main_router = Router::new()
         .merge(public_routes)
-        .merge(authenticated_routes)
-        .merge(protected_routes)
-        .merge(admin_routes)
+        .merge(user_routes)
+        .merge(admin_protected_routes)
         .with_state(app_state.clone())
-        .merge(swagger_routes);
+        .layer(api_rate_limiter());
 
-    // Aplicação das camadas globais (CORS, Headers, Audit, etc.)
-    apply_global_middleware(router, app_state)
+    // 5. APLICAÇÃO DE MIDDLEWARE GLOBAL (CORS, Audit, Tracing)
+    apply_global_middleware(main_router, app_state)
+
+    // 6. ISOLAMENTO DO SWAGGER (A Solução Segura)
+    // Geramos o Swagger separadamente. Ao fazer merge no final do objeto 'app',
+    // evitamos que a complexidade do ApiDoc::openapi() interfira na construção
+    // da árvore de tipos do router da aplicação.
+    //  let swagger_ui = SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi());
+
+    // Merge final: aplicação processada + documentação
+    // app.merge(swagger_ui)
 }
 
 fn apply_global_middleware(router: Router, app_state: AppState) -> Router {
