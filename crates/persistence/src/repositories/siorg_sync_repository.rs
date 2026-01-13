@@ -27,8 +27,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         &self,
         batch_size: i32,
     ) -> Result<Vec<SiorgSyncQueueItem>, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgSyncQueueItem,
+        let result = sqlx::query_as::<_, SiorgSyncQueueItem>(
             r#"
             UPDATE siorg_sync_queue
             SET status = 'PROCESSING'::sync_status_enum,
@@ -66,9 +65,9 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
                 scheduled_for,
                 expires_at,
                 created_at
-            "#,
-            batch_size
+            "#
         )
+        .bind(batch_size)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
@@ -80,8 +79,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
     }
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgSyncQueueItem>, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgSyncQueueItem,
+        let result = sqlx::query_as::<_, SiorgSyncQueueItem>(
             r#"
             SELECT
                 id,
@@ -106,9 +104,9 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
                 created_at
             FROM siorg_sync_queue
             WHERE id = $1
-            "#,
-            id
+            "#
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| {
@@ -126,8 +124,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<SiorgSyncQueueItem>, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgSyncQueueItem,
+        let result = sqlx::query_as::<_, SiorgSyncQueueItem>(
             r#"
             SELECT
                 id,
@@ -155,12 +152,12 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
               AND ($2::siorg_entity_type_enum IS NULL OR entity_type = $2)
             ORDER BY priority ASC, scheduled_for ASC
             LIMIT $3 OFFSET $4
-            "#,
-            status as Option<SyncStatus>,
-            entity_type as Option<SiorgEntityType>,
-            limit,
-            offset
+            "#
         )
+        .bind(status as Option<SyncStatus>)
+        .bind(entity_type as Option<SiorgEntityType>)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
@@ -172,14 +169,14 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
     }
 
     async fn count_by_status(&self, status: SyncStatus) -> Result<i64, RepositoryError> {
-        let result = sqlx::query_scalar!(
+        let result = sqlx::query_scalar(
             r#"
             SELECT COUNT(*) as "count!"
             FROM siorg_sync_queue
             WHERE status = $1
-            "#,
-            status as SyncStatus
+            "#
         )
+        .bind(status as SyncStatus)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
@@ -195,8 +192,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<SiorgSyncQueueItem>, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgSyncQueueItem,
+        let result = sqlx::query_as::<_, SiorgSyncQueueItem>(
             r#"
             SELECT
                 id,
@@ -223,10 +219,10 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
             WHERE status = 'CONFLICT'::sync_status_enum
             ORDER BY created_at DESC
             LIMIT $1 OFFSET $2
-            "#,
-            limit,
-            offset
+            "#
         )
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
@@ -243,8 +239,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
     ) -> Result<SiorgSyncQueueItem, RepositoryError> {
         let scheduled_for = payload.scheduled_for.unwrap_or_else(Utc::now);
 
-        let result = sqlx::query_as!(
-            SiorgSyncQueueItem,
+        let result = sqlx::query_as::<_, SiorgSyncQueueItem>(
             r#"
             INSERT INTO siorg_sync_queue (
                 entity_type, siorg_code, local_id, operation, priority,
@@ -272,17 +267,17 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
                 scheduled_for,
                 expires_at,
                 created_at
-            "#,
-            payload.entity_type as SiorgEntityType,
-            payload.siorg_code,
-            payload.local_id,
-            payload.operation as SiorgChangeType,
-            payload.priority,
-            payload.payload,
-            payload.detected_changes,
-            scheduled_for,
-            payload.expires_at
+            "#
         )
+        .bind(payload.entity_type as SiorgEntityType)
+        .bind(payload.siorg_code)
+        .bind(payload.local_id)
+        .bind(payload.operation as SiorgChangeType)
+        .bind(payload.priority)
+        .bind(payload.payload)
+        .bind(payload.detected_changes)
+        .bind(scheduled_for)
+        .bind(payload.expires_at)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
@@ -300,19 +295,19 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         error: Option<String>,
         error_details: Option<serde_json::Value>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE siorg_sync_queue
             SET status = $2,
                 last_error = $3,
                 error_details = $4
             WHERE id = $1
-            "#,
-            id,
-            status as SyncStatus,
-            error,
-            error_details
+            "#
         )
+        .bind(id)
+        .bind(status as SyncStatus)
+        .bind(error)
+        .bind(error_details)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -324,16 +319,16 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
     }
 
     async fn mark_processing(&self, id: Uuid) -> Result<(), RepositoryError> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE siorg_sync_queue
             SET status = 'PROCESSING'::sync_status_enum,
                 last_attempt_at = NOW(),
                 attempts = attempts + 1
             WHERE id = $1
-            "#,
-            id
+            "#
         )
+        .bind(id)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -349,17 +344,17 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         id: Uuid,
         processed_by: Option<Uuid>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE siorg_sync_queue
             SET status = 'COMPLETED'::sync_status_enum,
                 processed_at = NOW(),
                 processed_by = $2
             WHERE id = $1
-            "#,
-            id,
-            processed_by
+            "#
         )
+        .bind(id)
+        .bind(processed_by)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -386,7 +381,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
             SyncStatus::Pending // Will retry
         };
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE siorg_sync_queue
             SET status = $2,
@@ -394,12 +389,12 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
                 error_details = $4,
                 attempts = attempts + 1
             WHERE id = $1
-            "#,
-            id,
-            new_status as SyncStatus,
-            error,
-            error_details
+            "#
         )
+        .bind(id)
+        .bind(new_status as SyncStatus)
+        .bind(error)
+        .bind(error_details)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -415,16 +410,16 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         id: Uuid,
         detected_changes: serde_json::Value,
     ) -> Result<(), RepositoryError> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE siorg_sync_queue
             SET status = 'CONFLICT'::sync_status_enum,
                 detected_changes = $2
             WHERE id = $1
-            "#,
-            id,
-            detected_changes
+            "#
         )
+        .bind(id)
+        .bind(detected_changes)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -441,7 +436,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
         resolution_notes: String,
         processed_by: Option<Uuid>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE siorg_sync_queue
             SET status = 'COMPLETED'::sync_status_enum,
@@ -449,11 +444,11 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
                 processed_at = NOW(),
                 processed_by = $3
             WHERE id = $1
-            "#,
-            id,
-            resolution_notes,
-            processed_by
+            "#
         )
+        .bind(id)
+        .bind(resolution_notes)
+        .bind(processed_by)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -465,13 +460,13 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             DELETE FROM siorg_sync_queue
             WHERE id = $1
-            "#,
-            id
+            "#
         )
+        .bind(id)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -483,7 +478,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
     }
 
     async fn clean_expired(&self) -> Result<i64, RepositoryError> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             DELETE FROM siorg_sync_queue
             WHERE expires_at IS NOT NULL
@@ -518,8 +513,7 @@ impl SiorgHistoryRepository {
 #[async_trait]
 impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgHistoryItem>, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgHistoryItem,
+        let result = sqlx::query_as::<_, SiorgHistoryItem>(
             r#"
             SELECT
                 id,
@@ -541,9 +535,9 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
                 created_by
             FROM siorg_history
             WHERE id = $1
-            "#,
-            id
+            "#
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| {
@@ -563,8 +557,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<SiorgHistoryItem>, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgHistoryItem,
+        let result = sqlx::query_as::<_, SiorgHistoryItem>(
             r#"
             SELECT
                 id,
@@ -591,14 +584,14 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
               AND ($4::BOOLEAN IS NULL OR requires_review = $4)
             ORDER BY created_at DESC
             LIMIT $5 OFFSET $6
-            "#,
-            entity_type as Option<SiorgEntityType>,
-            siorg_code,
-            change_type as Option<SiorgChangeType>,
-            requires_review,
-            limit,
-            offset
+            "#
         )
+        .bind(entity_type as Option<SiorgEntityType>)
+        .bind(siorg_code)
+        .bind(change_type as Option<SiorgChangeType>)
+        .bind(requires_review)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
@@ -615,8 +608,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         siorg_code: i32,
         limit: i64,
     ) -> Result<Vec<SiorgHistoryItem>, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgHistoryItem,
+        let result = sqlx::query_as::<_, SiorgHistoryItem>(
             r#"
             SELECT
                 id,
@@ -640,11 +632,11 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
             WHERE entity_type = $1 AND siorg_code = $2
             ORDER BY created_at DESC
             LIMIT $3
-            "#,
-            entity_type as SiorgEntityType,
-            siorg_code,
-            limit
+            "#
         )
+        .bind(entity_type as SiorgEntityType)
+        .bind(siorg_code)
+        .bind(limit)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
@@ -663,8 +655,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<SiorgHistoryItem>, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgHistoryItem,
+        let result = sqlx::query_as::<_, SiorgHistoryItem>(
             r#"
             SELECT
                 id,
@@ -688,10 +679,10 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
             WHERE requires_review = TRUE AND reviewed_at IS NULL
             ORDER BY created_at DESC
             LIMIT $1 OFFSET $2
-            "#,
-            limit,
-            offset
+            "#
         )
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
@@ -706,8 +697,7 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         &self,
         payload: CreateHistoryItemPayload,
     ) -> Result<SiorgHistoryItem, RepositoryError> {
-        let result = sqlx::query_as!(
-            SiorgHistoryItem,
+        let result = sqlx::query_as::<_, SiorgHistoryItem>(
             r#"
             INSERT INTO siorg_history (
                 entity_type, siorg_code, local_id, change_type,
@@ -734,20 +724,20 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
                 review_notes,
                 created_at,
                 created_by
-            "#,
-            payload.entity_type as SiorgEntityType,
-            payload.siorg_code,
-            payload.local_id,
-            payload.change_type as SiorgChangeType,
-            payload.previous_data,
-            payload.new_data,
-            &payload.affected_fields,
-            payload.siorg_version,
-            payload.source,
-            payload.sync_queue_id,
-            payload.requires_review,
-            payload.created_by
+            "#
         )
+        .bind(payload.entity_type as SiorgEntityType)
+        .bind(payload.siorg_code)
+        .bind(payload.local_id)
+        .bind(payload.change_type as SiorgChangeType)
+        .bind(payload.previous_data)
+        .bind(payload.new_data)
+        .bind(&payload.affected_fields)
+        .bind(payload.siorg_version)
+        .bind(payload.source)
+        .bind(payload.sync_queue_id)
+        .bind(payload.requires_review)
+        .bind(payload.created_by)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
@@ -764,18 +754,18 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         reviewed_by: Uuid,
         notes: Option<String>,
     ) -> Result<(), RepositoryError> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE siorg_history
             SET reviewed_at = NOW(),
                 reviewed_by = $2,
                 review_notes = $3
             WHERE id = $1
-            "#,
-            id,
-            reviewed_by,
-            notes
+            "#
         )
+        .bind(id)
+        .bind(reviewed_by)
+        .bind(notes)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -790,14 +780,14 @@ impl SiorgHistoryRepositoryPort for SiorgHistoryRepository {
         &self,
         entity_type: Option<SiorgEntityType>,
     ) -> Result<i64, RepositoryError> {
-        let result = sqlx::query_scalar!(
+        let result = sqlx::query_scalar(
             r#"
             SELECT COUNT(*) as "count!"
             FROM siorg_history
             WHERE ($1::siorg_entity_type_enum IS NULL OR entity_type = $1)
-            "#,
-            entity_type as Option<SiorgEntityType>
+            "#
         )
+        .bind(entity_type as Option<SiorgEntityType>)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {

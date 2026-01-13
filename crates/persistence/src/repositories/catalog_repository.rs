@@ -28,22 +28,20 @@ impl UnitOfMeasureRepository {
 #[async_trait]
 impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UnitOfMeasureDto>, RepositoryError> {
-        sqlx::query_as!(
-            UnitOfMeasureDto,
-            "SELECT * FROM units_of_measure WHERE id = $1",
-            id
+        sqlx::query_as::<_, UnitOfMeasureDto>(
+            "SELECT * FROM units_of_measure WHERE id = $1"
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
     }
 
     async fn find_by_symbol(&self, symbol: &str) -> Result<Option<UnitOfMeasureDto>, RepositoryError> {
-        sqlx::query_as!(
-            UnitOfMeasureDto,
-            "SELECT * FROM units_of_measure WHERE symbol = $1",
-            symbol
+        sqlx::query_as::<_, UnitOfMeasureDto>(
+            "SELECT * FROM units_of_measure WHERE symbol = $1"
         )
+        .bind(symbol)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -79,18 +77,17 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         description: Option<&str>,
         is_base_unit: bool,
     ) -> Result<UnitOfMeasureDto, RepositoryError> {
-        sqlx::query_as!(
-            UnitOfMeasureDto,
+        sqlx::query_as::<_, UnitOfMeasureDto>(
             r#"
             INSERT INTO units_of_measure (name, symbol, description, is_base_unit)
             VALUES ($1, $2, $3, $4)
             RETURNING *
-            "#,
-            name,
-            symbol,
-            description,
-            is_base_unit
+            "#
         )
+        .bind(name)
+        .bind(symbol)
+        .bind(description)
+        .bind(is_base_unit)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -107,8 +104,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         let current = self.find_by_id(id).await?
             .ok_or(RepositoryError::NotFound)?;
 
-        sqlx::query_as!(
-            UnitOfMeasureDto,
+        sqlx::query_as::<_, UnitOfMeasureDto>(
             r#"
             UPDATE units_of_measure
             SET name = COALESCE($2, name),
@@ -118,20 +114,21 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
                 updated_at = NOW()
             WHERE id = $1
             RETURNING *
-            "#,
-            id,
-            name,
-            symbol,
-            description,
-            is_base_unit
+            "#
         )
+        .bind(id)
+        .bind(name)
+        .bind(symbol)
+        .bind(description)
+        .bind(is_base_unit)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
-        let result = sqlx::query!("DELETE FROM units_of_measure WHERE id = $1", id)
+        let result = sqlx::query("DELETE FROM units_of_measure WHERE id = $1")
+        .bind(id)
             .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
@@ -146,18 +143,17 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
     ) -> Result<(Vec<UnitOfMeasureDto>, i64), RepositoryError> {
         let search_pattern = search.map(|s| format!("%{}%", s));
 
-        let units = sqlx::query_as!(
-            UnitOfMeasureDto,
+        let units = sqlx::query_as::<_, UnitOfMeasureDto>(
             r#"
             SELECT * FROM units_of_measure
             WHERE ($1::TEXT IS NULL OR name ILIKE $1 OR symbol ILIKE $1)
             ORDER BY name
             LIMIT $2 OFFSET $3
-            "#,
-            search_pattern,
-            limit,
-            offset
+            "#
         )
+        .bind(search_pattern)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(Self::map_err)?;
@@ -198,20 +194,19 @@ impl CatalogGroupRepository {
 #[async_trait]
 impl CatalogGroupRepositoryPort for CatalogGroupRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatalogGroupDto>, RepositoryError> {
-        sqlx::query_as!(
-            CatalogGroupDto,
+        sqlx::query_as::<_, CatalogGroupDto>(
             r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType", 
                budget_classification_id, is_active, created_at, updated_at
-               FROM catalog_groups WHERE id = $1"#,
-            id
+               FROM catalog_groups WHERE id = $1"#
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
     }
 
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatalogGroupWithDetailsDto>, RepositoryError> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
@@ -225,37 +220,36 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             JOIN budget_classifications bc ON cg.budget_classification_id = bc.id
             LEFT JOIN catalog_groups pg ON cg.parent_id = pg.id
             WHERE cg.id = $1
-            "#,
-            id
+            "#
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)?;
 
         Ok(result.map(|r| CatalogGroupWithDetailsDto {
-            id: r.id,
-            parent_id: r.parent_id,
-            name: r.name,
-            code: r.code,
-            item_type: r.item_type,
-            budget_classification_id: r.budget_classification_id,
-            budget_classification_name: r.budget_classification_name,
-            budget_classification_code: r.budget_classification_code,
-            parent_name: r.parent_name,
-            is_active: r.is_active,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            id: r.get("id"),
+            parent_id: r.get("parent_id"),
+            name: r.get("name"),
+            code: r.get("code"),
+            item_type: r.get("item_type"),
+            budget_classification_id: r.get("budget_classification_id"),
+            budget_classification_name: r.get("budget_classification_name"),
+            budget_classification_code: r.get("budget_classification_code"),
+            parent_name: r.get("parent_name"),
+            is_active: r.get("is_active"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
         }))
     }
 
     async fn find_by_code(&self, code: &str) -> Result<Option<CatalogGroupDto>, RepositoryError> {
-        sqlx::query_as!(
-            CatalogGroupDto,
+        sqlx::query_as::<_, CatalogGroupDto>(
             r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType",
                budget_classification_id, is_active, created_at, updated_at
-               FROM catalog_groups WHERE code = $1"#,
-            code
+               FROM catalog_groups WHERE code = $1"#
         )
+        .bind(code)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -332,21 +326,20 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         budget_classification_id: Uuid,
         is_active: bool,
     ) -> Result<CatalogGroupDto, RepositoryError> {
-        sqlx::query_as!(
-            CatalogGroupDto,
+        sqlx::query_as::<_, CatalogGroupDto>(
             r#"
             INSERT INTO catalog_groups (parent_id, name, code, item_type, budget_classification_id, is_active)
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id, parent_id, name, code, item_type as "item_type: ItemType",
                       budget_classification_id, is_active, created_at, updated_at
-            "#,
-            parent_id,
-            name,
-            code,
-            item_type as ItemType,
-            budget_classification_id,
-            is_active
+            "#
         )
+        .bind(parent_id)
+        .bind(name)
+        .bind(code)
+        .bind(item_type as ItemType)
+        .bind(budget_classification_id)
+        .bind(is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -372,8 +365,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         let new_budget_classification_id = budget_classification_id.unwrap_or(current.budget_classification_id);
         let new_is_active = is_active.unwrap_or(current.is_active);
 
-        sqlx::query_as!(
-            CatalogGroupDto,
+        sqlx::query_as::<_, CatalogGroupDto>(
             r#"
             UPDATE catalog_groups
             SET parent_id = $2, name = $3, code = $4, item_type = $5,
@@ -381,22 +373,23 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             WHERE id = $1
             RETURNING id, parent_id, name, code, item_type as "item_type: ItemType",
                       budget_classification_id, is_active, created_at, updated_at
-            "#,
-            id,
-            new_parent_id,
-            new_name,
-            new_code,
-            new_item_type as ItemType,
-            new_budget_classification_id,
-            new_is_active
+            "#
         )
+        .bind(id)
+        .bind(new_parent_id)
+        .bind(new_name)
+        .bind(new_code)
+        .bind(new_item_type as ItemType)
+        .bind(new_budget_classification_id)
+        .bind(new_is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
-        let result = sqlx::query!("DELETE FROM catalog_groups WHERE id = $1", id)
+        let result = sqlx::query("DELETE FROM catalog_groups WHERE id = $1")
+        .bind(id)
             .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
@@ -414,7 +407,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
     ) -> Result<(Vec<CatalogGroupWithDetailsDto>, i64), RepositoryError> {
         let search_pattern = search.map(|s| format!("%{}%", s));
 
-        let records = sqlx::query!(
+        let records = sqlx::query(
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
@@ -433,14 +426,14 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
               AND ($4::BOOLEAN IS NULL OR cg.is_active = $4)
             ORDER BY cg.name
             LIMIT $5 OFFSET $6
-            "#,
-            search_pattern,
-            parent_id,
-            item_type as Option<ItemType>,
-            is_active,
-            limit,
-            offset
+            "#
         )
+        .bind(search_pattern)
+        .bind(parent_id)
+        .bind(item_type as Option<ItemType>)
+        .bind(is_active)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(Self::map_err)?;
@@ -481,15 +474,14 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
     }
 
     async fn find_children(&self, parent_id: Option<Uuid>) -> Result<Vec<CatalogGroupDto>, RepositoryError> {
-        sqlx::query_as!(
-            CatalogGroupDto,
+        sqlx::query_as::<_, CatalogGroupDto>(
             r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType",
                budget_classification_id, is_active, created_at, updated_at
                FROM catalog_groups 
                WHERE parent_id = $1 OR (parent_id IS NULL AND $1 IS NULL)
-               ORDER BY name"#,
-            parent_id
+               ORDER BY name"#
         )
+        .bind(parent_id)
         .fetch_all(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -497,7 +489,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
 
     async fn get_tree(&self) -> Result<Vec<CatalogGroupTreeNode>, RepositoryError> {
         // Fetch all groups with their details
-        let all_groups = sqlx::query!(
+        let all_groups = sqlx::query(
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
@@ -581,18 +573,17 @@ impl CatalogItemRepository {
 #[async_trait]
 impl CatalogItemRepositoryPort for CatalogItemRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatalogItemDto>, RepositoryError> {
-        sqlx::query_as!(
-            CatalogItemDto,
-            "SELECT * FROM catalog_items WHERE id = $1",
-            id
+        sqlx::query_as::<_, CatalogItemDto>(
+            "SELECT * FROM catalog_items WHERE id = $1"
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
     }
 
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatalogItemWithDetailsDto>, RepositoryError> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             SELECT 
                 ci.*, 
@@ -602,9 +593,9 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
             JOIN catalog_groups cg ON ci.group_id = cg.id
             JOIN units_of_measure um ON ci.unit_of_measure_id = um.id
             WHERE ci.id = $1
-            "#,
-            id
+            "#
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)?;
@@ -634,11 +625,10 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
     }
 
     async fn find_by_catmat_code(&self, catmat_code: &str) -> Result<Option<CatalogItemDto>, RepositoryError> {
-        sqlx::query_as!(
-            CatalogItemDto,
-            "SELECT * FROM catalog_items WHERE catmat_code = $1",
-            catmat_code
+        sqlx::query_as::<_, CatalogItemDto>(
+            "SELECT * FROM catalog_items WHERE catmat_code = $1"
         )
+        .bind(catmat_code)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -708,8 +698,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         requires_batch_control: bool,
         is_active: bool,
     ) -> Result<CatalogItemDto, RepositoryError> {
-        sqlx::query_as!(
-            CatalogItemDto,
+        sqlx::query_as::<_, CatalogItemDto>(
             r#"
             INSERT INTO catalog_items (
                 group_id, unit_of_measure_id, name, catmat_code, specification,
@@ -718,21 +707,21 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING *
-            "#,
-            group_id,
-            unit_of_measure_id,
-            name,
-            catmat_code,
-            specification,
-            estimated_value,
-            search_links,
-            photo_url,
-            is_stockable,
-            is_permanent,
-            shelf_life_days,
-            requires_batch_control,
-            is_active
+            "#
         )
+        .bind(group_id)
+        .bind(unit_of_measure_id)
+        .bind(name)
+        .bind(catmat_code)
+        .bind(specification)
+        .bind(estimated_value)
+        .bind(search_links)
+        .bind(photo_url)
+        .bind(is_stockable)
+        .bind(is_permanent)
+        .bind(shelf_life_days)
+        .bind(requires_batch_control)
+        .bind(is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -758,8 +747,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         let current = self.find_by_id(id).await?
             .ok_or(RepositoryError::NotFound)?;
 
-        sqlx::query_as!(
-            CatalogItemDto,
+        sqlx::query_as::<_, CatalogItemDto>(
             r#"
             UPDATE catalog_items
             SET group_id = COALESCE($2, group_id),
@@ -778,29 +766,30 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
                 updated_at = NOW()
             WHERE id = $1
             RETURNING *
-            "#,
-            id,
-            group_id,
-            unit_of_measure_id,
-            name,
-            catmat_code,
-            specification,
-            estimated_value,
-            search_links,
-            photo_url,
-            is_stockable,
-            is_permanent,
-            shelf_life_days,
-            requires_batch_control,
-            is_active
+            "#
         )
+        .bind(id)
+        .bind(group_id)
+        .bind(unit_of_measure_id)
+        .bind(name)
+        .bind(catmat_code)
+        .bind(specification)
+        .bind(estimated_value)
+        .bind(search_links)
+        .bind(photo_url)
+        .bind(is_stockable)
+        .bind(is_permanent)
+        .bind(shelf_life_days)
+        .bind(requires_batch_control)
+        .bind(is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
-        let result = sqlx::query!("DELETE FROM catalog_items WHERE id = $1", id)
+        let result = sqlx::query("DELETE FROM catalog_items WHERE id = $1")
+        .bind(id)
             .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
@@ -819,7 +808,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
     ) -> Result<(Vec<CatalogItemWithDetailsDto>, i64), RepositoryError> {
         let search_pattern = search.map(|s| format!("%{}%", s));
 
-        let records = sqlx::query!(
+        let records = sqlx::query(
             r#"
             SELECT 
                 ci.*, 
@@ -835,15 +824,15 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
               AND ($5::BOOLEAN IS NULL OR ci.is_active = $5)
             ORDER BY ci.name
             LIMIT $6 OFFSET $7
-            "#,
-            search_pattern,
-            group_id,
-            is_stockable,
-            is_permanent,
-            is_active,
-            limit,
-            offset
+            "#
         )
+        .bind(search_pattern)
+        .bind(group_id)
+        .bind(is_stockable)
+        .bind(is_permanent)
+        .bind(is_active)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(Self::map_err)?;
@@ -915,18 +904,17 @@ impl UnitConversionRepository {
 #[async_trait]
 impl UnitConversionRepositoryPort for UnitConversionRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UnitConversionDto>, RepositoryError> {
-        sqlx::query_as!(
-            UnitConversionDto,
-            "SELECT * FROM unit_conversions WHERE id = $1",
-            id
+        sqlx::query_as::<_, UnitConversionDto>(
+            "SELECT * FROM unit_conversions WHERE id = $1"
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
     }
 
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<UnitConversionWithDetailsDto>, RepositoryError> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             SELECT 
                 uc.*,
@@ -938,9 +926,9 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
             JOIN units_of_measure from_unit ON uc.from_unit_id = from_unit.id
             JOIN units_of_measure to_unit ON uc.to_unit_id = to_unit.id
             WHERE uc.id = $1
-            "#,
-            id
+            "#
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)?;
@@ -960,12 +948,11 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
     }
 
     async fn find_conversion(&self, from_unit_id: Uuid, to_unit_id: Uuid) -> Result<Option<UnitConversionDto>, RepositoryError> {
-        sqlx::query_as!(
-            UnitConversionDto,
-            "SELECT * FROM unit_conversions WHERE from_unit_id = $1 AND to_unit_id = $2",
-            from_unit_id,
-            to_unit_id
+        sqlx::query_as::<_, UnitConversionDto>(
+            "SELECT * FROM unit_conversions WHERE from_unit_id = $1 AND to_unit_id = $2"
         )
+        .bind(from_unit_id)
+        .bind(to_unit_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -989,17 +976,16 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         to_unit_id: Uuid,
         conversion_factor: rust_decimal::Decimal,
     ) -> Result<UnitConversionDto, RepositoryError> {
-        sqlx::query_as!(
-            UnitConversionDto,
+        sqlx::query_as::<_, UnitConversionDto>(
             r#"
             INSERT INTO unit_conversions (from_unit_id, to_unit_id, conversion_factor)
             VALUES ($1, $2, $3)
             RETURNING *
-            "#,
-            from_unit_id,
-            to_unit_id,
-            conversion_factor
+            "#
         )
+        .bind(from_unit_id)
+        .bind(to_unit_id)
+        .bind(conversion_factor)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
@@ -1010,24 +996,24 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         id: Uuid,
         conversion_factor: rust_decimal::Decimal,
     ) -> Result<UnitConversionDto, RepositoryError> {
-        sqlx::query_as!(
-            UnitConversionDto,
+        sqlx::query_as::<_, UnitConversionDto>(
             r#"
             UPDATE unit_conversions
             SET conversion_factor = $2, updated_at = NOW()
             WHERE id = $1
             RETURNING *
-            "#,
-            id,
-            conversion_factor
+            "#
         )
+        .bind(id)
+        .bind(conversion_factor)
         .fetch_one(&self.pool)
         .await
         .map_err(Self::map_err)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
-        let result = sqlx::query!("DELETE FROM unit_conversions WHERE id = $1", id)
+        let result = sqlx::query("DELETE FROM unit_conversions WHERE id = $1")
+        .bind(id)
             .execute(&self.pool)
             .await
             .map_err(Self::map_err)?;
@@ -1041,7 +1027,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         from_unit_id: Option<Uuid>,
         to_unit_id: Option<Uuid>,
     ) -> Result<(Vec<UnitConversionWithDetailsDto>, i64), RepositoryError> {
-        let records = sqlx::query!(
+        let records = sqlx::query(
             r#"
             SELECT 
                 uc.*,
@@ -1056,12 +1042,12 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
               AND ($2::UUID IS NULL OR uc.to_unit_id = $2)
             ORDER BY from_unit.name, to_unit.name
             LIMIT $3 OFFSET $4
-            "#,
-            from_unit_id,
-            to_unit_id,
-            limit,
-            offset
+            "#
         )
+        .bind(from_unit_id)
+        .bind(to_unit_id)
+        .bind(limit)
+        .bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(Self::map_err)?;

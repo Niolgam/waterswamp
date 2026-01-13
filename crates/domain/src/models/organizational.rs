@@ -71,7 +71,7 @@ pub enum MappingStatus {
 // System Settings
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct SystemSettingDto {
     pub key: String,
     #[schema(value_type = Object)]
@@ -114,7 +114,7 @@ fn default_value_type() -> String {
 // Organization
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct OrganizationDto {
     pub id: Uuid,
     pub acronym: String,
@@ -177,7 +177,7 @@ pub struct UpdateOrganizationPayload {
 // Organizational Unit Category
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct OrganizationalUnitCategoryDto {
     pub id: Uuid,
     pub name: String,
@@ -218,7 +218,7 @@ pub struct UpdateOrganizationalUnitCategoryPayload {
 // Organizational Unit Type
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct OrganizationalUnitTypeDto {
     pub id: Uuid,
     pub code: String,
@@ -257,7 +257,8 @@ pub struct UpdateOrganizationalUnitTypePayload {
 // Organizational Unit
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::Type)]
+#[sqlx(type_name = "json")]
 pub struct ContactInfo {
     #[serde(default)]
     pub phones: Vec<String>,
@@ -268,7 +269,7 @@ pub struct ContactInfo {
     pub address: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct OrganizationalUnitDto {
     pub id: Uuid,
     pub organization_id: Uuid,
@@ -372,7 +373,7 @@ impl Default for ContactInfo {
 // SIORG Sync Queue
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct SiorgSyncQueueItem {
     pub id: Uuid,
     pub entity_type: SiorgEntityType,
@@ -432,7 +433,7 @@ fn default_priority() -> i32 {
 // SIORG History
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct SiorgHistoryItem {
     pub id: Uuid,
     pub entity_type: SiorgEntityType,
