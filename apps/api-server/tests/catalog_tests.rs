@@ -220,6 +220,7 @@ async fn test_update_unit_of_measure_success() {
     let app = common::spawn_app().await;
     let unit = create_unit_of_measure(&app, "Meter").await;
     let id = unit["id"].as_str().unwrap();
+    let new_name = random_name("UpdatedMeter");
     let new_symbol = random_code();
 
     let response = app
@@ -227,14 +228,14 @@ async fn test_update_unit_of_measure_success() {
         .put(&format!("/api/admin/catalog/units/{}", id))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "name": "Updated Meter",
+            "name": new_name,
             "symbol": new_symbol
         }))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert_eq!(body["name"], "Updated Meter");
+    assert_eq!(body["name"], new_name);
     assert_eq!(body["symbol"], new_symbol);
 }
 

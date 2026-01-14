@@ -34,12 +34,12 @@ fn random_bacen_code() -> i32 {
     (num % 9900 + 100) as i32
 }
 
-// Generates a random IBGE code (int in range 1000000-9999999 for municipalities, 10-99 for states)
+// Generates a random IBGE code for tests - use range 54-999 to avoid conflicts with real Brazilian state codes (11-53)
 fn random_ibge_code_state() -> i32 {
     let uuid = Uuid::new_v4();
     let bytes = uuid.as_bytes();
     let num = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-    (num % 90 + 10) as i32
+    (num % 946 + 54) as i32  // Range 54-999 to avoid real IBGE state codes
 }
 
 fn random_ibge_code_city() -> i32 {
