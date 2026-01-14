@@ -492,7 +492,7 @@ async fn test_list_budget_classifications_filter_by_is_active() {
 
     let response = app
         .api
-        .get("/api/admin/budget-classifications?is_active=true")
+        .get("/api/admin/budget-classifications?is_active=true&limit=100")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
