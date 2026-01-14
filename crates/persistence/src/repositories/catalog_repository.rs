@@ -498,7 +498,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
                 cg.created_at, cg.updated_at,
                 bc.name as budget_classification_name,
                 bc.full_code as budget_classification_code,
-                (SELECT COUNT(*) FROM catalog_items WHERE group_id = cg.id) as "item_count!"
+                (SELECT COUNT(*) FROM catalog_items WHERE group_id = cg.id) as item_count
             FROM catalog_groups cg
             JOIN budget_classifications bc ON cg.budget_classification_id = bc.id
             ORDER BY cg.name
