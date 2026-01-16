@@ -257,8 +257,7 @@ pub struct UpdateOrganizationalUnitTypePayload {
 // Organizational Unit
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::Type)]
-#[sqlx(type_name = "json")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ContactInfo {
     #[serde(default)]
     pub phones: Vec<String>,
@@ -286,6 +285,7 @@ pub struct OrganizationalUnitDto {
     pub siorg_last_version: Option<String>,
     pub is_siorg_managed: bool,
     pub activity_area: ActivityArea,
+    #[sqlx(json)]
     pub contact_info: ContactInfo,
     pub level: i32,
     pub path_ids: Vec<Uuid>,

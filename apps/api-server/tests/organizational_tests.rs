@@ -18,6 +18,13 @@ fn random_code() -> String {
     uuid.chars().take(8).collect()
 }
 
+fn random_numeric_code() -> i32 {
+    let uuid = Uuid::new_v4();
+    let bytes = uuid.as_bytes();
+    let num = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+    (num % 900000 + 100000) as i32  // Range 100000-999999
+}
+
 async fn create_system_setting(app: &TestApp, key: &str, value: Value) -> Value {
     let response = app
         .api
@@ -285,6 +292,8 @@ async fn test_create_organization_success() {
     let app = common::spawn_app().await;
 
     let cnpj = format!("{:014}", rand::random::<u64>() % 100000000000000);
+    let ug_code = random_numeric_code();
+    let siorg_code = random_numeric_code();
     let response = app
         .api
         .post("/api/admin/organizational/organizations")
@@ -293,8 +302,8 @@ async fn test_create_organization_success() {
             "acronym": random_code(),
             "name": random_name("Organization"),
             "cnpj": cnpj,
-            "ug_code": 123456,
-            "siorg_code": 789012,
+            "ug_code": ug_code,
+            "siorg_code": siorg_code,
             "is_main_organization": false,
             "is_active": true
         }))
