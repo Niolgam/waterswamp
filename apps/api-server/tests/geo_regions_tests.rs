@@ -14,11 +14,13 @@ fn random_code(len: usize) -> String {
     // Use UUID to get randomness
     let uuid = Uuid::new_v4().simple().to_string();
 
-    // Map bytes to A-Z range to maximize the available pool (26^len)
+    // Include digits in the pool to avoid conflicts with real ISO2 codes (which are letters only)
+    // This gives us 36^len combinations instead of 26^len
+    let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chars().collect();
     uuid.bytes()
         .filter(|b| b.is_ascii_alphanumeric())
         .take(len)
-        .map(|b| (b % 26 + b'A') as char)
+        .map(|b| chars[(b as usize) % chars.len()])
         .collect()
 }
 
@@ -72,7 +74,7 @@ async fn create_unique_country(app: &TestApp) -> Value {
             return response.json();
         }
 
-        if response.status_code() != StatusCode::CONFLICT || attempts >= 10 {
+        if response.status_code() != StatusCode::CONFLICT || attempts >= 20 {
             panic!(
                 "Failed to create country after {} attempts. Last status: {}. Body: {}",
                 attempts,
