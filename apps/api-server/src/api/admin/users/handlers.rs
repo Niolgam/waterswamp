@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 use validator::Validate;
 
-use super::contracts::{AdminCreateUserRequest, AdminUpdateUserRequest, UserActionResponse};
+use super::contracts::{AdminCreateUserRequest, AdminUpdateUserRequest, BanUserRequest, UserActionResponse};
 use crate::{
     extractors::current_user::CurrentUser,
     infra::{errors::AppError, state::AppState},
@@ -353,6 +353,7 @@ pub async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// POST /admin/users/{id}/ban
 #[utoipa::path(
     post,
     path = "/api/v1/admin/users/{id}/ban",
@@ -360,26 +361,54 @@ pub async fn delete_user(
     params(
         ("id" = Uuid, Path, description = "ID do usuário")
     ),
+    request_body = BanUserRequest,
     responses(
-        (status = 200, description = "Usuário banido com sucesso", body = UserActionResponse),
-        (status = 401, description = "Não autenticado"),
-        (status = 403, description = "Sem permissão de administrador")
+        (status = 200, description = "User banned successfully", body = UserActionResponse),
+        (status = 401, description = "Not authenticated"),
+        (status = 403, description = "No admin permission or trying to ban yourself"),
+        (status = 404, description = "User not found or already banned")
     ),
     security(
         ("bearer_auth" = [])
     )
 )]
 pub async fn ban_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    current_user: CurrentUser,
     Path(user_id): Path<Uuid>,
+    Json(payload): Json<BanUserRequest>,
 ) -> Result<Json<UserActionResponse>, AppError> {
+    // Prevent self-ban
+    if current_user.id == user_id {
+        return Err(AppError::Forbidden("Cannot ban yourself".to_string()));
+    }
+
+    let auth_repo = AuthRepository::new(state.db_pool_auth.clone());
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+
+    // Ban the user
+    user_repo
+        .ban_user(user_id, payload.reason.as_deref())
+        .await
+        .map_err(|e| match e {
+            domain::errors::RepositoryError::NotFound => {
+                AppError::NotFound("User not found or already banned".to_string())
+            }
+            _ => AppError::from(e),
+        })?;
+
+    // Revoke all tokens to force logout
+    auth_repo.revoke_all_user_tokens(user_id).await?;
+
     Ok(Json(UserActionResponse {
         user_id,
         action: "ban".to_string(),
         success: true,
+        message: Some("User has been banned and all sessions revoked".to_string()),
     }))
 }
 
+/// POST /admin/users/{id}/unban
 #[utoipa::path(
     post,
     path = "/api/v1/admin/users/{id}/unban",
@@ -388,21 +417,33 @@ pub async fn ban_user(
         ("id" = Uuid, Path, description = "ID do usuário")
     ),
     responses(
-        (status = 200, description = "Usuário desbanido com sucesso", body = UserActionResponse),
-        (status = 401, description = "Não autenticado"),
-        (status = 403, description = "Sem permissão de administrador")
+        (status = 200, description = "User unbanned successfully", body = UserActionResponse),
+        (status = 401, description = "Not authenticated"),
+        (status = 403, description = "No admin permission"),
+        (status = 404, description = "User not found or not banned")
     ),
     security(
         ("bearer_auth" = [])
     )
 )]
 pub async fn unban_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserActionResponse>, AppError> {
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+
+    // Unban the user
+    user_repo.unban_user(user_id).await.map_err(|e| match e {
+        domain::errors::RepositoryError::NotFound => {
+            AppError::NotFound("User not found or not banned".to_string())
+        }
+        _ => AppError::from(e),
+    })?;
+
     Ok(Json(UserActionResponse {
         user_id,
         action: "unban".to_string(),
         success: true,
+        message: Some("User has been unbanned".to_string()),
     }))
 }

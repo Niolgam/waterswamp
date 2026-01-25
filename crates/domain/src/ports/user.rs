@@ -61,6 +61,11 @@ pub trait UserRepositoryPort: Send + Sync {
     async fn update_role(&self, id: Uuid, new_role: &str) -> Result<(), RepositoryError>;
     async fn mark_email_unverified(&self, id: Uuid) -> Result<(), RepositoryError>;
 
+    // Ban/Unban operations
+    async fn ban_user(&self, id: Uuid, reason: Option<&str>) -> Result<(), RepositoryError>;
+    async fn unban_user(&self, id: Uuid) -> Result<(), RepositoryError>;
+    async fn is_banned(&self, id: Uuid) -> Result<bool, RepositoryError>;
+
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
 
     // Listagem (Admin)

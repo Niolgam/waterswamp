@@ -36,6 +36,9 @@ pub struct UserDtoExtended {
     pub email_verified: bool,
     pub email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
     pub mfa_enabled: bool,
+    pub is_banned: bool,
+    pub banned_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub banned_reason: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }

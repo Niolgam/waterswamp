@@ -52,11 +52,12 @@ impl UserRepositoryPort for UserRepository {
     ) -> Result<Option<UserDtoExtended>, RepositoryError> {
         sqlx::query_as::<_, UserDtoExtended>(
             r#"
-            SELECT 
-                id, username, email, role, 
-                email_verified, email_verified_at, mfa_enabled, 
-                created_at, updated_at 
-            FROM users 
+            SELECT
+                id, username, email, role,
+                email_verified, email_verified_at, mfa_enabled,
+                is_banned, banned_at, banned_reason,
+                created_at, updated_at
+            FROM users
             WHERE id = $1
             "#,
         )
@@ -229,6 +230,54 @@ impl UserRepositoryPort for UserRepository {
             .await
             .map_err(Self::map_err)?;
         Ok(())
+    }
+
+    async fn ban_user(&self, id: Uuid, reason: Option<&str>) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            r#"
+            UPDATE users
+            SET is_banned = TRUE, banned_at = NOW(), banned_reason = $2, updated_at = NOW()
+            WHERE id = $1 AND is_banned = FALSE
+            "#,
+        )
+        .bind(id)
+        .bind(reason)
+        .execute(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
+    }
+
+    async fn unban_user(&self, id: Uuid) -> Result<(), RepositoryError> {
+        let result = sqlx::query(
+            r#"
+            UPDATE users
+            SET is_banned = FALSE, banned_at = NULL, banned_reason = NULL, updated_at = NOW()
+            WHERE id = $1 AND is_banned = TRUE
+            "#,
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(Self::map_err)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound);
+        }
+        Ok(())
+    }
+
+    async fn is_banned(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        sqlx::query_scalar("SELECT is_banned FROM users WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Self::map_err)
+            .map(|opt| opt.unwrap_or(false))
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {

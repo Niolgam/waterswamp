@@ -3,10 +3,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ServiceError {
-    #[error("Usuário já existe")]
+    #[error("User already exists")]
     UserAlreadyExists,
 
-    #[error("Credenciais inválidas")]
+    #[error("Invalid credentials")]
     InvalidCredentials,
 
     #[error("{0}")]
@@ -18,11 +18,14 @@ pub enum ServiceError {
     #[error("{0}")]
     Conflict(String),
 
-    #[error("Erro de repositório: {0}")]
+    #[error("Repository error: {0}")]
     Repository(String),
 
-    #[error("Erro interno: {0}")]
+    #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Repository error: {0}")]
+    RepositoryError(String),
 }
 
 impl ServiceError {
@@ -34,6 +37,7 @@ impl ServiceError {
             ServiceError::NotFound(_) => http::StatusCode::NOT_FOUND,
             ServiceError::Conflict(_) => http::StatusCode::CONFLICT,
             ServiceError::Repository(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
+            ServiceError::RepositoryError(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
             ServiceError::Internal(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -51,6 +55,9 @@ impl From<RepositoryError> for ServiceError {
             RepositoryError::NotFound => ServiceError::NotFound("Resource not found".to_string()),
             RepositoryError::Duplicate(msg) => ServiceError::Conflict(msg),
             RepositoryError::Database(msg) => ServiceError::Repository(msg),
+            RepositoryError::ForeignKey(msg) => ServiceError::BadRequest(format!("Foreign key constraint: {}", msg)),
+            RepositoryError::InvalidData(msg) => ServiceError::BadRequest(msg),
+            RepositoryError::Transaction(msg) => ServiceError::Internal(format!("Transaction error: {}", msg)),
         }
     }
 }
