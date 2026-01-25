@@ -5,6 +5,8 @@ use domain::ports::MfaRepositoryPort;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::db_utils::map_db_error;
+
 #[derive(Clone)]
 pub struct MfaRepository {
     pool: PgPool,
@@ -13,10 +15,6 @@ pub struct MfaRepository {
 impl MfaRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
-    }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        RepositoryError::Database(e.to_string())
     }
 }
 
@@ -41,7 +39,7 @@ impl MfaRepositoryPort for MfaRepository {
         .bind(expires_at)
         .execute(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(())
     }
@@ -60,7 +58,7 @@ impl MfaRepositoryPort for MfaRepository {
         .bind(token_hash)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(result)
     }
@@ -70,12 +68,12 @@ impl MfaRepositoryPort for MfaRepository {
             .bind(token_hash)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(())
     }
 
     async fn enable_mfa(&self, user_id: Uuid, secret: &str) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await.map_err(Self::map_err)?;
+        let mut tx = self.pool.begin().await.map_err(map_db_error)?;
 
         // 1. Salvar segredo no usuário e ativar flag
         sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $1 WHERE id = $2")
@@ -83,37 +81,37 @@ impl MfaRepositoryPort for MfaRepository {
             .bind(user_id)
             .execute(&mut *tx)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         // 2. Limpar tokens de setup pendentes deste usuário
         sqlx::query("DELETE FROM mfa_setup_tokens WHERE user_id = $1")
             .bind(user_id)
             .execute(&mut *tx)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
-        tx.commit().await.map_err(Self::map_err)?;
+        tx.commit().await.map_err(map_db_error)?;
         Ok(())
     }
 
     async fn disable_mfa(&self, user_id: Uuid) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await.map_err(Self::map_err)?;
+        let mut tx = self.pool.begin().await.map_err(map_db_error)?;
 
         // Desativar no usuário
         sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
             .bind(user_id)
             .execute(&mut *tx)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         // Limpar códigos de backup
         sqlx::query("DELETE FROM mfa_backup_codes WHERE user_id = $1")
             .bind(user_id)
             .execute(&mut *tx)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
-        tx.commit().await.map_err(Self::map_err)?;
+        tx.commit().await.map_err(map_db_error)?;
         Ok(())
     }
 
@@ -122,14 +120,14 @@ impl MfaRepositoryPort for MfaRepository {
         user_id: Uuid,
         codes: &[String],
     ) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await.map_err(Self::map_err)?;
+        let mut tx = self.pool.begin().await.map_err(map_db_error)?;
 
         // Limpar antigos
         sqlx::query("DELETE FROM mfa_backup_codes WHERE user_id = $1")
             .bind(user_id)
             .execute(&mut *tx)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         // Inserir novos
         for code in codes {
@@ -141,10 +139,10 @@ impl MfaRepositoryPort for MfaRepository {
                 .bind(code)
                 .execute(&mut *tx)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         }
 
-        tx.commit().await.map_err(Self::map_err)?;
+        tx.commit().await.map_err(map_db_error)?;
         Ok(())
     }
 
@@ -155,7 +153,7 @@ impl MfaRepositoryPort for MfaRepository {
         .bind(user_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(codes.into_iter().map(|(c,)| c).collect())
     }
@@ -173,7 +171,7 @@ impl MfaRepositoryPort for MfaRepository {
         .bind(code_hash)
         .execute(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -183,7 +181,7 @@ impl MfaRepositoryPort for MfaRepository {
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await
-            .map_err(Self::map_err)
+            .map_err(map_db_error)
     }
 
     async fn is_mfa_enabled(&self, user_id: Uuid) -> Result<bool, RepositoryError> {
@@ -191,7 +189,7 @@ impl MfaRepositoryPort for MfaRepository {
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await
-            .map_err(Self::map_err)
+            .map_err(map_db_error)
             .map(|opt| opt.unwrap_or(false))
     }
 }

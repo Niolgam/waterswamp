@@ -12,6 +12,8 @@ use domain::value_objects::LocationName;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::db_utils::map_db_error;
+
 // ... (SiteType, BuildingType, SpaceType repositories unchanged) ...
 // ============================
 // Site Type Repository
@@ -26,17 +28,6 @@ impl SiteTypeRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -48,7 +39,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_name(
@@ -61,7 +52,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
         .bind(name.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_name(&self, name: &LocationName) -> Result<bool, RepositoryError> {
@@ -69,7 +60,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
             .bind(name.as_str())
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -84,7 +75,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -101,7 +92,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
         .bind(description)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -142,7 +133,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
         }
         query = query.bind(id);
 
-        query.fetch_one(&self.pool).await.map_err(Self::map_err)
+        query.fetch_one(&self.pool).await.map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -150,7 +141,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -174,7 +165,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         } else {
             sqlx::query_as::<_, SiteTypeDto>(
                 "SELECT id, name, description, icon, color, created_at, updated_at FROM site_types
@@ -184,7 +175,7 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         };
 
         let total: i64 = if let Some(ref pattern) = search_pattern {
@@ -192,12 +183,12 @@ impl SiteTypeRepositoryPort for SiteTypeRepository {
                 .bind(pattern)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         } else {
             sqlx::query_scalar("SELECT COUNT(*) FROM site_types")
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         };
 
         Ok((site_types, total))
@@ -217,17 +208,6 @@ impl BuildingTypeRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -239,7 +219,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_name(
@@ -252,7 +232,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
         .bind(name.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_name(&self, name: &LocationName) -> Result<bool, RepositoryError> {
@@ -260,7 +240,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
             .bind(name.as_str())
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -275,7 +255,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -292,7 +272,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
         .bind(description)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -333,7 +313,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
         }
         query = query.bind(id);
 
-        query.fetch_one(&self.pool).await.map_err(Self::map_err)
+        query.fetch_one(&self.pool).await.map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -341,7 +321,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -365,7 +345,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         } else {
             sqlx::query_as::<_, BuildingTypeDto>(
                 "SELECT id, name, description, icon, color, created_at, updated_at FROM building_types
@@ -375,7 +355,7 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         };
 
         let total: i64 = if let Some(ref pattern) = search_pattern {
@@ -383,12 +363,12 @@ impl BuildingTypeRepositoryPort for BuildingTypeRepository {
                 .bind(pattern)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         } else {
             sqlx::query_scalar("SELECT COUNT(*) FROM building_types")
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         };
 
         Ok((building_types, total))
@@ -408,17 +388,6 @@ impl SpaceTypeRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -430,7 +399,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_name(
@@ -443,7 +412,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
         .bind(name.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_name(&self, name: &LocationName) -> Result<bool, RepositoryError> {
@@ -451,7 +420,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
             .bind(name.as_str())
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -466,7 +435,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -483,7 +452,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
         .bind(description)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -524,7 +493,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
         }
         query = query.bind(id);
 
-        query.fetch_one(&self.pool).await.map_err(Self::map_err)
+        query.fetch_one(&self.pool).await.map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -532,7 +501,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -556,7 +525,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         } else {
             sqlx::query_as::<_, SpaceTypeDto>(
                 "SELECT id, name, description, icon, color, created_at, updated_at FROM space_types
@@ -566,7 +535,7 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         };
 
         let total: i64 = if let Some(ref pattern) = search_pattern {
@@ -574,12 +543,12 @@ impl SpaceTypeRepositoryPort for SpaceTypeRepository {
                 .bind(pattern)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         } else {
             sqlx::query_scalar("SELECT COUNT(*) FROM space_types")
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         };
 
         Ok((space_types, total))
@@ -643,7 +612,7 @@ impl SiteRepositoryPort for SiteRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(site)
     }
@@ -674,7 +643,7 @@ impl SiteRepositoryPort for SiteRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(site)
     }
@@ -697,7 +666,7 @@ impl SiteRepositoryPort for SiteRepository {
         .bind(address)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(site)
     }
@@ -735,7 +704,7 @@ impl SiteRepositoryPort for SiteRepository {
         .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(site)
     }
@@ -745,7 +714,7 @@ impl SiteRepositoryPort for SiteRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -821,7 +790,7 @@ impl SiteRepositoryPort for SiteRepository {
         }
         query = query.bind(limit).bind(offset);
 
-        let sites = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+        let sites = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
 
         // Count total
         let count_query_str = format!("SELECT COUNT(*) FROM sites s {}", where_clause);
@@ -841,7 +810,7 @@ impl SiteRepositoryPort for SiteRepository {
         let total = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok((sites, total))
     }
@@ -860,22 +829,6 @@ impl BuildingRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-                if code == "23503" {
-                    return RepositoryError::Database(
-                        "Foreign key constraint violation".to_string(),
-                    );
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -889,7 +842,7 @@ impl BuildingRepositoryPort for BuildingRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_relations_by_id(
@@ -918,7 +871,7 @@ impl BuildingRepositoryPort for BuildingRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(building)
     }
 
@@ -940,7 +893,7 @@ impl BuildingRepositoryPort for BuildingRepository {
         .bind(description)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -974,7 +927,7 @@ impl BuildingRepositoryPort for BuildingRepository {
         .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -982,7 +935,7 @@ impl BuildingRepositoryPort for BuildingRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -1056,7 +1009,7 @@ impl BuildingRepositoryPort for BuildingRepository {
         }
         query = query.bind(limit).bind(offset);
 
-        let buildings = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+        let buildings = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
 
         // Count total
         let count_query_str = format!("SELECT COUNT(*) FROM buildings b {}", where_clause);
@@ -1076,7 +1029,7 @@ impl BuildingRepositoryPort for BuildingRepository {
         let total = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok((buildings, total))
     }
@@ -1095,22 +1048,6 @@ impl FloorRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-                if code == "23503" {
-                    return RepositoryError::Database(
-                        "Foreign key constraint violation".to_string(),
-                    );
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -1124,7 +1061,7 @@ impl FloorRepositoryPort for FloorRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_relations_by_id(
@@ -1152,7 +1089,7 @@ impl FloorRepositoryPort for FloorRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(floor)
     }
 
@@ -1172,7 +1109,7 @@ impl FloorRepositoryPort for FloorRepository {
         .bind(description)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -1203,7 +1140,7 @@ impl FloorRepositoryPort for FloorRepository {
         .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -1211,7 +1148,7 @@ impl FloorRepositoryPort for FloorRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -1279,7 +1216,7 @@ impl FloorRepositoryPort for FloorRepository {
         }
         query = query.bind(limit).bind(offset);
 
-        let floors = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+        let floors = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
 
         // Count total
         let count_query_str = format!("SELECT COUNT(*) FROM floors f {}", where_clause);
@@ -1296,7 +1233,7 @@ impl FloorRepositoryPort for FloorRepository {
         let total = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok((floors, total))
     }
@@ -1350,7 +1287,7 @@ impl SpaceRepositoryPort for SpaceRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_relations_by_id(
@@ -1400,7 +1337,7 @@ impl SpaceRepositoryPort for SpaceRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn create(
@@ -1423,7 +1360,7 @@ impl SpaceRepositoryPort for SpaceRepository {
         .bind(description)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -1461,7 +1398,7 @@ impl SpaceRepositoryPort for SpaceRepository {
         .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -1469,7 +1406,7 @@ impl SpaceRepositoryPort for SpaceRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -1564,7 +1501,7 @@ impl SpaceRepositoryPort for SpaceRepository {
         }
         query = query.bind(limit).bind(offset);
 
-        let spaces = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+        let spaces = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
 
         // Count total
         let count_query_str = format!("SELECT COUNT(*) FROM spaces sp {}", where_clause);
@@ -1584,7 +1521,7 @@ impl SpaceRepositoryPort for SpaceRepository {
         let total = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok((spaces, total))
     }
