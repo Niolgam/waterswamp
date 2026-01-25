@@ -6,29 +6,16 @@ use domain::value_objects::{Email, Username};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-// REMOVIDO: Lifetime <'a>
-// ADICIONADO: Derive Clone (opcional, mas útil)
+use crate::db_utils::map_db_error;
+
 #[derive(Clone)]
 pub struct UserRepository {
-    pool: PgPool, // REMOVIDO: & (referência). Agora é Owned.
+    pool: PgPool,
 }
 
 impl UserRepository {
-    // ALTERADO: Recebe PgPool (owned) em vez de &PgPool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
-    }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        // Detecção básica de duplicação (Postgres code 23505)
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
     }
 }
 
@@ -43,7 +30,7 @@ impl UserRepositoryPort for UserRepository {
         // ALTERADO: &self.pool (referência para o owned) em vez de self.pool (que já era ref)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_extended_by_id(
@@ -64,7 +51,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn get_password_hash(&self, id: Uuid) -> Result<Option<String>, RepositoryError> {
@@ -72,7 +59,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(id)
             .fetch_optional(&self.pool)
             .await
-            .map_err(Self::map_err)
+            .map_err(map_db_error)
     }
 
     async fn mark_email_unverified(&self, id: Uuid) -> Result<(), RepositoryError> {
@@ -82,7 +69,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(id)
         .execute(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(())
     }
 
@@ -96,7 +83,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(username.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_email(&self, email: &Email) -> Result<Option<UserDto>, RepositoryError> {
@@ -106,7 +93,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(email.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_for_login(&self, identifier: &str) -> Result<Option<UserLoginInfo>, RepositoryError> {
@@ -116,7 +103,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(identifier)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_email(&self, email: &Email) -> Result<bool, RepositoryError> {
@@ -124,7 +111,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(email.as_str())
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)
+            .map_err(map_db_error)
     }
 
     async fn exists_by_username(&self, username: &Username) -> Result<bool, RepositoryError> {
@@ -132,7 +119,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(username.as_str())
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)
+            .map_err(map_db_error)
     }
 
     async fn exists_by_email_excluding(
@@ -147,7 +134,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(exclude_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_username_excluding(
@@ -160,7 +147,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(exclude_id)
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)
+            .map_err(map_db_error)
     }
 
     async fn create(
@@ -181,7 +168,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(password_hash)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update_username(
@@ -194,7 +181,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(())
     }
 
@@ -204,7 +191,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(())
     }
 
@@ -218,7 +205,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(())
     }
 
@@ -228,7 +215,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(())
     }
 
@@ -244,7 +231,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(reason)
         .execute(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         if result.rows_affected() == 0 {
             return Err(RepositoryError::NotFound);
@@ -263,7 +250,7 @@ impl UserRepositoryPort for UserRepository {
         .bind(id)
         .execute(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         if result.rows_affected() == 0 {
             return Err(RepositoryError::NotFound);
@@ -276,7 +263,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(id)
             .fetch_optional(&self.pool)
             .await
-            .map_err(Self::map_err)
+            .map_err(map_db_error)
             .map(|opt| opt.unwrap_or(false))
     }
 
@@ -285,7 +272,7 @@ impl UserRepositoryPort for UserRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -332,11 +319,11 @@ impl UserRepositoryPort for UserRepository {
 
         query = query.bind(limit).bind(offset);
 
-        let users = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+        let users = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
         let total = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok((users, total))
     }
