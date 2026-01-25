@@ -1,9 +1,9 @@
 use crate::errors::ServiceError;
 use domain::models::{
     BudgetClassificationDto, BudgetClassificationTreeNode, BudgetClassificationWithParentDto,
-    CreateBudgetClassificationPayload, PaginatedBudgetClassifications,
-    UpdateBudgetClassificationPayload,
+    CreateBudgetClassificationPayload, UpdateBudgetClassificationPayload,
 };
+use domain::pagination::Paginated;
 use domain::ports::BudgetClassificationRepositoryPort;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -142,7 +142,7 @@ impl BudgetClassificationsService {
         parent_id: Option<Uuid>,
         level: Option<i32>,
         is_active: Option<bool>,
-    ) -> Result<PaginatedBudgetClassifications, ServiceError> {
+    ) -> Result<Paginated<BudgetClassificationWithParentDto>, ServiceError> {
         let limit = limit.unwrap_or(50).min(100);
         let offset = offset.unwrap_or(0);
 
@@ -151,12 +151,7 @@ impl BudgetClassificationsService {
             .list(limit, offset, search, parent_id, level, is_active)
             .await?;
 
-        Ok(PaginatedBudgetClassifications {
-            items,
-            total,
-            limit,
-            offset,
-        })
+        Ok(Paginated::new(items, total, limit, offset))
     }
 
     pub async fn get_tree(&self) -> Result<Vec<BudgetClassificationTreeNode>, ServiceError> {

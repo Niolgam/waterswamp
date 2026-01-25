@@ -59,14 +59,6 @@ pub struct UserDetailDto {
     pub roles: Vec<String>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PaginatedUsers {
-    pub users: Vec<UserDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ListUsersQuery {
     pub limit: Option<i64>,

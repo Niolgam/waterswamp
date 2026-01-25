@@ -4,10 +4,11 @@ use axum::{
     Json,
 };
 use domain::models::{
-    BudgetClassificationTreeNode, CreateBudgetClassificationPayload,
-    ListBudgetClassificationsQuery, PaginatedBudgetClassifications,
+    BudgetClassificationTreeNode, BudgetClassificationWithParentDto,
+    CreateBudgetClassificationPayload, ListBudgetClassificationsQuery,
     UpdateBudgetClassificationPayload,
 };
+use domain::pagination::Paginated;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -33,7 +34,7 @@ use super::contracts::{BudgetClassificationResponse, BudgetClassificationWithPar
         ("is_active" = Option<bool>, Query, description = "Filtrar por status ativo")
     ),
     responses(
-        (status = 200, description = "Lista de classificações orçamentárias", body = PaginatedBudgetClassifications),
+        (status = 200, description = "Lista de classificações orçamentárias", body = Paginated<BudgetClassificationWithParentDto>),
         (status = 401, description = "Não autenticado"),
         (status = 403, description = "Sem permissão de administrador")
     ),
@@ -44,7 +45,7 @@ use super::contracts::{BudgetClassificationResponse, BudgetClassificationWithPar
 pub async fn list_budget_classifications(
     State(state): State<AppState>,
     Query(params): Query<ListBudgetClassificationsQuery>,
-) -> Result<Json<PaginatedBudgetClassifications>, AppError> {
+) -> Result<Json<Paginated<BudgetClassificationWithParentDto>>, AppError> {
     let result = state
         .budget_classifications_service
         .list(

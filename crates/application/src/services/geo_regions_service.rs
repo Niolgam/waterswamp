@@ -1,9 +1,10 @@
 use crate::errors::ServiceError;
 use domain::models::{
     CityDto, CityWithStateDto, CountryDto, CreateCityPayload, CreateCountryPayload,
-    CreateStatePayload, PaginatedCities, PaginatedCountries, PaginatedStates, StateDto,
-    StateWithCountryDto, UpdateCityPayload, UpdateCountryPayload, UpdateStatePayload,
+    CreateStatePayload, StateDto, StateWithCountryDto, UpdateCityPayload, UpdateCountryPayload,
+    UpdateStatePayload,
 };
+use domain::pagination::Paginated;
 use domain::ports::{CityRepositoryPort, CountryRepositoryPort, StateRepositoryPort};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -125,15 +126,10 @@ impl GeoRegionsService {
         limit: i64,
         offset: i64,
         search: Option<String>,
-    ) -> Result<PaginatedCountries, ServiceError> {
-        let (countries, total) = self.country_repo.list(limit, offset, search).await?;
+    ) -> Result<Paginated<CountryDto>, ServiceError> {
+        let (items, total) = self.country_repo.list(limit, offset, search).await?;
 
-        Ok(PaginatedCountries {
-            countries,
-            total,
-            limit,
-            offset,
-        })
+        Ok(Paginated::new(items, total, limit, offset))
     }
 
     // ============================
@@ -282,21 +278,16 @@ impl GeoRegionsService {
         offset: Option<i64>,
         search: Option<String>,
         country_id: Option<Uuid>,
-    ) -> Result<PaginatedStates, ServiceError> {
+    ) -> Result<Paginated<StateWithCountryDto>, ServiceError> {
         let limit = limit.unwrap_or(50).min(100);
         let offset = offset.unwrap_or(0);
 
-        let (states, total) = self
+        let (items, total) = self
             .state_repo
             .list(limit, offset, search, country_id)
             .await?;
 
-        Ok(PaginatedStates {
-            states,
-            total,
-            limit,
-            offset,
-        })
+        Ok(Paginated::new(items, total, limit, offset))
     }
 
     // ============================
@@ -381,17 +372,12 @@ impl GeoRegionsService {
         offset: Option<i64>,
         search: Option<String>,
         state_id: Option<Uuid>,
-    ) -> Result<PaginatedCities, ServiceError> {
+    ) -> Result<Paginated<CityWithStateDto>, ServiceError> {
         let limit = limit.unwrap_or(50).min(100);
         let offset = offset.unwrap_or(0);
 
-        let (cities, total) = self.city_repo.list(limit, offset, search, state_id).await?;
+        let (items, total) = self.city_repo.list(limit, offset, search, state_id).await?;
 
-        Ok(PaginatedCities {
-            cities,
-            total,
-            limit,
-            offset,
-        })
+        Ok(Paginated::new(items, total, limit, offset))
     }
 }

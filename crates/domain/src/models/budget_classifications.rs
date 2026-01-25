@@ -106,18 +106,6 @@ pub struct ListBudgetClassificationsQuery {
 }
 
 // ============================
-// Paginated Response
-// ============================
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct PaginatedBudgetClassifications {
-    pub items: Vec<BudgetClassificationWithParentDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
-// ============================
 // Helper Functions
 // ============================
 

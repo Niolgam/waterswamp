@@ -568,34 +568,6 @@ impl SiteRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(err: sqlx::Error) -> RepositoryError {
-        match &err {
-            sqlx::Error::Database(db_err) => {
-                if let Some(code) = db_err.code() {
-                    if code == "23505" {
-                        return RepositoryError::Duplicate(
-                            db_err
-                                .message()
-                                .to_string()
-                                .split("DETAIL:")
-                                .nth(1)
-                                .unwrap_or("Duplicate key violation")
-                                .trim()
-                                .to_string(),
-                        );
-                    } else if code == "23503" {
-                        return RepositoryError::Database(
-                            "Foreign key constraint violated".to_string(),
-                        );
-                    }
-                }
-            }
-            sqlx::Error::RowNotFound => return RepositoryError::NotFound,
-            _ => {}
-        }
-        RepositoryError::Database(err.to_string())
-    }
 }
 
 #[async_trait]
@@ -1250,27 +1222,6 @@ pub struct SpaceRepository {
 impl SpaceRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
-    }
-
-    fn map_err(err: sqlx::Error) -> RepositoryError {
-        match err {
-            sqlx::Error::Database(db_err) => {
-                if let Some(constraint) = db_err.constraint() {
-                    if constraint.contains("unique_space_name_per_floor") {
-                        return RepositoryError::Duplicate(
-                            "Já existe um espaço com este nome neste andar".to_string(),
-                        );
-                    }
-                    if constraint.contains("fk") || constraint.contains("foreign") {
-                        return RepositoryError::Database(
-                            "Andar ou tipo de espaço não encontrado".to_string(),
-                        );
-                    }
-                }
-                RepositoryError::Database(db_err.to_string())
-            }
-            _ => RepositoryError::Database(err.to_string()),
-        }
     }
 }
 
