@@ -396,7 +396,7 @@ pub async fn ban_user(
 
     // Ban the user
     user_repo
-        .ban_user(user_id, payload.reason.as_deref())
+        .ban_user(user_id, payload.reason)
         .await
         .map_err(|e| match e {
             domain::errors::RepositoryError::NotFound => {

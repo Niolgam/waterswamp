@@ -62,7 +62,7 @@ pub trait UserRepositoryPort: Send + Sync {
     async fn mark_email_unverified(&self, id: Uuid) -> Result<(), RepositoryError>;
 
     // Ban/Unban operations
-    async fn ban_user(&self, id: Uuid, reason: Option<&str>) -> Result<(), RepositoryError>;
+    async fn ban_user(&self, id: Uuid, reason: Option<String>) -> Result<(), RepositoryError>;
     async fn unban_user(&self, id: Uuid) -> Result<(), RepositoryError>;
     async fn is_banned(&self, id: Uuid) -> Result<bool, RepositoryError>;
 

@@ -219,7 +219,7 @@ impl UserRepositoryPort for UserRepository {
         Ok(())
     }
 
-    async fn ban_user(&self, id: Uuid, reason: Option<&str>) -> Result<(), RepositoryError> {
+    async fn ban_user(&self, id: Uuid, reason: Option<String>) -> Result<(), RepositoryError> {
         let result = sqlx::query(
             r#"
             UPDATE users
@@ -228,7 +228,7 @@ impl UserRepositoryPort for UserRepository {
             "#,
         )
         .bind(id)
-        .bind(reason)
+        .bind(reason.as_deref())
         .execute(&self.pool)
         .await
         .map_err(map_db_error)?;
