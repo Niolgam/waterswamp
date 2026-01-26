@@ -7,9 +7,11 @@ use axum::{
 use casbin::{CoreApi, MgmtApi};
 use core_services::security::hash_password;
 use domain::models::{ListUsersQuery, UserDetailDto, UserDto, UserDtoExtended};
+use domain::pagination::Paginated;
 use domain::ports::AuthRepositoryPort;
 use domain::ports::UserRepositoryPort;
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 use validator::Validate;
@@ -19,6 +21,20 @@ use crate::{
     extractors::current_user::CurrentUser,
     infra::{errors::AppError, state::AppState},
 };
+
+/// User response for list endpoint
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserListItem {
+    pub id: Uuid,
+    pub username: String,
+    pub email: String,
+    pub role: String,
+    pub roles: Vec<String>,
+    pub email_verified: bool,
+    pub mfa_enabled: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
 
 fn user_to_user_detail_dto(user: UserDtoExtended) -> UserDetailDto {
     UserDetailDto {
@@ -55,7 +71,7 @@ fn user_to_user_detail_dto(user: UserDtoExtended) -> UserDetailDto {
 pub async fn list_users(
     State(state): State<AppState>,
     Query(params): Query<ListUsersQuery>,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Json<Paginated<UserListItem>>, AppError> {
     let user_repo = UserRepository::new(state.db_pool_auth);
 
     let limit = params.limit.unwrap_or(10);
@@ -67,30 +83,22 @@ pub async fn list_users(
     let (users_dto, total) = user_repo.list(limit, offset, search).await?;
 
     // Map users to include role information
-    let users: Vec<Value> = users_dto
+    let items: Vec<UserListItem> = users_dto
         .into_iter()
-        .map(|u| {
-            json!({
-                "id": u.id,
-                "username": u.username,
-                "email": u.email,
-                "role": "user", // Default role
-                "roles": ["user"],
-                "email_verified": false,
-                "mfa_enabled": false,
-                "created_at": u.created_at,
-                "updated_at": u.updated_at
-            })
+        .map(|u| UserListItem {
+            id: u.id,
+            username: u.username.to_string(),
+            email: u.email.to_string(),
+            role: "user".to_string(),
+            roles: vec!["user".to_string()],
+            email_verified: false,
+            mfa_enabled: false,
+            created_at: u.created_at,
+            updated_at: u.updated_at,
         })
         .collect();
 
-    // Return proper response structure with pagination details
-    Ok(Json(json!({
-        "users": users,
-        "total": total,
-        "limit": limit,
-        "offset": offset
-    })))
+    Ok(Json(Paginated::new(items, total, limit, offset)))
 }
 
 /// POST /admin/users
