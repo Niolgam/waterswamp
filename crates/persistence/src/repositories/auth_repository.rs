@@ -6,6 +6,8 @@ use domain::ports::AuthRepositoryPort;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::db_utils::map_db_error;
+
 #[derive(Clone)]
 pub struct AuthRepository {
     pool: PgPool,
@@ -14,10 +16,6 @@ pub struct AuthRepository {
 impl AuthRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
-    }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        RepositoryError::Database(e.to_string())
     }
 }
 
@@ -42,7 +40,7 @@ impl AuthRepositoryPort for AuthRepository {
         .bind(family_id)
         .execute(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(())
     }
@@ -59,7 +57,7 @@ impl AuthRepositoryPort for AuthRepository {
         .bind(token_hash)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     // Método atômico para rotação: Revoga o antigo E insere o novo
@@ -72,14 +70,14 @@ impl AuthRepositoryPort for AuthRepository {
         parent_hash: &str,
         user_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await.map_err(Self::map_err)?;
+        let mut tx = self.pool.begin().await.map_err(map_db_error)?;
 
         // 1. Revogar antigo
         sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE id = $1")
             .bind(old_token_id)
             .execute(&mut *tx)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         // 2. Inserir novo
         sqlx::query(
@@ -95,9 +93,9 @@ impl AuthRepositoryPort for AuthRepository {
         .bind(parent_hash)
         .execute(&mut *tx)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
-        tx.commit().await.map_err(Self::map_err)?;
+        tx.commit().await.map_err(map_db_error)?;
         Ok(())
     }
 
@@ -106,7 +104,7 @@ impl AuthRepositoryPort for AuthRepository {
             .bind(family_id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(())
     }
 
@@ -121,7 +119,7 @@ impl AuthRepositoryPort for AuthRepository {
         .bind(token_hash)
         .execute(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -137,7 +135,7 @@ impl AuthRepositoryPort for AuthRepository {
         .bind(user_id)
         .execute(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(())
     }

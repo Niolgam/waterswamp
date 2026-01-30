@@ -4,9 +4,10 @@ use axum::{
     Json,
 };
 use domain::models::{
-    CreateDepartmentCategoryPayload, ListDepartmentCategoriesQuery,
-    PaginatedDepartmentCategories, UpdateDepartmentCategoryPayload,
+    CreateDepartmentCategoryPayload, DepartmentCategoryDto, ListDepartmentCategoriesQuery,
+    UpdateDepartmentCategoryPayload,
 };
+use domain::pagination::Paginated;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -22,7 +23,7 @@ use super::contracts::DepartmentCategoryResponse;
 pub async fn list_department_categories(
     State(state): State<AppState>,
     Query(params): Query<ListDepartmentCategoriesQuery>,
-) -> Result<Json<PaginatedDepartmentCategories>, AppError> {
+) -> Result<Json<Paginated<DepartmentCategoryDto>>, AppError> {
     let result = state
         .location_service
         .list_department_categories(params.limit, params.offset, params.search)

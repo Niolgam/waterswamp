@@ -18,14 +18,6 @@ pub struct DepartmentCategoryDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct PaginatedDepartmentCategories {
-    pub department_categories: Vec<DepartmentCategoryDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ListDepartmentCategoriesQuery {
     pub limit: Option<i64>,

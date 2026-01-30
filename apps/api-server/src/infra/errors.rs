@@ -4,49 +4,47 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use domain::errors::RepositoryError; // <--- Importante!
+use domain::errors::RepositoryError;
 use serde_json::json;
 use thiserror::Error;
 use validator::ValidationErrors;
 
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("Erro de banco de dados: {0}")]
+    #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
-    // Novo: Erro vindo da camada de domínio/repositório
-    #[error("Erro de repositório: {0}")]
+    #[error("Repository error: {0}")]
     Repository(#[from] RepositoryError),
 
-    // Erro vindo da camada de serviço/aplicação
-    #[error("Erro de serviço: {0}")]
+    #[error("Service error: {0}")]
     Service(#[from] ServiceError),
 
-    #[error("Não autorizado: {0}")]
+    #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
-    #[error("Acesso negado: {0}")]
+    #[error("Forbidden: {0}")]
     Forbidden(String),
 
-    #[error("Não encontrado: {0}")]
+    #[error("Not found: {0}")]
     NotFound(String),
 
-    #[error("Conflito: {0}")]
+    #[error("Conflict: {0}")]
     Conflict(String),
 
-    #[error("Requisição inválida: {0}")]
+    #[error("Bad request: {0}")]
     BadRequest(String),
 
-    #[error("Erro interno: {0}")]
+    #[error("Internal error: {0}")]
     Internal(String),
 
-    #[error("Erro interno: {0}")]
+    #[error("Internal error: {0}")]
     Anyhow(#[from] anyhow::Error),
 
-    #[error("Senha inválida")]
+    #[error("Invalid password")]
     InvalidPassword,
 
-    #[error("Erro de validação: {0}")]
+    #[error("Validation error: {0}")]
     Validation(#[from] ValidationErrors),
 }
 
@@ -65,52 +63,58 @@ impl IntoResponse for AppError {
             _ => tracing::info!("Erro cliente na requisição: {:?}", self),
         }
 
-        // 2. Determina o status code e a mensagem segura para o cliente
+        // 2. Determine status code and safe message for client
         let (status, error_message) = match self {
             AppError::Database(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Erro interno no servidor.".to_string(),
+                "Internal server error.".to_string(),
             ),
-            // Mapeamento inteligente dos erros do Repositório
+            // Smart mapping of Repository errors
             AppError::Repository(repo_err) => match repo_err {
                 RepositoryError::NotFound => {
-                    (StatusCode::NOT_FOUND, "Recurso não encontrado.".to_string())
+                    (StatusCode::NOT_FOUND, "Resource not found.".to_string())
                 }
-                RepositoryError::Duplicate(msg) => (
-                    StatusCode::CONFLICT,
-                    msg, // "Email já existe", etc.
-                ),
+                RepositoryError::Duplicate(msg) => (StatusCode::CONFLICT, msg),
                 RepositoryError::Database(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "Erro interno de persistência.".to_string(),
+                    "Internal persistence error.".to_string(),
+                ),
+                RepositoryError::ForeignKey(msg) => (
+                    StatusCode::BAD_REQUEST,
+                    format!("Foreign key constraint: {}", msg),
+                ),
+                RepositoryError::InvalidData(msg) => (StatusCode::BAD_REQUEST, msg),
+                RepositoryError::Transaction(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Transaction error.".to_string(),
                 ),
             },
-            // Mapeamento dos erros de serviço
+            // Mapping of Service errors
             AppError::Service(service_err) => match service_err {
                 ServiceError::UserAlreadyExists => (
                     StatusCode::CONFLICT,
-                    "Usuário já existe.".to_string(),
+                    "User already exists.".to_string(),
                 ),
                 ServiceError::InvalidCredentials => (
                     StatusCode::UNAUTHORIZED,
-                    "Credenciais inválidas.".to_string(),
+                    "Invalid credentials.".to_string(),
                 ),
                 ServiceError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
                 ServiceError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
                 ServiceError::Conflict(msg) => (StatusCode::CONFLICT, msg),
-                ServiceError::Repository(msg) => (
+                ServiceError::Repository(msg) | ServiceError::RepositoryError(msg) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Erro de repositório: {}", msg),
+                    format!("Repository error: {}", msg),
                 ),
                 ServiceError::Internal(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "Erro interno no serviço.".to_string(),
+                    "Internal service error.".to_string(),
                 ),
             },
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
             AppError::InvalidPassword => (
                 StatusCode::UNAUTHORIZED,
-                "Usuário ou senha inválidos.".to_string(),
+                "Invalid username or password.".to_string(),
             ),
             AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
@@ -120,7 +124,7 @@ impl IntoResponse for AppError {
             AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             AppError::Anyhow(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Erro interno inesperado.".to_string(),
+                "Unexpected internal error.".to_string(),
             ),
         };
 

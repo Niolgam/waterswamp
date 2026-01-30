@@ -8,6 +8,7 @@ pub use config::EmailConfig;
 #[cfg(any(test, feature = "mock"))]
 pub mod mock;
 
+use domain::errors::EmailError;
 use domain::ports::EmailServicePort;
 use domain::value_objects::Email;
 use domain::value_objects::Username;
@@ -185,7 +186,7 @@ impl EmailServicePort for EmailService {
         to: &Email,
         username: &Username,
         token: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), EmailError> {
         let mut context = TeraContext::new();
         context.insert("username", username.as_str());
 
@@ -197,24 +198,24 @@ impl EmailServicePort for EmailService {
         let service = self.clone();
         let to_string = to.as_str().to_string();
 
-        // Spawn para não bloquear, como era antes
+        // Spawn to avoid blocking, as it was before
         tokio::spawn(async move {
             if let Err(e) = service
                 .send_raw(
                     to_string,
-                    "Verifique seu email - Waterswamp".into(),
+                    "Verify your email - Waterswamp".into(),
                     "email_verification.html",
                     context,
                 )
                 .await
             {
-                tracing::error!("Falha email verificação: {:?}", e);
+                tracing::error!("Email verification send failed: {:?}", e);
             }
         });
         Ok(())
     }
 
-    async fn send_welcome_email(&self, to: &Email, username: &Username) -> Result<(), String> {
+    async fn send_welcome_email(&self, to: &Email, username: &Username) -> Result<(), EmailError> {
         let mut context = TeraContext::new();
         context.insert("username", username.as_str());
 
@@ -225,13 +226,13 @@ impl EmailServicePort for EmailService {
             if let Err(e) = service
                 .send_raw(
                     to_string,
-                    "Bem-vindo ao Waterswamp!".into(),
+                    "Welcome to Waterswamp!".into(),
                     "welcome.html",
                     context,
                 )
                 .await
             {
-                tracing::error!("Falha email welcome: {:?}", e);
+                tracing::error!("Welcome email send failed: {:?}", e);
             }
         });
         Ok(())
@@ -242,7 +243,7 @@ impl EmailServicePort for EmailService {
         to: &Email,
         username: &Username,
         token: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), EmailError> {
         let mut context = TeraContext::new();
         context.insert("username", username.as_str());
 
@@ -258,19 +259,23 @@ impl EmailServicePort for EmailService {
             if let Err(e) = service
                 .send_raw(
                     to_string,
-                    "Redefina sua senha".into(),
+                    "Reset your password".into(),
                     "reset_password.html",
                     context,
                 )
                 .await
             {
-                tracing::error!("Falha email reset: {:?}", e);
+                tracing::error!("Password reset email send failed: {:?}", e);
             }
         });
         Ok(())
     }
 
-    async fn send_mfa_enabled_email(&self, to: &Email, username: &Username) -> Result<(), String> {
+    async fn send_mfa_enabled_email(
+        &self,
+        to: &Email,
+        username: &Username,
+    ) -> Result<(), EmailError> {
         let mut context = TeraContext::new();
         context.insert("username", username.as_str());
 
@@ -286,13 +291,13 @@ impl EmailServicePort for EmailService {
             if let Err(e) = service
                 .send_raw(
                     to_string,
-                    "MFA Ativado - Waterswamp".into(),
+                    "MFA Enabled - Waterswamp".into(),
                     "mfa_enabled.html",
                     context,
                 )
                 .await
             {
-                tracing::error!("Falha no envio de email MFA: {:?}", e);
+                tracing::error!("MFA enabled email send failed: {:?}", e);
             }
         });
         Ok(())

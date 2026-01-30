@@ -557,6 +557,9 @@ impl From<RepositoryError> for ServiceError {
             RepositoryError::NotFound => ServiceError::NotFound("Resource not found".to_string()),
             RepositoryError::Duplicate(msg) => ServiceError::InvalidOperation(format!("Duplicate: {}", msg)),
             RepositoryError::Database(msg) => ServiceError::RepositoryError(msg),
+            RepositoryError::ForeignKey(msg) => ServiceError::InvalidOperation(format!("Foreign key constraint: {}", msg)),
+            RepositoryError::InvalidData(msg) => ServiceError::InvalidOperation(msg),
+            RepositoryError::Transaction(msg) => ServiceError::RepositoryError(format!("Transaction error: {}", msg)),
         }
     }
 }

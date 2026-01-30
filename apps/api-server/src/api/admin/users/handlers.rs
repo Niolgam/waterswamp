@@ -7,18 +7,34 @@ use axum::{
 use casbin::{CoreApi, MgmtApi};
 use core_services::security::hash_password;
 use domain::models::{ListUsersQuery, UserDetailDto, UserDto, UserDtoExtended};
+use domain::pagination::Paginated;
 use domain::ports::AuthRepositoryPort;
 use domain::ports::UserRepositoryPort;
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 use validator::Validate;
 
-use super::contracts::{AdminCreateUserRequest, AdminUpdateUserRequest, UserActionResponse};
+use super::contracts::{AdminCreateUserRequest, AdminUpdateUserRequest, BanUserRequest, UserActionResponse};
 use crate::{
     extractors::current_user::CurrentUser,
     infra::{errors::AppError, state::AppState},
 };
+
+/// User response for list endpoint
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserListItem {
+    pub id: Uuid,
+    pub username: String,
+    pub email: String,
+    pub role: String,
+    pub roles: Vec<String>,
+    pub email_verified: bool,
+    pub mfa_enabled: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
 
 fn user_to_user_detail_dto(user: UserDtoExtended) -> UserDetailDto {
     UserDetailDto {
@@ -55,7 +71,7 @@ fn user_to_user_detail_dto(user: UserDtoExtended) -> UserDetailDto {
 pub async fn list_users(
     State(state): State<AppState>,
     Query(params): Query<ListUsersQuery>,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Json<Paginated<UserListItem>>, AppError> {
     let user_repo = UserRepository::new(state.db_pool_auth);
 
     let limit = params.limit.unwrap_or(10);
@@ -67,30 +83,22 @@ pub async fn list_users(
     let (users_dto, total) = user_repo.list(limit, offset, search).await?;
 
     // Map users to include role information
-    let users: Vec<Value> = users_dto
+    let items: Vec<UserListItem> = users_dto
         .into_iter()
-        .map(|u| {
-            json!({
-                "id": u.id,
-                "username": u.username,
-                "email": u.email,
-                "role": "user", // Default role
-                "roles": ["user"],
-                "email_verified": false,
-                "mfa_enabled": false,
-                "created_at": u.created_at,
-                "updated_at": u.updated_at
-            })
+        .map(|u| UserListItem {
+            id: u.id,
+            username: u.username.to_string(),
+            email: u.email.to_string(),
+            role: "user".to_string(),
+            roles: vec!["user".to_string()],
+            email_verified: false,
+            mfa_enabled: false,
+            created_at: u.created_at,
+            updated_at: u.updated_at,
         })
         .collect();
 
-    // Return proper response structure with pagination details
-    Ok(Json(json!({
-        "users": users,
-        "total": total,
-        "limit": limit,
-        "offset": offset
-    })))
+    Ok(Json(Paginated::new(items, total, limit, offset)))
 }
 
 /// POST /admin/users
@@ -353,6 +361,7 @@ pub async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// POST /admin/users/{id}/ban
 #[utoipa::path(
     post,
     path = "/api/v1/admin/users/{id}/ban",
@@ -360,26 +369,54 @@ pub async fn delete_user(
     params(
         ("id" = Uuid, Path, description = "ID do usuário")
     ),
+    request_body = BanUserRequest,
     responses(
-        (status = 200, description = "Usuário banido com sucesso", body = UserActionResponse),
-        (status = 401, description = "Não autenticado"),
-        (status = 403, description = "Sem permissão de administrador")
+        (status = 200, description = "User banned successfully", body = UserActionResponse),
+        (status = 401, description = "Not authenticated"),
+        (status = 403, description = "No admin permission or trying to ban yourself"),
+        (status = 404, description = "User not found or already banned")
     ),
     security(
         ("bearer_auth" = [])
     )
 )]
 pub async fn ban_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
+    current_user: CurrentUser,
     Path(user_id): Path<Uuid>,
+    Json(payload): Json<BanUserRequest>,
 ) -> Result<Json<UserActionResponse>, AppError> {
+    // Prevent self-ban
+    if current_user.id == user_id {
+        return Err(AppError::Forbidden("Cannot ban yourself".to_string()));
+    }
+
+    let auth_repo = AuthRepository::new(state.db_pool_auth.clone());
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+
+    // Ban the user
+    user_repo
+        .ban_user(user_id, payload.reason)
+        .await
+        .map_err(|e| match e {
+            domain::errors::RepositoryError::NotFound => {
+                AppError::NotFound("User not found or already banned".to_string())
+            }
+            _ => AppError::from(e),
+        })?;
+
+    // Revoke all tokens to force logout
+    auth_repo.revoke_all_user_tokens(user_id).await?;
+
     Ok(Json(UserActionResponse {
         user_id,
         action: "ban".to_string(),
         success: true,
+        message: Some("User has been banned and all sessions revoked".to_string()),
     }))
 }
 
+/// POST /admin/users/{id}/unban
 #[utoipa::path(
     post,
     path = "/api/v1/admin/users/{id}/unban",
@@ -388,21 +425,33 @@ pub async fn ban_user(
         ("id" = Uuid, Path, description = "ID do usuário")
     ),
     responses(
-        (status = 200, description = "Usuário desbanido com sucesso", body = UserActionResponse),
-        (status = 401, description = "Não autenticado"),
-        (status = 403, description = "Sem permissão de administrador")
+        (status = 200, description = "User unbanned successfully", body = UserActionResponse),
+        (status = 401, description = "Not authenticated"),
+        (status = 403, description = "No admin permission"),
+        (status = 404, description = "User not found or not banned")
     ),
     security(
         ("bearer_auth" = [])
     )
 )]
 pub async fn unban_user(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserActionResponse>, AppError> {
+    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+
+    // Unban the user
+    user_repo.unban_user(user_id).await.map_err(|e| match e {
+        domain::errors::RepositoryError::NotFound => {
+            AppError::NotFound("User not found or not banned".to_string())
+        }
+        _ => AppError::from(e),
+    })?;
+
     Ok(Json(UserActionResponse {
         user_id,
         action: "unban".to_string(),
         success: true,
+        message: Some("User has been unbanned".to_string()),
     }))
 }

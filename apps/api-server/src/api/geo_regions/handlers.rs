@@ -4,10 +4,11 @@ use axum::{
     Json,
 };
 use domain::models::{
-    CreateCityPayload, CreateCountryPayload, CreateStatePayload, ListCitiesQuery,
-    ListCountriesQuery, ListStatesQuery, PaginatedCities, PaginatedCountries, PaginatedStates,
-    UpdateCityPayload, UpdateCountryPayload, UpdateStatePayload,
+    CityWithStateDto, CountryDto, CreateCityPayload, CreateCountryPayload, CreateStatePayload,
+    ListCitiesQuery, ListCountriesQuery, ListStatesQuery, StateWithCountryDto, UpdateCityPayload,
+    UpdateCountryPayload, UpdateStatePayload,
 };
+use domain::pagination::Paginated;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -30,7 +31,7 @@ use super::contracts::{CityResponse, CityWithStateResponse, CountryResponse, Sta
         ("search" = Option<String>, Query, description = "Termo de busca")
     ),
     responses(
-        (status = 200, description = "Lista de países", body = PaginatedCountries),
+        (status = 200, description = "Lista de países", body = Paginated<CountryDto>),
         (status = 401, description = "Não autenticado"),
         (status = 403, description = "Sem permissão de administrador")
     ),
@@ -41,7 +42,7 @@ use super::contracts::{CityResponse, CityWithStateResponse, CountryResponse, Sta
 pub async fn list_countries(
     State(state): State<AppState>,
     Query(params): Query<ListCountriesQuery>,
-) -> Result<Json<PaginatedCountries>, AppError> {
+) -> Result<Json<Paginated<CountryDto>>, AppError> {
     let result = state
         .location_service
         .list_countries(
@@ -210,7 +211,7 @@ pub async fn delete_country(
         ("country_id" = Option<Uuid>, Query, description = "Filtrar por ID do país")
     ),
     responses(
-        (status = 200, description = "Lista de estados", body = PaginatedStates),
+        (status = 200, description = "Lista de estados", body = Paginated<StateWithCountryDto>),
         (status = 401, description = "Não autenticado"),
         (status = 403, description = "Sem permissão de administrador")
     ),
@@ -221,7 +222,7 @@ pub async fn delete_country(
 pub async fn list_states(
     State(state): State<AppState>,
     Query(params): Query<ListStatesQuery>,
-) -> Result<Json<PaginatedStates>, AppError> {
+) -> Result<Json<Paginated<StateWithCountryDto>>, AppError> {
     let result = state
         .location_service
         .list_states(params.limit, params.offset, params.search, params.country_id)
@@ -389,7 +390,7 @@ pub async fn delete_state(
         ("state_id" = Option<Uuid>, Query, description = "Filtrar por ID do estado")
     ),
     responses(
-        (status = 200, description = "Lista de cidades", body = PaginatedCities),
+        (status = 200, description = "Lista de cidades", body = Paginated<CityWithStateDto>),
         (status = 401, description = "Não autenticado"),
         (status = 403, description = "Sem permissão de administrador")
     ),
@@ -400,7 +401,7 @@ pub async fn delete_state(
 pub async fn list_cities(
     State(state): State<AppState>,
     Query(params): Query<ListCitiesQuery>,
-) -> Result<Json<PaginatedCities>, AppError> {
+) -> Result<Json<Paginated<CityWithStateDto>>, AppError> {
     let result = state
         .location_service
         .list_cities(params.limit, params.offset, params.search, params.state_id)

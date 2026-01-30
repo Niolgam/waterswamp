@@ -181,6 +181,9 @@ mod tests {
             email_verified: true,
             email_verified_at: None,
             mfa_enabled: false,
+            is_banned: false,
+            banned_at: None,
+            banned_reason: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         };

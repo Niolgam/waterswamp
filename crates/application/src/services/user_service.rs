@@ -191,6 +191,9 @@ mod tests {
             async fn mark_email_unverified(&self, id: Uuid) -> Result<(), RepositoryError>;
             async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
             async fn list(&self, limit: i64, offset: i64, search: Option<String>) -> Result<(Vec<UserDto>, i64), RepositoryError>;
+            async fn ban_user(&self, id: Uuid, reason: Option<String>) -> Result<(), RepositoryError>;
+            async fn unban_user(&self, id: Uuid) -> Result<(), RepositoryError>;
+            async fn is_banned(&self, id: Uuid) -> Result<bool, RepositoryError>;
         }
     }
 
@@ -211,10 +214,10 @@ mod tests {
         pub EmailService {}
         #[async_trait::async_trait]
         impl EmailServicePort for EmailService {
-            async fn send_verification_email(&self, to: &Email, username: &Username, token: &str) -> Result<(), String>;
-            async fn send_welcome_email(&self, to: &Email, username: &Username) -> Result<(), String>;
-            async fn send_password_reset_email(&self, to: &Email, username: &Username, token: &str) -> Result<(), String>;
-            async fn send_mfa_enabled_email(&self, to: &Email, username: &Username) -> Result<(), String>;
+            async fn send_verification_email(&self, to: &Email, username: &Username, token: &str) -> Result<(), domain::errors::EmailError>;
+            async fn send_welcome_email(&self, to: &Email, username: &Username) -> Result<(), domain::errors::EmailError>;
+            async fn send_password_reset_email(&self, to: &Email, username: &Username, token: &str) -> Result<(), domain::errors::EmailError>;
+            async fn send_mfa_enabled_email(&self, to: &Email, username: &Username) -> Result<(), domain::errors::EmailError>;
         }
     }
 
@@ -235,6 +238,9 @@ mod tests {
             email_verified: true,
             email_verified_at: Some(Utc::now()),
             mfa_enabled: false,
+            is_banned: false,
+            banned_at: None,
+            banned_reason: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }

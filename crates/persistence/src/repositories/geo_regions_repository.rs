@@ -6,6 +6,8 @@ use domain::value_objects::{LocationName, StateCode};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::db_utils::map_db_error;
+
 // ============================
 // Country Repository
 // ============================
@@ -19,22 +21,6 @@ impl CountryRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-                if code == "23503" {
-                    return RepositoryError::Database(
-                        "Foreign key constraint violation".to_string(),
-                    );
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -46,7 +32,7 @@ impl CountryRepositoryPort for CountryRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_iso2(&self, iso2: &str) -> Result<Option<CountryDto>, RepositoryError> {
@@ -56,7 +42,7 @@ impl CountryRepositoryPort for CountryRepository {
         .bind(iso2)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_bacen_code(&self, bacen_code: i32) -> Result<Option<CountryDto>, RepositoryError> {
@@ -66,7 +52,7 @@ impl CountryRepositoryPort for CountryRepository {
         .bind(bacen_code)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_iso2(&self, iso2: &str) -> Result<bool, RepositoryError> {
@@ -74,7 +60,7 @@ impl CountryRepositoryPort for CountryRepository {
             .bind(iso2)
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -89,7 +75,7 @@ impl CountryRepositoryPort for CountryRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -98,7 +84,7 @@ impl CountryRepositoryPort for CountryRepository {
             .bind(bacen_code)
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -113,7 +99,7 @@ impl CountryRepositoryPort for CountryRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -126,7 +112,7 @@ impl CountryRepositoryPort for CountryRepository {
         .bind(bacen_code)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -154,7 +140,7 @@ impl CountryRepositoryPort for CountryRepository {
         .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -162,7 +148,7 @@ impl CountryRepositoryPort for CountryRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -183,7 +169,7 @@ impl CountryRepositoryPort for CountryRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         } else {
             sqlx::query_as::<_, CountryDto>(
                 "SELECT id, name, iso2, bacen_code, created_at, updated_at FROM countries ORDER BY name LIMIT $1 OFFSET $2",
@@ -192,7 +178,7 @@ impl CountryRepositoryPort for CountryRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         };
 
         let total: i64 = if let Some(ref pattern) = search_pattern {
@@ -200,12 +186,12 @@ impl CountryRepositoryPort for CountryRepository {
                 .bind(pattern)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         } else {
             sqlx::query_scalar("SELECT COUNT(*) FROM countries")
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         };
 
         Ok((countries, total))
@@ -225,22 +211,6 @@ impl StateRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-                if code == "23503" {
-                    return RepositoryError::Database(
-                        "Foreign key constraint violation".to_string(),
-                    );
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -252,7 +222,7 @@ impl StateRepositoryPort for StateRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_country_by_id(
@@ -273,7 +243,7 @@ impl StateRepositoryPort for StateRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_abbreviation(&self, abbreviation: &StateCode) -> Result<Option<StateDto>, RepositoryError> {
@@ -283,7 +253,7 @@ impl StateRepositoryPort for StateRepository {
         .bind(abbreviation.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_ibge_code(&self, ibge_code: i32) -> Result<Option<StateDto>, RepositoryError> {
@@ -293,7 +263,7 @@ impl StateRepositoryPort for StateRepository {
         .bind(ibge_code)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_abbreviation(&self, abbreviation: &StateCode) -> Result<bool, RepositoryError> {
@@ -301,7 +271,7 @@ impl StateRepositoryPort for StateRepository {
             .bind(abbreviation.as_str())
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -317,7 +287,7 @@ impl StateRepositoryPort for StateRepository {
             .bind(country_id)
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -332,7 +302,7 @@ impl StateRepositoryPort for StateRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -341,7 +311,7 @@ impl StateRepositoryPort for StateRepository {
             .bind(ibge_code)
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -356,7 +326,7 @@ impl StateRepositoryPort for StateRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -376,7 +346,7 @@ impl StateRepositoryPort for StateRepository {
         .bind(country_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -434,7 +404,7 @@ impl StateRepositoryPort for StateRepository {
         }
         query = query.bind(id);
 
-        query.fetch_one(&self.pool).await.map_err(Self::map_err)
+        query.fetch_one(&self.pool).await.map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -442,7 +412,7 @@ impl StateRepositoryPort for StateRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -502,7 +472,7 @@ impl StateRepositoryPort for StateRepository {
         }
         query = query.bind(limit).bind(offset);
 
-        let states = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+        let states = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
 
         // Count query
         let count_query_str = format!(
@@ -522,7 +492,7 @@ impl StateRepositoryPort for StateRepository {
         let total: i64 = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok((states, total))
     }
@@ -541,22 +511,6 @@ impl CityRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-                if code == "23503" {
-                    return RepositoryError::Database(
-                        "Foreign key constraint violation".to_string(),
-                    );
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -568,7 +522,7 @@ impl CityRepositoryPort for CityRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_state_by_id(
@@ -591,7 +545,7 @@ impl CityRepositoryPort for CityRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(result)
     }
@@ -603,7 +557,7 @@ impl CityRepositoryPort for CityRepository {
         .bind(ibge_code)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_ibge_code(&self, ibge_code: i32) -> Result<bool, RepositoryError> {
@@ -611,7 +565,7 @@ impl CityRepositoryPort for CityRepository {
             .bind(ibge_code)
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -626,7 +580,7 @@ impl CityRepositoryPort for CityRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -645,7 +599,7 @@ impl CityRepositoryPort for CityRepository {
         .bind(state_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -694,7 +648,7 @@ impl CityRepositoryPort for CityRepository {
         }
         query = query.bind(id);
 
-        query.fetch_one(&self.pool).await.map_err(Self::map_err)
+        query.fetch_one(&self.pool).await.map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -702,7 +656,7 @@ impl CityRepositoryPort for CityRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -740,7 +694,7 @@ impl CityRepositoryPort for CityRepository {
                     .bind(offset)
                     .fetch_all(&self.pool)
                     .await
-                    .map_err(Self::map_err)?
+                    .map_err(map_db_error)?
             }
             (Some(pattern), None) => {
                 let q = format!(
@@ -753,7 +707,7 @@ impl CityRepositoryPort for CityRepository {
                     .bind(offset)
                     .fetch_all(&self.pool)
                     .await
-                    .map_err(Self::map_err)?
+                    .map_err(map_db_error)?
             }
             (None, Some(state)) => {
                 let q = format!(
@@ -766,7 +720,7 @@ impl CityRepositoryPort for CityRepository {
                     .bind(offset)
                     .fetch_all(&self.pool)
                     .await
-                    .map_err(Self::map_err)?
+                    .map_err(map_db_error)?
             }
             (None, None) => {
                 let q = format!("{} ORDER BY c.name LIMIT $1 OFFSET $2", base_query);
@@ -775,7 +729,7 @@ impl CityRepositoryPort for CityRepository {
                     .bind(offset)
                     .fetch_all(&self.pool)
                     .await
-                    .map_err(Self::map_err)?
+                    .map_err(map_db_error)?
             }
         };
 
@@ -788,25 +742,25 @@ impl CityRepositoryPort for CityRepository {
             .bind(state)
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?,
+            .map_err(map_db_error)?,
             (Some(pattern), None) => {
                 sqlx::query_scalar(&format!("{} WHERE c.name ILIKE $1", count_base))
                     .bind(pattern)
                     .fetch_one(&self.pool)
                     .await
-                    .map_err(Self::map_err)?
+                    .map_err(map_db_error)?
             }
             (None, Some(state)) => {
                 sqlx::query_scalar(&format!("{} WHERE c.state_id = $1", count_base))
                     .bind(state)
                     .fetch_one(&self.pool)
                     .await
-                    .map_err(Self::map_err)?
+                    .map_err(map_db_error)?
             }
             (None, None) => sqlx::query_scalar(count_base)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?,
+                .map_err(map_db_error)?,
         };
 
         Ok((cities, total))

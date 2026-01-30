@@ -242,15 +242,6 @@ pub struct ListAuditLogsQuery {
     pub sort_by: Option<String>,
 }
 
-/// Paginated response for audit logs
-#[derive(Debug, Serialize)]
-pub struct PaginatedAuditLogs {
-    pub logs: Vec<AuditLogEntry>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
 /// Summary statistics for audit logs
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuditLogStats {
