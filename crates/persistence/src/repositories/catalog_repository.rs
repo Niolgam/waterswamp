@@ -195,7 +195,7 @@ impl CatalogGroupRepository {
 impl CatalogGroupRepositoryPort for CatalogGroupRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatalogGroupDto>, RepositoryError> {
         sqlx::query_as::<_, CatalogGroupDto>(
-            r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType", 
+            r#"SELECT id, parent_id, name, code, item_type, 
                budget_classification_id, is_active, created_at, updated_at
                FROM catalog_groups WHERE id = $1"#
         )
@@ -210,7 +210,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
-                cg.item_type as "item_type: ItemType",
+                cg.item_type,
                 cg.budget_classification_id, cg.is_active,
                 cg.created_at, cg.updated_at,
                 bc.name as budget_classification_name,
@@ -245,7 +245,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
 
     async fn find_by_code(&self, code: &str) -> Result<Option<CatalogGroupDto>, RepositoryError> {
         sqlx::query_as::<_, CatalogGroupDto>(
-            r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType",
+            r#"SELECT id, parent_id, name, code, item_type,
                budget_classification_id, is_active, created_at, updated_at
                FROM catalog_groups WHERE code = $1"#
         )
@@ -330,7 +330,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             r#"
             INSERT INTO catalog_groups (parent_id, name, code, item_type, budget_classification_id, is_active)
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, parent_id, name, code, item_type as "item_type: ItemType",
+            RETURNING id, parent_id, name, code, item_type,
                       budget_classification_id, is_active, created_at, updated_at
             "#
         )
@@ -371,7 +371,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             SET parent_id = $2, name = $3, code = $4, item_type = $5,
                 budget_classification_id = $6, is_active = $7, updated_at = NOW()
             WHERE id = $1
-            RETURNING id, parent_id, name, code, item_type as "item_type: ItemType",
+            RETURNING id, parent_id, name, code, item_type,
                       budget_classification_id, is_active, created_at, updated_at
             "#
         )
@@ -411,7 +411,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
-                cg.item_type as "item_type: ItemType",
+                cg.item_type,
                 cg.budget_classification_id, cg.is_active,
                 cg.created_at, cg.updated_at,
                 bc.name as budget_classification_name,
@@ -475,7 +475,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
 
     async fn find_children(&self, parent_id: Option<Uuid>) -> Result<Vec<CatalogGroupDto>, RepositoryError> {
         sqlx::query_as::<_, CatalogGroupDto>(
-            r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType",
+            r#"SELECT id, parent_id, name, code, item_type,
                budget_classification_id, is_active, created_at, updated_at
                FROM catalog_groups 
                WHERE parent_id = $1 OR (parent_id IS NULL AND $1 IS NULL)
@@ -493,12 +493,12 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
-                cg.item_type as "item_type: ItemType",
+                cg.item_type,
                 cg.budget_classification_id, cg.is_active,
                 cg.created_at, cg.updated_at,
                 bc.name as budget_classification_name,
                 bc.full_code as budget_classification_code,
-                (SELECT COUNT(*) FROM catalog_items WHERE group_id = cg.id) as "item_count!"
+                (SELECT COUNT(*) FROM catalog_items WHERE group_id = cg.id) as item_count
             FROM catalog_groups cg
             JOIN budget_classifications bc ON cg.budget_classification_id = bc.id
             ORDER BY cg.name

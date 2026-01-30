@@ -47,6 +47,7 @@ pub struct BudgetClassificationTreeNode {
     pub name: String,
     pub level: i32,
     pub is_active: bool,
+    #[schema(no_recursion)]
     pub children: Vec<BudgetClassificationTreeNode>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

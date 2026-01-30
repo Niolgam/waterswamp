@@ -61,16 +61,13 @@ pub fn build(app_state: AppState) -> Router {
         .layer(api_rate_limiter());
 
     // 5. APLICAÇÃO DE MIDDLEWARE GLOBAL (CORS, Audit, Tracing)
-    apply_global_middleware(main_router, app_state)
+    let app = apply_global_middleware(main_router, app_state);
 
-    // 6. ISOLAMENTO DO SWAGGER (A Solução Segura)
-    // Geramos o Swagger separadamente. Ao fazer merge no final do objeto 'app',
-    // evitamos que a complexidade do ApiDoc::openapi() interfira na construção
-    // da árvore de tipos do router da aplicação.
-    //  let swagger_ui = SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi());
+    // 6. SWAGGER UI
+    // O atributo #[schema(no_recursion)] nos tipos TreeNode evita stack overflow
+    let swagger_ui = SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi());
 
-    // Merge final: aplicação processada + documentação
-    // app.merge(swagger_ui)
+    app.merge(swagger_ui)
 }
 
 fn apply_global_middleware(router: Router, app_state: AppState) -> Router {

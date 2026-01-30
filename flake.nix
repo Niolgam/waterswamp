@@ -29,6 +29,7 @@
         # Bibliotecas que seu código precisa linkar (OpenSSL)
         buildInputs = [
           pkgs.openssl
+          pkgs.inotify-tools
         ];
 
         # Variáveis de ambiente úteis para garantir que o openssl-sys ache tudo

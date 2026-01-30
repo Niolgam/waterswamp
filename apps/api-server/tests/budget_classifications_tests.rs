@@ -480,8 +480,11 @@ async fn test_list_budget_classifications_filter_by_parent_id() {
 async fn test_list_budget_classifications_filter_by_is_active() {
     let app = common::spawn_app().await;
 
-    let active = create_unique_classification(&app, None, "Active").await;
-    let inactive = create_unique_classification(&app, None, "Inactive").await;
+    let active = create_unique_classification(&app, None, "FilterActive").await;
+    let inactive = create_unique_classification(&app, None, "FilterInactive").await;
+
+    let active_name = active["name"].as_str().unwrap();
+    let inactive_name = inactive["name"].as_str().unwrap();
 
     // Make one inactive
     app.api
@@ -490,9 +493,10 @@ async fn test_list_budget_classifications_filter_by_is_active() {
         .json(&json!({"is_active": false}))
         .await;
 
+    // Search for active classification with is_active=true filter
     let response = app
         .api
-        .get("/api/admin/budget-classifications?is_active=true")
+        .get(&format!("/api/admin/budget-classifications?is_active=true&search={}", active_name))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
@@ -500,13 +504,27 @@ async fn test_list_budget_classifications_filter_by_is_active() {
     let body: Value = response.json();
     let items = body["items"].as_array().unwrap();
 
+    // Should find the active classification
+    assert!(items.iter().any(|item| item["id"] == active["id"]));
+
     // All items should be active
     for item in items {
         assert_eq!(item["is_active"], true);
     }
 
-    // Should contain active classification
-    assert!(items.iter().any(|item| item["id"] == active["id"]));
+    // Search for inactive classification with is_active=true filter - should not find it
+    let response = app
+        .api
+        .get(&format!("/api/admin/budget-classifications?is_active=true&search={}", inactive_name))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    let items = body["items"].as_array().unwrap();
+
+    // Should NOT find the inactive classification when filtering for active only
+    assert!(!items.iter().any(|item| item["id"] == inactive["id"]));
 }
 
 #[tokio::test]

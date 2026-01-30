@@ -9,7 +9,7 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 validator = { workspace = true, features = ["derive"] }
 chrono = { workspace = true, features = ["serde"] }
 axum = { workspace = true }
-sqlx = { workspace = true, features = ["macros", "uuid", "chrono", "rust_decimal"] }
+sqlx = { workspace = true, features = ["macros", "uuid", "chrono", "rust_decimal", "json"] }
 regex = { workspace = true }
 lazy_static = { workspace = true }
 serde_json = { workspace = true }
