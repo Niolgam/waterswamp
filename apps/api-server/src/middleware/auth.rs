@@ -15,13 +15,13 @@ pub async fn mw_authenticate(
     next: Next,
 ) -> Result<Response, AppError> {
     let token = extract_token(req.headers())
-        .ok_or_else(|| AppError::Unauthorized("Token não encontrado".to_string()))?;
+        .ok_or_else(|| AppError::Unauthorized("Token not found".to_string()))?;
 
-    // Verifica o token usando o JwtService (suporta rotação de chaves)
+    // Verify token using JwtService (supports key rotation)
     let claims = state
         .jwt_service
         .verify_token(&token, TokenType::Access)
-        .map_err(|_| AppError::Unauthorized("Token inválido ou expirado".to_string()))?;
+        .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))?;
 
     let user_id = claims.sub;
     // Username já está disponível no JWT - não precisa query no banco! (N+1 fix)
@@ -56,7 +56,7 @@ pub async fn mw_authorize(
     let user = req
         .extensions()
         .get::<CurrentUser>()
-        .ok_or_else(|| anyhow::anyhow!("CurrentUser não encontrado nas extensões"))?;
+        .ok_or_else(|| anyhow::anyhow!("CurrentUser not found in request extensions"))?;
 
     let subject = user.id.to_string();
     let object = req.uri().path().to_string();

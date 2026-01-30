@@ -14,11 +14,13 @@ fn random_code(len: usize) -> String {
     // Use UUID to get randomness
     let uuid = Uuid::new_v4().simple().to_string();
 
-    // Map bytes to A-Z range to maximize the available pool (26^len)
+    // Include digits in the pool to avoid conflicts with real ISO2 codes (which are letters only)
+    // This gives us 36^len combinations instead of 26^len
+    let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chars().collect();
     uuid.bytes()
         .filter(|b| b.is_ascii_alphanumeric())
         .take(len)
-        .map(|b| (b % 26 + b'A') as char)
+        .map(|b| chars[(b as usize) % chars.len()])
         .collect()
 }
 
@@ -34,12 +36,12 @@ fn random_bacen_code() -> i32 {
     (num % 9900 + 100) as i32
 }
 
-// Generates a random IBGE code (int in range 1000000-9999999 for municipalities, 10-99 for states)
+// Generates a random IBGE code for tests - use range 54-999 to avoid conflicts with real Brazilian state codes (11-53)
 fn random_ibge_code_state() -> i32 {
     let uuid = Uuid::new_v4();
     let bytes = uuid.as_bytes();
     let num = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-    (num % 90 + 10) as i32
+    (num % 946 + 54) as i32  // Range 54-999 to avoid real IBGE state codes
 }
 
 fn random_ibge_code_city() -> i32 {
@@ -72,7 +74,7 @@ async fn create_unique_country(app: &TestApp) -> Value {
             return response.json();
         }
 
-        if response.status_code() != StatusCode::CONFLICT || attempts >= 10 {
+        if response.status_code() != StatusCode::CONFLICT || attempts >= 20 {
             panic!(
                 "Failed to create country after {} attempts. Last status: {}. Body: {}",
                 attempts,
@@ -251,7 +253,7 @@ async fn test_list_countries_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["countries"].is_array());
+    assert!(body["items"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 2);
 }
 
@@ -457,7 +459,7 @@ async fn test_list_states_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["states"].is_array());
+    assert!(body["items"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 3);
 }
 
@@ -526,7 +528,7 @@ async fn test_list_states_with_search() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let states = body["states"].as_array().unwrap();
+    let states = body["items"].as_array().unwrap();
     assert!(states
         .iter()
         .any(|s| s["name"].as_str().unwrap().contains(&name_match)));
@@ -656,7 +658,7 @@ async fn test_list_cities_filter_by_state() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let cities = body["cities"].as_array().unwrap();
+    let cities = body["items"].as_array().unwrap();
 
     // Should only have State 1 cities
     for city in cities {

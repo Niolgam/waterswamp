@@ -131,4 +131,74 @@ impl<'a> EmailVerificationRepository<'a> {
 
         Ok(())
     }
+
+    /// Verifies email atomically: finds token, marks as used, and updates user.
+    /// This ensures ACID compliance - either all operations succeed or none do.
+    pub async fn verify_email_atomic(&self, token_hash: &str) -> Result<Option<Uuid>, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // 1. Find and lock the token (SELECT FOR UPDATE prevents race conditions)
+        let result: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT user_id
+            FROM email_verification_tokens
+            WHERE token_hash = $1
+              AND used = FALSE
+              AND expires_at > NOW()
+            FOR UPDATE
+            "#,
+        )
+        .bind(token_hash)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let user_id = match result {
+            Some((uid,)) => uid,
+            None => {
+                tx.rollback().await?;
+                return Ok(None);
+            }
+        };
+
+        // 2. Mark token as used
+        sqlx::query(
+            r#"
+            UPDATE email_verification_tokens
+            SET used = TRUE
+            WHERE token_hash = $1
+            "#,
+        )
+        .bind(token_hash)
+        .execute(&mut *tx)
+        .await?;
+
+        // 3. Mark user email as verified
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET email_verified = TRUE,
+                email_verified_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        // 4. Invalidate all other pending tokens for this user
+        sqlx::query(
+            r#"
+            UPDATE email_verification_tokens
+            SET used = TRUE
+            WHERE user_id = $1 AND used = FALSE
+            "#,
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(Some(user_id))
+    }
 }

@@ -47,6 +47,7 @@ pub struct BudgetClassificationTreeNode {
     pub name: String,
     pub level: i32,
     pub is_active: bool,
+    #[schema(no_recursion)]
     pub children: Vec<BudgetClassificationTreeNode>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -103,18 +104,6 @@ pub struct ListBudgetClassificationsQuery {
     pub parent_id: Option<Uuid>,
     pub level: Option<i32>,
     pub is_active: Option<bool>,
-}
-
-// ============================
-// Paginated Response
-// ============================
-
-#[derive(Debug, Serialize, Deserialize, ToSchema)]
-pub struct PaginatedBudgetClassifications {
-    pub items: Vec<BudgetClassificationWithParentDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
 }
 
 // ============================

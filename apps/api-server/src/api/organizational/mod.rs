@@ -72,8 +72,8 @@ pub fn router() -> Router<AppState> {
         )
         .route("/{id}/children", get(handlers::get_organizational_unit_children))
         .route("/{id}/path", get(handlers::get_organizational_unit_path))
-        .route("/{id}/deactivate", get(handlers::deactivate_organizational_unit))
-        .route("/{id}/activate", get(handlers::activate_organizational_unit));
+        .route("/{id}/deactivate", post(handlers::deactivate_organizational_unit))
+        .route("/{id}/activate", post(handlers::activate_organizational_unit));
 
     // SIORG Sync routes (immediate operations)
     let sync_router = Router::new()

@@ -5,6 +5,8 @@ use domain::ports::BudgetClassificationRepositoryPort;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::db_utils::map_db_error;
+
 #[derive(Clone)]
 pub struct BudgetClassificationRepository {
     pool: PgPool,
@@ -13,22 +15,6 @@ pub struct BudgetClassificationRepository {
 impl BudgetClassificationRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
-    }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-                if code == "23503" {
-                    return RepositoryError::Database(
-                        "Foreign key constraint violation".to_string(),
-                    );
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
     }
 }
 
@@ -45,7 +31,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_parent_by_id(
@@ -66,7 +52,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_full_code(
@@ -83,7 +69,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         .bind(full_code)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_full_code(&self, full_code: &str) -> Result<bool, RepositoryError> {
@@ -93,7 +79,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         .bind(full_code)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -109,7 +95,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         .bind(exclude_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -133,7 +119,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -195,7 +181,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         }
         query = query.bind(id);
 
-        query.fetch_one(&self.pool).await.map_err(Self::map_err)
+        query.fetch_one(&self.pool).await.map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -203,7 +189,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -279,7 +265,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         }
         query = query.bind(limit).bind(offset);
 
-        let items = query.fetch_all(&self.pool).await.map_err(Self::map_err)?;
+        let items = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
 
         // Count query
         let count_query_str = format!(
@@ -305,7 +291,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         let total: i64 = count_query
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok((items, total))
     }
@@ -332,7 +318,7 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
             )
         };
 
-        query.fetch_all(&self.pool).await.map_err(Self::map_err)
+        query.fetch_all(&self.pool).await.map_err(map_db_error)
     }
 
     async fn find_by_level(&self, level: i32) -> Result<Vec<BudgetClassificationDto>, RepositoryError> {
@@ -347,6 +333,6 @@ impl BudgetClassificationRepositoryPort for BudgetClassificationRepository {
         .bind(level)
         .fetch_all(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 }

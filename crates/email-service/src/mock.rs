@@ -1,5 +1,6 @@
 use crate::EmailSender;
 use async_trait::async_trait;
+use domain::errors::EmailError;
 use domain::ports::EmailServicePort;
 use domain::value_objects::{Email, Username};
 use std::sync::{Arc, Mutex};
@@ -42,8 +43,8 @@ impl EmailServicePort for MockEmailService {
         to: &Email,
         username: &Username,
         token: &str,
-    ) -> Result<(), String> {
-        // Delega para o método legado
+    ) -> Result<(), EmailError> {
+        // Delegates to legacy method
         EmailSender::send_verification_email(
             self,
             to.as_str().to_string(),
@@ -53,7 +54,7 @@ impl EmailServicePort for MockEmailService {
         Ok(())
     }
 
-    async fn send_welcome_email(&self, to: &Email, username: &Username) -> Result<(), String> {
+    async fn send_welcome_email(&self, to: &Email, username: &Username) -> Result<(), EmailError> {
         EmailSender::send_welcome_email(self, to.as_str().to_string(), username.as_str());
         Ok(())
     }
@@ -63,7 +64,7 @@ impl EmailServicePort for MockEmailService {
         to: &Email,
         username: &Username,
         token: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), EmailError> {
         EmailSender::send_password_reset_email(
             self,
             to.as_str().to_string(),
@@ -73,7 +74,11 @@ impl EmailServicePort for MockEmailService {
         Ok(())
     }
 
-    async fn send_mfa_enabled_email(&self, to: &Email, username: &Username) -> Result<(), String> {
+    async fn send_mfa_enabled_email(
+        &self,
+        to: &Email,
+        username: &Username,
+    ) -> Result<(), EmailError> {
         EmailSender::send_mfa_enabled_email(self, to.as_str().to_string(), username.as_str());
         Ok(())
     }

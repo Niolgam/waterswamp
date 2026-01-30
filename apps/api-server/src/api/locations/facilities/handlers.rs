@@ -3,16 +3,17 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use serde_json::{json, Value};
 use domain::models::{
-    CreateBuildingPayload, CreateBuildingTypePayload, CreateFloorPayload, CreateSitePayload,
-    CreateSiteTypePayload, CreateSpacePayload, CreateSpaceTypePayload, ListBuildingsQuery,
-    ListBuildingTypesQuery, ListFloorsQuery, ListSitesQuery, ListSiteTypesQuery,
-    ListSpacesQuery, ListSpaceTypesQuery, PaginatedBuildings, PaginatedBuildingTypes,
-    PaginatedFloors, PaginatedSites, PaginatedSiteTypes, PaginatedSpaceTypes,
-    UpdateBuildingPayload, UpdateBuildingTypePayload, UpdateFloorPayload, UpdateSitePayload,
-    UpdateSiteTypePayload, UpdateSpacePayload, UpdateSpaceTypePayload,
+    BuildingTypeDto, BuildingWithRelationsDto, CreateBuildingPayload, CreateBuildingTypePayload,
+    CreateFloorPayload, CreateSitePayload, CreateSiteTypePayload, CreateSpacePayload,
+    CreateSpaceTypePayload, FloorWithRelationsDto, ListBuildingsQuery, ListBuildingTypesQuery,
+    ListFloorsQuery, ListSitesQuery, ListSiteTypesQuery, ListSpacesQuery, ListSpaceTypesQuery,
+    SiteTypeDto, SiteWithRelationsDto, SpaceTypeDto, SpaceWithRelationsDto, UpdateBuildingPayload,
+    UpdateBuildingTypePayload, UpdateFloorPayload, UpdateSitePayload, UpdateSiteTypePayload,
+    UpdateSpacePayload, UpdateSpaceTypePayload,
 };
+use domain::pagination::Paginated;
+use serde_json::{json, Value};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -31,7 +32,7 @@ use super::contracts::{
 pub async fn list_site_types(
     State(state): State<AppState>,
     Query(params): Query<ListSiteTypesQuery>,
-) -> Result<Json<PaginatedSiteTypes>, AppError> {
+) -> Result<Json<Paginated<SiteTypeDto>>, AppError> {
     let result = state
         .location_service
         .list_site_types(params.limit, params.offset, params.search)
@@ -117,7 +118,7 @@ pub async fn delete_site_type(
 pub async fn list_building_types(
     State(state): State<AppState>,
     Query(params): Query<ListBuildingTypesQuery>,
-) -> Result<Json<PaginatedBuildingTypes>, AppError> {
+) -> Result<Json<Paginated<BuildingTypeDto>>, AppError> {
     let result = state
         .location_service
         .list_building_types(params.limit, params.offset, params.search)
@@ -203,7 +204,7 @@ pub async fn delete_building_type(
 pub async fn list_space_types(
     State(state): State<AppState>,
     Query(params): Query<ListSpaceTypesQuery>,
-) -> Result<Json<PaginatedSpaceTypes>, AppError> {
+) -> Result<Json<Paginated<SpaceTypeDto>>, AppError> {
     let result = state
         .location_service
         .list_space_types(params.limit, params.offset, params.search)
@@ -289,7 +290,7 @@ pub async fn delete_space_type(
 pub async fn list_sites(
     State(state): State<AppState>,
     Query(params): Query<ListSitesQuery>,
-) -> Result<Json<PaginatedSites>, AppError> {
+) -> Result<Json<Paginated<SiteWithRelationsDto>>, AppError> {
     let result = state
         .location_service
         .list_sites(
@@ -402,7 +403,7 @@ pub async fn delete_site(
 pub async fn list_buildings(
     State(state): State<AppState>,
     Query(params): Query<ListBuildingsQuery>,
-) -> Result<Json<PaginatedBuildings>, AppError> {
+) -> Result<Json<Paginated<BuildingWithRelationsDto>>, AppError> {
     let result = state
         .location_service
         .list_buildings(
@@ -521,7 +522,7 @@ pub async fn delete_building(
 pub async fn list_floors(
     State(state): State<AppState>,
     Query(params): Query<ListFloorsQuery>,
-) -> Result<Json<PaginatedFloors>, AppError> {
+) -> Result<Json<Paginated<FloorWithRelationsDto>>, AppError> {
     let result = state
         .location_service
         .list_floors(params.limit, params.offset, params.search, params.building_id)

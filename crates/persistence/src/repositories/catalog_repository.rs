@@ -7,6 +7,8 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+use crate::db_utils::map_db_error;
+
 // ============================
 // Unit of Measure Repository
 // ============================
@@ -19,10 +21,6 @@ impl UnitOfMeasureRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -34,7 +32,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_symbol(&self, symbol: &str) -> Result<Option<UnitOfMeasureDto>, RepositoryError> {
@@ -44,7 +42,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(symbol)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_symbol(&self, symbol: &str) -> Result<bool, RepositoryError> {
@@ -54,7 +52,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(symbol)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -66,7 +64,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(exclude_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -90,7 +88,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(is_base_unit)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -123,7 +121,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(is_base_unit)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -131,7 +129,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -156,7 +154,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         let total: i64 = sqlx::query_scalar(
             r#"
@@ -167,7 +165,7 @@ impl UnitOfMeasureRepositoryPort for UnitOfMeasureRepository {
         .bind(&search_pattern)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok((units, total))
     }
@@ -186,23 +184,20 @@ impl CatalogGroupRepository {
         Self { pool }
     }
 
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
 impl CatalogGroupRepositoryPort for CatalogGroupRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatalogGroupDto>, RepositoryError> {
         sqlx::query_as::<_, CatalogGroupDto>(
-            r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType", 
+            r#"SELECT id, parent_id, name, code, item_type, 
                budget_classification_id, is_active, created_at, updated_at
                FROM catalog_groups WHERE id = $1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatalogGroupWithDetailsDto>, RepositoryError> {
@@ -210,7 +205,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
-                cg.item_type as "item_type: ItemType",
+                cg.item_type,
                 cg.budget_classification_id, cg.is_active,
                 cg.created_at, cg.updated_at,
                 bc.name as budget_classification_name,
@@ -225,7 +220,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(result.map(|r| CatalogGroupWithDetailsDto {
             id: r.get("id"),
@@ -245,14 +240,14 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
 
     async fn find_by_code(&self, code: &str) -> Result<Option<CatalogGroupDto>, RepositoryError> {
         sqlx::query_as::<_, CatalogGroupDto>(
-            r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType",
+            r#"SELECT id, parent_id, name, code, item_type,
                budget_classification_id, is_active, created_at, updated_at
                FROM catalog_groups WHERE code = $1"#
         )
         .bind(code)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_code_in_level(&self, code: &str, parent_id: Option<Uuid>) -> Result<bool, RepositoryError> {
@@ -263,7 +258,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(parent_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -281,7 +276,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(exclude_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -292,7 +287,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -303,7 +298,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -314,7 +309,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn create(
@@ -330,7 +325,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             r#"
             INSERT INTO catalog_groups (parent_id, name, code, item_type, budget_classification_id, is_active)
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, parent_id, name, code, item_type as "item_type: ItemType",
+            RETURNING id, parent_id, name, code, item_type,
                       budget_classification_id, is_active, created_at, updated_at
             "#
         )
@@ -342,7 +337,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -371,7 +366,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             SET parent_id = $2, name = $3, code = $4, item_type = $5,
                 budget_classification_id = $6, is_active = $7, updated_at = NOW()
             WHERE id = $1
-            RETURNING id, parent_id, name, code, item_type as "item_type: ItemType",
+            RETURNING id, parent_id, name, code, item_type,
                       budget_classification_id, is_active, created_at, updated_at
             "#
         )
@@ -384,7 +379,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(new_is_active)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -392,7 +387,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -411,7 +406,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
-                cg.item_type as "item_type: ItemType",
+                cg.item_type,
                 cg.budget_classification_id, cg.is_active,
                 cg.created_at, cg.updated_at,
                 bc.name as budget_classification_name,
@@ -436,7 +431,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         let groups = records.into_iter().map(|r| CatalogGroupWithDetailsDto {
             id: r.get("id"),
@@ -468,14 +463,14 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok((groups, total))
     }
 
     async fn find_children(&self, parent_id: Option<Uuid>) -> Result<Vec<CatalogGroupDto>, RepositoryError> {
         sqlx::query_as::<_, CatalogGroupDto>(
-            r#"SELECT id, parent_id, name, code, item_type as "item_type: ItemType",
+            r#"SELECT id, parent_id, name, code, item_type,
                budget_classification_id, is_active, created_at, updated_at
                FROM catalog_groups 
                WHERE parent_id = $1 OR (parent_id IS NULL AND $1 IS NULL)
@@ -484,7 +479,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         .bind(parent_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn get_tree(&self) -> Result<Vec<CatalogGroupTreeNode>, RepositoryError> {
@@ -493,12 +488,12 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
             r#"
             SELECT 
                 cg.id, cg.parent_id, cg.name, cg.code,
-                cg.item_type as "item_type: ItemType",
+                cg.item_type,
                 cg.budget_classification_id, cg.is_active,
                 cg.created_at, cg.updated_at,
                 bc.name as budget_classification_name,
                 bc.full_code as budget_classification_code,
-                (SELECT COUNT(*) FROM catalog_items WHERE group_id = cg.id) as "item_count!"
+                (SELECT COUNT(*) FROM catalog_items WHERE group_id = cg.id) as item_count
             FROM catalog_groups cg
             JOIN budget_classifications bc ON cg.budget_classification_id = bc.id
             ORDER BY cg.name
@@ -506,7 +501,7 @@ impl CatalogGroupRepositoryPort for CatalogGroupRepository {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         // Build hierarchical structure
         let mut nodes: Vec<CatalogGroupTreeNode> = all_groups.iter().map(|r| CatalogGroupTreeNode {
@@ -565,9 +560,6 @@ impl CatalogItemRepository {
         Self { pool }
     }
 
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -579,7 +571,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatalogItemWithDetailsDto>, RepositoryError> {
@@ -598,7 +590,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(result.map(|r| CatalogItemWithDetailsDto {
             id: r.get("id"),
@@ -631,7 +623,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(catmat_code)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_catmat_code(&self, catmat_code: &str) -> Result<bool, RepositoryError> {
@@ -641,7 +633,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(catmat_code)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -653,7 +645,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(exclude_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -665,7 +657,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(group_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -678,7 +670,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(exclude_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -724,7 +716,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -784,7 +776,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -792,7 +784,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -835,7 +827,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         let items = records.into_iter().map(|r| CatalogItemWithDetailsDto {
             id: r.get("id"),
@@ -877,7 +869,7 @@ impl CatalogItemRepositoryPort for CatalogItemRepository {
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok((items, total))
     }
@@ -896,9 +888,6 @@ impl UnitConversionRepository {
         Self { pool }
     }
 
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -910,7 +899,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<UnitConversionWithDetailsDto>, RepositoryError> {
@@ -931,7 +920,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok(result.map(|r| UnitConversionWithDetailsDto {
             id: r.get("id"),
@@ -955,7 +944,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(to_unit_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_conversion(&self, from_unit_id: Uuid, to_unit_id: Uuid) -> Result<bool, RepositoryError> {
@@ -966,7 +955,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(to_unit_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -988,7 +977,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(conversion_factor)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -1008,7 +997,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(conversion_factor)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -1016,7 +1005,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -1050,7 +1039,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         let conversions = records.into_iter().map(|r| UnitConversionWithDetailsDto {
             id: r.get("id"),
@@ -1076,7 +1065,7 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         .bind(to_unit_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)?;
+        .map_err(map_db_error)?;
 
         Ok((conversions, total))
     }

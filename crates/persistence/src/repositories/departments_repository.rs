@@ -6,6 +6,8 @@ use domain::value_objects::LocationName;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::db_utils::map_db_error;
+
 // ============================
 // Department Category Repository
 // ============================
@@ -19,17 +21,6 @@ impl DepartmentCategoryRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
-    fn map_err(e: sqlx::Error) -> RepositoryError {
-        if let Some(db_err) = e.as_database_error() {
-            if let Some(code) = db_err.code() {
-                if code == "23505" {
-                    return RepositoryError::Duplicate(db_err.message().to_string());
-                }
-            }
-        }
-        RepositoryError::Database(e.to_string())
-    }
 }
 
 #[async_trait]
@@ -41,7 +32,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn find_by_name(
@@ -54,7 +45,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
         .bind(name.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn exists_by_name(&self, name: &LocationName) -> Result<bool, RepositoryError> {
@@ -62,7 +53,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
             .bind(name.as_str())
             .fetch_one(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -77,7 +68,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
                 .bind(exclude_id)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?;
+                .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -94,7 +85,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
         .bind(description)
         .fetch_one(&self.pool)
         .await
-        .map_err(Self::map_err)
+        .map_err(map_db_error)
     }
 
     async fn update(
@@ -138,7 +129,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
         }
         query = query.bind(id);
 
-        query.fetch_one(&self.pool).await.map_err(Self::map_err)
+        query.fetch_one(&self.pool).await.map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -146,7 +137,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
             .bind(id)
             .execute(&self.pool)
             .await
-            .map_err(Self::map_err)?;
+            .map_err(map_db_error)?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -170,7 +161,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         } else {
             sqlx::query_as::<_, DepartmentCategoryDto>(
                 "SELECT id, name, description, created_at, updated_at FROM department_categories
@@ -180,7 +171,7 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
             .bind(offset)
             .fetch_all(&self.pool)
             .await
-            .map_err(Self::map_err)?
+            .map_err(map_db_error)?
         };
 
         let total: i64 = if let Some(ref pattern) = search_pattern {
@@ -188,12 +179,12 @@ impl DepartmentCategoryRepositoryPort for DepartmentCategoryRepository {
                 .bind(pattern)
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         } else {
             sqlx::query_scalar("SELECT COUNT(*) FROM department_categories")
                 .fetch_one(&self.pool)
                 .await
-                .map_err(Self::map_err)?
+                .map_err(map_db_error)?
         };
 
         Ok((department_categories, total))

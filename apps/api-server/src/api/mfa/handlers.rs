@@ -60,7 +60,7 @@ pub async fn verify_setup(
             match e {
                 // Return 400 for invalid code during setup
                 ServiceError::InvalidCredentials => {
-                    AppError::BadRequest("Código ou token inválido".to_string())
+                    AppError::BadRequest("Invalid code or token".to_string())
                 }
                 _ => AppError::Anyhow(anyhow::anyhow!(e)),
             }
@@ -86,7 +86,7 @@ pub async fn verify_login(
             use application::errors::ServiceError;
             match e {
                 ServiceError::InvalidCredentials => {
-                    AppError::Unauthorized("Código inválido ou expirado".to_string())
+                    AppError::Unauthorized("Invalid or expired code".to_string())
                 }
                 _ => AppError::Anyhow(anyhow::anyhow!(e)),
             }
@@ -112,7 +112,7 @@ pub async fn disable_mfa(
     let stored_hash = user_repo
         .get_password_hash(current_user.id)
         .await?
-        .ok_or(AppError::NotFound("Usuário não encontrado".to_string()))?;
+        .ok_or(AppError::NotFound("User not found".to_string()))?;
 
     let pwd = payload.password.clone();
     let password_valid = tokio::task::spawn_blocking(move || {
@@ -122,19 +122,19 @@ pub async fn disable_mfa(
     .map_err(|_| AppError::Internal("Erro task".into()))??;
 
     if !password_valid {
-        return Err(AppError::Unauthorized("Senha incorreta".to_string()));
+        return Err(AppError::Unauthorized("Incorrect password".to_string()));
     }
 
     // 2. Verify TOTP
     let secret_str = mfa_repo
         .get_mfa_secret(current_user.id)
         .await?
-        .ok_or(AppError::BadRequest("MFA não ativo".to_string()))?;
+        .ok_or(AppError::BadRequest("MFA is not enabled".to_string()))?;
 
     // FIX: Converted error to String
     let secret_bytes = Secret::Encoded(secret_str)
         .to_bytes()
-        .map_err(|_| AppError::Internal("Falha ao decodificar segredo MFA".to_string()))?;
+        .map_err(|_| AppError::Internal("Failed to decode MFA secret".to_string()))?;
 
     let user_data = user_repo.find_by_id(current_user.id).await?.unwrap();
 
@@ -150,7 +150,7 @@ pub async fn disable_mfa(
     .unwrap();
 
     if !totp.check_current(&payload.totp_code).unwrap_or(false) {
-        return Err(AppError::Unauthorized("Código inválido".to_string()));
+        return Err(AppError::Unauthorized("Invalid code".to_string()));
     }
 
     // 3. Disable
@@ -158,7 +158,7 @@ pub async fn disable_mfa(
 
     Ok(Json(MfaDisableResponse {
         disabled: true,
-        message: "Desativado".to_string(),
+        message: "MFA disabled successfully".to_string(),
     }))
 }
 
@@ -195,7 +195,7 @@ pub async fn regenerate_backup_codes(
     let stored_hash = user_repo
         .get_password_hash(current_user.id)
         .await?
-        .ok_or(AppError::NotFound("Usuário não encontrado".to_string()))?;
+        .ok_or(AppError::NotFound("User not found".to_string()))?;
 
     let pwd = payload.password.clone();
     let password_valid = tokio::task::spawn_blocking(move || {
@@ -205,19 +205,19 @@ pub async fn regenerate_backup_codes(
     .map_err(|_| AppError::Internal("Erro task".into()))??;
 
     if !password_valid {
-        return Err(AppError::Unauthorized("Senha incorreta".to_string()));
+        return Err(AppError::Unauthorized("Incorrect password".to_string()));
     }
 
     // 2. Verify TOTP
     let secret_str = mfa_repo
         .get_mfa_secret(current_user.id)
         .await?
-        .ok_or(AppError::BadRequest("MFA não ativo".to_string()))?;
+        .ok_or(AppError::BadRequest("MFA is not enabled".to_string()))?;
 
     // FIX: Converted error to String
     let secret_bytes = Secret::Encoded(secret_str)
         .to_bytes()
-        .map_err(|_| AppError::Internal("Falha ao decodificar segredo MFA".to_string()))?;
+        .map_err(|_| AppError::Internal("Failed to decode MFA secret".to_string()))?;
 
     let user_data = user_repo.find_by_id(current_user.id).await?.unwrap();
     let totp = TOTP::new(
@@ -232,7 +232,7 @@ pub async fn regenerate_backup_codes(
     .unwrap();
 
     if !totp.check_current(&payload.totp_code).unwrap_or(false) {
-        return Err(AppError::Unauthorized("Código TOTP inválido".to_string()));
+        return Err(AppError::Unauthorized("Invalid TOTP code".to_string()));
     }
 
     // 3. Regenerate

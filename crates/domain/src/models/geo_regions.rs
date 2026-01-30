@@ -20,14 +20,6 @@ pub struct CountryDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PaginatedCountries {
-    pub countries: Vec<CountryDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ListCountriesQuery {
     pub limit: Option<i64>,
@@ -78,14 +70,6 @@ pub struct StateWithCountryDto {
     pub country_bacen_code: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PaginatedStates {
-    pub states: Vec<StateWithCountryDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -141,14 +125,6 @@ pub struct CityWithStateDto {
     pub country_bacen_code: i32,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct PaginatedCities {
-    pub cities: Vec<CityWithStateDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

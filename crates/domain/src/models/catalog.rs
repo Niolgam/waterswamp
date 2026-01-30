@@ -90,6 +90,7 @@ pub struct CatalogGroupTreeNode {
     pub budget_classification_name: String,
     pub budget_classification_code: String,
     pub is_active: bool,
+    #[schema(no_recursion)]
     pub children: Vec<CatalogGroupTreeNode>,
     pub item_count: i64,
     pub created_at: DateTime<Utc>,

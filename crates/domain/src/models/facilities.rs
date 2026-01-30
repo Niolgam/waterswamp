@@ -20,14 +20,6 @@ pub struct SiteTypeDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct PaginatedSiteTypes {
-    pub site_types: Vec<SiteTypeDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ListSiteTypesQuery {
     pub limit: Option<i64>,
@@ -64,14 +56,6 @@ pub struct BuildingTypeDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct PaginatedBuildingTypes {
-    pub building_types: Vec<BuildingTypeDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ListBuildingTypesQuery {
     pub limit: Option<i64>,
@@ -106,14 +90,6 @@ pub struct SpaceTypeDto {
     pub color: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PaginatedSpaceTypes {
-    pub space_types: Vec<SpaceTypeDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -178,14 +154,6 @@ pub struct SiteWithRelationsDto {
     pub default_zoom: Option<i32>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PaginatedSites {
-    pub sites: Vec<SiteWithRelationsDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -258,14 +226,6 @@ pub struct BuildingWithRelationsDto {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct PaginatedBuildings {
-    pub buildings: Vec<BuildingWithRelationsDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct ListBuildingsQuery {
     pub limit: Option<i64>,
@@ -327,14 +287,6 @@ pub struct FloorWithRelationsDto {
     pub description: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PaginatedFloors {
-    pub floors: Vec<FloorWithRelationsDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -410,14 +362,6 @@ pub struct SpaceWithRelationsDto {
     pub area: Option<f64>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PaginatedSpaces {
-    pub spaces: Vec<SpaceWithRelationsDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
 }
 
 #[derive(Debug, Deserialize)]

@@ -28,6 +28,9 @@ pub struct UserActionResponse {
     pub action: String,
     /// Indica se a ação foi bem-sucedida
     pub success: bool,
+    /// Mensagem descritiva
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
