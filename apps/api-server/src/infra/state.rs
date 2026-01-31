@@ -9,6 +9,7 @@ use application::services::organizational_service::{
     OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
     OrganizationalUnitTypeService, SystemSettingsService,
 };
+use application::services::requisition_service::RequisitionService;
 use application::services::user_service::UserService;
 use application::external::SiorgSyncService;
 use casbin::Enforcer;
@@ -50,6 +51,7 @@ pub struct AppState {
     pub siorg_sync_service: Arc<SiorgSyncService>,
     pub siorg_sync_queue_repository: Arc<dyn SiorgSyncQueueRepositoryPort>,
     pub siorg_history_repository: Arc<dyn SiorgHistoryRepositoryPort>,
+    pub requisition_service: Arc<RequisitionService>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,

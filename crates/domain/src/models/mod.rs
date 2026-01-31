@@ -9,6 +9,7 @@ pub mod geo_regions;
 pub mod mfa;
 pub mod organizational;
 pub mod policy;
+pub mod requisition;
 pub mod user;
 
 pub use audit::*;
@@ -22,4 +23,5 @@ pub use geo_regions::*;
 pub use mfa::*;
 pub use organizational::*;
 pub use policy::*;
+pub use requisition::*;
 pub use user::*;
