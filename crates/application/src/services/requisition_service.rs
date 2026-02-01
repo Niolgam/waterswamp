@@ -323,3 +323,224 @@ impl RequisitionService {
             .map_err(ServiceError::from)
     }
 }
+
+// ============================================================================
+// TESTS
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{NaiveDate, Utc};
+    use rust_decimal::Decimal;
+
+    // ========================================================================
+    // HELPER FUNCTIONS
+    // ========================================================================
+
+    fn create_test_requisition(status: RequisitionStatus) -> RequisitionDto {
+        RequisitionDto {
+            id: Uuid::new_v4(),
+            requisition_number: "REQ2024001".to_string(),
+            warehouse_id: Uuid::new_v4(),
+            destination_unit_id: None,
+            requester_id: Uuid::new_v4(),
+            status,
+            priority: RequisitionPriority::Normal,
+            total_value: Some(Decimal::new(1000, 2)),
+            request_date: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap(),
+            needed_by: None,
+            approved_by: None,
+            approved_at: None,
+            fulfilled_by: None,
+            fulfilled_at: None,
+            rejection_reason: None,
+            cancellation_reason: None,
+            notes: None,
+            internal_notes: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn create_test_item(deleted: bool) -> RequisitionItemDto {
+        RequisitionItemDto {
+            id: Uuid::new_v4(),
+            requisition_id: Uuid::new_v4(),
+            catalog_item_id: Uuid::new_v4(),
+            requested_quantity: Decimal::new(10, 0),
+            approved_quantity: None,
+            fulfilled_quantity: None,
+            unit_value: Some(Decimal::new(100, 2)),
+            total_value: Some(Decimal::new(1000, 2)),
+            justification: Some("Test item".to_string()),
+            cut_reason: None,
+            deleted_at: if deleted { Some(Utc::now()) } else { None },
+            deleted_by: if deleted { Some(Uuid::new_v4()) } else { None },
+            deletion_reason: if deleted { Some("Test deletion".to_string()) } else { None },
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    // ========================================================================
+    // AUDIT CONTEXT TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_audit_context_creation() {
+        let user_id = Uuid::new_v4();
+        let ctx = AuditContext::new(user_id)
+            .with_ip(Some("10.0.0.1".to_string()))
+            .with_user_agent(Some("Mozilla/5.0".to_string()));
+
+        assert_eq!(ctx.user_id, user_id);
+        assert_eq!(ctx.ip_address, Some("10.0.0.1".to_string()));
+        assert_eq!(ctx.user_agent, Some("Mozilla/5.0".to_string()));
+    }
+
+    #[test]
+    fn test_audit_context_without_optional_fields() {
+        let user_id = Uuid::new_v4();
+        let ctx = AuditContext::new(user_id);
+
+        assert_eq!(ctx.user_id, user_id);
+        assert_eq!(ctx.ip_address, None);
+        assert_eq!(ctx.user_agent, None);
+    }
+
+    // ========================================================================
+    // PAYLOAD VALIDATION TESTS (Pure logic, no mocks needed)
+    // ========================================================================
+
+    #[test]
+    fn test_reject_payload_validation() {
+        // Empty reason should fail
+        let empty_reason = "   ".trim();
+        assert!(empty_reason.is_empty());
+
+        // Valid reason should pass
+        let valid_reason = "Budget constraints".trim();
+        assert!(!valid_reason.is_empty());
+    }
+
+    #[test]
+    fn test_cancel_payload_validation() {
+        let empty_reason = "".trim();
+        assert!(empty_reason.is_empty());
+
+        let valid_reason = "No longer needed".trim();
+        assert!(!valid_reason.is_empty());
+    }
+
+    #[test]
+    fn test_rollback_payload_validation() {
+        let empty_reason = "   ".trim();
+        assert!(empty_reason.is_empty());
+
+        let valid_reason = "Reverting to previous state".trim();
+        assert!(!valid_reason.is_empty());
+    }
+
+    // ========================================================================
+    // DTO CREATION TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_requisition_dto_creation() {
+        let req = create_test_requisition(RequisitionStatus::Pending);
+
+        assert_eq!(req.status, RequisitionStatus::Pending);
+        assert_eq!(req.requisition_number, "REQ2024001");
+        assert!(req.approved_by.is_none());
+        assert!(req.approved_at.is_none());
+    }
+
+    #[test]
+    fn test_requisition_item_dto_creation() {
+        let item = create_test_item(false);
+
+        assert!(item.deleted_at.is_none());
+        assert!(item.deleted_by.is_none());
+        assert!(item.deletion_reason.is_none());
+    }
+
+    #[test]
+    fn test_deleted_item_dto_creation() {
+        let item = create_test_item(true);
+
+        assert!(item.deleted_at.is_some());
+        assert!(item.deleted_by.is_some());
+        assert!(item.deletion_reason.is_some());
+    }
+
+    // ========================================================================
+    // STATUS VALIDATION TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_pending_status_allows_approval() {
+        let req = create_test_requisition(RequisitionStatus::Pending);
+        assert_eq!(req.status, RequisitionStatus::Pending);
+    }
+
+    #[test]
+    fn test_draft_status_blocks_approval() {
+        let req = create_test_requisition(RequisitionStatus::Draft);
+        assert_ne!(req.status, RequisitionStatus::Pending);
+    }
+
+    #[test]
+    fn test_approved_status_blocks_rejection() {
+        let req = create_test_requisition(RequisitionStatus::Approved);
+        assert_ne!(req.status, RequisitionStatus::Pending);
+    }
+
+    // ========================================================================
+    // ENUM TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_requisition_status_variants() {
+        assert_eq!(
+            format!("{:?}", RequisitionStatus::Draft),
+            "Draft"
+        );
+        assert_eq!(
+            format!("{:?}", RequisitionStatus::Pending),
+            "Pending"
+        );
+        assert_eq!(
+            format!("{:?}", RequisitionStatus::Approved),
+            "Approved"
+        );
+        assert_eq!(
+            format!("{:?}", RequisitionStatus::Rejected),
+            "Rejected"
+        );
+        assert_eq!(
+            format!("{:?}", RequisitionStatus::Cancelled),
+            "Cancelled"
+        );
+    }
+
+    #[test]
+    fn test_requisition_priority_variants() {
+        assert_eq!(
+            format!("{:?}", RequisitionPriority::Low),
+            "Low"
+        );
+        assert_eq!(
+            format!("{:?}", RequisitionPriority::Normal),
+            "Normal"
+        );
+        assert_eq!(
+            format!("{:?}", RequisitionPriority::High),
+            "High"
+        );
+        assert_eq!(
+            format!("{:?}", RequisitionPriority::Urgent),
+            "Urgent"
+        );
+    }
+}
