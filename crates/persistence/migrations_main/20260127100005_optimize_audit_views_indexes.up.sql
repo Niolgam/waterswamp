@@ -1,6 +1,7 @@
 -- ============================================================================
 -- Migration: Optimize Audit Views with Covering Indexes
 -- Description: Adds covering indexes to improve performance of audit trail views
+-- Note: Using regular CREATE INDEX (not CONCURRENTLY) because SQLx runs migrations in transactions
 -- ============================================================================
 
 -- ============================================================================
@@ -9,7 +10,7 @@
 
 -- Covering index para a view principal
 -- Inclui todas as colunas selecionadas pela view para evitar table lookups
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_audit_trail_cover
+CREATE INDEX IF NOT EXISTS idx_req_history_audit_trail_cover
     ON requisition_history(requisition_id, performed_at DESC)
     INCLUDE (
         id, requisition_number, operation, status_before, status_after,
@@ -19,12 +20,12 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_audit_trail_cover
 
 -- Índice para a subquery que conta itens por transaction_id
 -- Otimiza: (SELECT COUNT(*) FROM requisition_item_history WHERE transaction_id = ...)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_item_history_transaction_count
+CREATE INDEX IF NOT EXISTS idx_req_item_history_transaction_count
     ON requisition_item_history(transaction_id)
     INCLUDE (id);
 
 -- Índice para busca por período com campos da view
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_date_cover
+CREATE INDEX IF NOT EXISTS idx_req_history_date_cover
     ON requisition_history(performed_at DESC)
     INCLUDE (requisition_id, operation, status_after, performed_by_name);
 
@@ -33,7 +34,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_date_cover
 -- ============================================================================
 
 -- Covering index para a view de auditoria de NFs
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_inv_history_audit_trail_cover
+CREATE INDEX IF NOT EXISTS idx_inv_history_audit_trail_cover
     ON invoice_history(invoice_id, performed_at DESC)
     INCLUDE (
         id, invoice_number, operation, status_before, status_after,
@@ -42,7 +43,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_inv_history_audit_trail_cover
     );
 
 -- Índice para subquery de itens de NF
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_inv_item_history_transaction_count
+CREATE INDEX IF NOT EXISTS idx_inv_item_history_transaction_count
     ON invoice_item_history(transaction_id)
     INCLUDE (id);
 
@@ -51,17 +52,17 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_inv_item_history_transaction_count
 -- ============================================================================
 
 -- Busca de rollbacks por usuário (análise de quem faz mais rollbacks)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_rollback_user
+CREATE INDEX IF NOT EXISTS idx_req_history_rollback_user
     ON requisition_history(performed_by, performed_at DESC)
     WHERE is_rollback = TRUE;
 
 -- Busca de operações críticas (aprovações, rejeições, cancelamentos)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_critical_ops
+CREATE INDEX IF NOT EXISTS idx_req_history_critical_ops
     ON requisition_history(operation, performed_at DESC)
     WHERE operation IN ('APPROVAL', 'REJECTION', 'CANCELLATION');
 
 -- Busca por IP (análise de segurança)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_ip
+CREATE INDEX IF NOT EXISTS idx_req_history_ip
     ON requisition_history(ip_address, performed_at DESC)
     WHERE ip_address IS NOT NULL;
 
@@ -70,7 +71,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_ip
 -- ============================================================================
 
 -- Otimiza a função que lista pontos de rollback disponíveis
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_req_history_rollback_points_cover
+CREATE INDEX IF NOT EXISTS idx_req_history_rollback_points_cover
     ON requisition_history(requisition_id, performed_at DESC)
     INCLUDE (id, operation, status_after, performed_by_name, changed_fields, is_rollback)
     WHERE is_rollback_point = TRUE;
