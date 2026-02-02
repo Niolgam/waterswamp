@@ -15,9 +15,9 @@ lazy_static! {
         r"^[a-zA-Z0-9_\-/:*]+$"
     ).unwrap();
 
-    /// Valid action pattern: CRUD operations
+    /// Valid action pattern: CRUD operations or HTTP methods
     static ref ACTION_REGEX: Regex = Regex::new(
-        r"^(create|read|update|delete|list|manage|\*)$"
+        r"^(create|read|update|delete|list|manage|GET|POST|PUT|DELETE|PATCH|\*)$"
     ).unwrap();
 }
 
@@ -36,9 +36,9 @@ pub struct PolicyRequest {
     #[serde(alias = "object", alias = "obj")]
     pub obj: String,
 
-    /// The action being performed (create, read, update, delete, list, manage, *)
+    /// The action being performed (create, read, update, delete, list, manage, GET, POST, PUT, DELETE, PATCH, *)
     #[validate(length(min = 1, max = 50, message = "Action must be between 1 and 50 characters"))]
-    #[validate(regex(path = *ACTION_REGEX, message = "Action must be one of: create, read, update, delete, list, manage, *"))]
+    #[validate(regex(path = *ACTION_REGEX, message = "Action must be one of: create, read, update, delete, list, manage, GET, POST, PUT, DELETE, PATCH, *"))]
     #[serde(alias = "action", alias = "act")]
     pub act: String,
 }
