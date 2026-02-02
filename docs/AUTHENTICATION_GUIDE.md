@@ -452,11 +452,19 @@ O backend aceita requisições de:
 - `http://localhost:4200` (desenvolvimento)
 - Domínios configurados em produção
 
-Headers permitidos:
-- `Content-Type`
-- `Authorization`
-- `X-CSRF-Token`
-- `X-Requested-With`
+**Headers permitidos (Access-Control-Allow-Headers):**
+
+| Header | Uso |
+|--------|-----|
+| `Content-Type` | Tipo do conteúdo da requisição |
+| `Authorization` | Token JWT (Bearer) |
+| `Accept` | Tipos de resposta aceitos |
+| `X-Content-Type-Options` | Prevenção de MIME sniffing |
+| `X-CSRF-Token` | Token CSRF para session auth |
+| `X-Requested-With` | Identificador de requisição AJAX |
+
+**Métodos permitidos:**
+- GET, POST, PUT, DELETE, PATCH, OPTIONS
 
 ---
 
