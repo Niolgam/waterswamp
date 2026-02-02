@@ -1,6 +1,7 @@
 use axum::{middleware, Router};
 use core_services::security::security_headers;
 use tower::ServiceBuilder;
+use tower_cookies::CookieManagerLayer;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -79,6 +80,8 @@ fn apply_global_middleware(router: Router, app_state: AppState) -> Router {
             .layer(middleware::from_fn(telemetry::metrics_middleware))
             .layer(TraceLayer::new_for_http())
             .layer(cors::configure())
+            // Cookie management layer for session-based authentication
+            .layer(CookieManagerLayer::new())
             .layer(headers[0].clone())
             .layer(headers[1].clone())
             .layer(headers[2].clone())
