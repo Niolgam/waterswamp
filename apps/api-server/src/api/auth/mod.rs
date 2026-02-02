@@ -1,18 +1,20 @@
 //! Auth Feature Module
 //!
 //! Este módulo encapsula toda a funcionalidade de autenticação:
-//! - Login/Logout
+//! - Login/Logout (JWT e Session-based)
 //! - Registro de usuários
 //! - Refresh de tokens
 //! - Reset de senha
+//! - Session management (HttpOnly cookies)
 //!
 //! # Arquitetura
 //!
 //! ```text
 //! api/auth/
-//! ├── mod.rs        # Router + re-exports (este arquivo)
-//! ├── handlers.rs   # Handlers HTTP
-//! └── contracts.rs  # DTOs (Request/Response)
+//! ├── mod.rs              # Router + re-exports (este arquivo)
+//! ├── handlers.rs         # Handlers HTTP (JWT-based)
+//! ├── session_handlers.rs # Handlers HTTP (Cookie-based)
+//! └── contracts.rs        # DTOs (Request/Response)
 //! ```
 //!
 //! # Uso
@@ -29,8 +31,12 @@
 
 pub mod contracts;
 pub mod handlers;
+pub mod session_handlers;
 
-use axum::{routing::post, Router};
+use axum::{
+    routing::{delete, get, post},
+    Router,
+};
 
 use crate::{infra::state::AppState, middleware::login_rate_limiter};
 
@@ -51,16 +57,27 @@ pub use contracts::{
 
 /// Cria o router de autenticação com todas as rotas públicas.
 ///
-/// # Rotas
+/// # Rotas JWT (Token-Based)
 ///
 /// | Método | Path              | Handler           | Descrição                    |
 /// |--------|-------------------|-------------------|------------------------------|
-/// | POST   | /login            | login             | Autenticar usuário           |
+/// | POST   | /login            | login             | Autenticar usuário (JWT)     |
 /// | POST   | /register         | register          | Registrar novo usuário       |
 /// | POST   | /refresh-token    | refresh_token     | Renovar access token         |
 /// | POST   | /logout           | logout            | Revogar refresh token        |
 /// | POST   | /forgot-password  | forgot_password   | Solicitar reset de senha     |
 /// | POST   | /reset-password   | reset_password    | Redefinir senha com token    |
+///
+/// # Rotas Session (Cookie-Based)
+///
+/// | Método | Path                  | Handler           | Descrição                    |
+/// |--------|-----------------------|-------------------|------------------------------|
+/// | POST   | /session/login        | session_login     | Login com cookie HttpOnly    |
+/// | POST   | /session/logout       | session_logout    | Logout (limpa cookies)       |
+/// | POST   | /session/logout-all   | session_logout_all| Logout de todas as sessões   |
+/// | GET    | /session/me           | session_info      | Info da sessão atual         |
+/// | GET    | /session/list         | list_sessions     | Lista sessões do usuário     |
+/// | DELETE | /session/{id}         | revoke_session    | Revoga sessão específica     |
 ///
 /// # Exemplo
 ///
@@ -72,8 +89,8 @@ pub use contracts::{
 /// let router = auth::router().with_state(app_state);
 /// ```
 pub fn router() -> Router<AppState> {
-    let auth_routes = Router::new()
-        // Autenticação Básica
+    let jwt_routes = Router::new()
+        // Autenticação JWT (Token-Based)
         .route("/login", post(handlers::login))
         .route("/register", post(handlers::register))
         .route("/refresh-token", post(handlers::refresh_token))
@@ -81,7 +98,18 @@ pub fn router() -> Router<AppState> {
         .route("/forgot-password", post(handlers::forgot_password))
         .route("/reset-password", post(handlers::reset_password));
 
-    auth_routes.layer(login_rate_limiter())
+    let session_routes = Router::new()
+        // Autenticação Session (Cookie-Based)
+        .route("/session/login", post(session_handlers::session_login))
+        .route("/session/logout", post(session_handlers::session_logout))
+        .route("/session/logout-all", post(session_handlers::session_logout_all))
+        .route("/session/me", get(session_handlers::session_info))
+        .route("/session/list", get(session_handlers::list_sessions))
+        .route("/session/{session_id}", delete(session_handlers::revoke_session));
+
+    jwt_routes
+        .merge(session_routes)
+        .layer(login_rate_limiter())
 }
 
 /// Cria o router para rotas de autenticação protegidas (requerem token de acesso).

@@ -8,6 +8,7 @@ pub mod geo_regions;
 pub mod mfa;
 pub mod organizational;
 pub mod requisition;
+pub mod session;
 pub mod user;
 
 pub use auth::*;
@@ -20,4 +21,5 @@ pub use geo_regions::*;
 pub use mfa::*;
 pub use organizational::*;
 pub use requisition::*;
+pub use session::*;
 pub use user::*;

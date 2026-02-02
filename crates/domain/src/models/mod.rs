@@ -10,6 +10,7 @@ pub mod mfa;
 pub mod organizational;
 pub mod policy;
 pub mod requisition;
+pub mod session;
 pub mod user;
 
 pub use audit::*;
@@ -24,4 +25,5 @@ pub use mfa::*;
 pub use organizational::*;
 pub use policy::*;
 pub use requisition::*;
+pub use session::*;
 pub use user::*;

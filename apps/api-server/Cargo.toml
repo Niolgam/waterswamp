@@ -59,5 +59,8 @@ rand = { workspace = true }
 futures = { workspace = true }
 moka = { workspace = true }
 rust_decimal = { workspace = true }
+tower-cookies = { workspace = true }
+cookie = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]

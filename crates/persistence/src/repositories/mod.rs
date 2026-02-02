@@ -9,5 +9,6 @@ pub mod geo_regions_repository;
 pub mod mfa_repository;
 pub mod organizational_repository;
 pub mod requisition_repository;
+pub mod session_repository;
 pub mod siorg_sync_repository;
 pub mod user_repository;
