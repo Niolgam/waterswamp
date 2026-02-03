@@ -20,61 +20,63 @@ use uuid::Uuid;
 async fn create_test_city(pool: &PgPool) -> Uuid {
     let suffix = &Uuid::new_v4().to_string()[..8];
 
-    // Create country
+    // Create country (schema: id, name, iso2, bacen_code)
     let country_id = Uuid::new_v4();
+    let bacen_code = (suffix.as_bytes()[0] as i32 % 9000) + 1000;
     sqlx::query(
         r#"
-        INSERT INTO countries (id, name, iso2, iso3, bacen_code, is_active)
-        VALUES ($1, $2, $3, $4, $5, true)
-        ON CONFLICT (iso2) DO UPDATE SET name = EXCLUDED.name
+        INSERT INTO countries (id, name, iso2, bacen_code)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
         RETURNING id
         "#,
     )
     .bind(country_id)
     .bind(format!("Test Country {}", suffix))
     .bind(&suffix[..2].to_uppercase())
-    .bind(format!("T{}", &suffix[..2].to_uppercase()))
-    .bind((suffix.as_bytes()[0] as i32 % 900) + 100)
+    .bind(bacen_code)
     .execute(pool)
     .await
     .expect("Failed to create test country");
 
-    // Create state
+    // Create state (schema: id, country_id, name, abbreviation, ibge_code)
     let state_id = Uuid::new_v4();
     let state_abbr: String = suffix.chars().filter(|c| c.is_alphabetic()).take(2).collect::<String>().to_uppercase();
     let state_abbr = if state_abbr.len() < 2 { "ZZ".to_string() } else { state_abbr };
+    let state_ibge = (suffix.as_bytes()[0] as i32 % 40) + 60;
 
     sqlx::query(
         r#"
-        INSERT INTO states (id, name, abbreviation, ibge_code, country_id, is_active)
-        VALUES ($1, $2, $3, $4, $5, true)
-        ON CONFLICT (abbreviation, country_id) DO UPDATE SET name = EXCLUDED.name
+        INSERT INTO states (id, country_id, name, abbreviation, ibge_code)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (ibge_code) DO UPDATE SET name = EXCLUDED.name
         RETURNING id
         "#,
     )
     .bind(state_id)
+    .bind(country_id)
     .bind(format!("Test State {}", suffix))
     .bind(&state_abbr)
-    .bind((suffix.as_bytes()[0] as i32 % 40) + 60)
-    .bind(country_id)
+    .bind(state_ibge)
     .execute(pool)
     .await
     .expect("Failed to create test state");
 
-    // Create city
+    // Create city (schema: id, state_id, name, ibge_code)
     let city_id = Uuid::new_v4();
+    let city_ibge = (suffix.as_bytes()[0] as i32 % 9000000) + 1000000;
     sqlx::query(
         r#"
-        INSERT INTO cities (id, name, ibge_code, state_id, is_active)
-        VALUES ($1, $2, $3, $4, true)
+        INSERT INTO cities (id, state_id, name, ibge_code)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT (ibge_code) DO UPDATE SET name = EXCLUDED.name
         RETURNING id
         "#,
     )
     .bind(city_id)
-    .bind(format!("Test City {}", suffix))
-    .bind((suffix.as_bytes()[0] as i32 % 9000000) + 1000000)
     .bind(state_id)
+    .bind(format!("Test City {}", suffix))
+    .bind(city_ibge)
     .execute(pool)
     .await
     .expect("Failed to create test city");
