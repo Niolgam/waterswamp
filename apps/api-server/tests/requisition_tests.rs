@@ -16,21 +16,89 @@ use uuid::Uuid;
 // TEST HELPERS
 // ============================================================================
 
+/// Creates a test city (with country and state) and returns the city_id
+async fn create_test_city(pool: &PgPool) -> Uuid {
+    let suffix = &Uuid::new_v4().to_string()[..8];
+
+    // Create country
+    let country_id = Uuid::new_v4();
+    sqlx::query(
+        r#"
+        INSERT INTO countries (id, name, iso2, iso3, bacen_code, is_active)
+        VALUES ($1, $2, $3, $4, $5, true)
+        ON CONFLICT (iso2) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        "#,
+    )
+    .bind(country_id)
+    .bind(format!("Test Country {}", suffix))
+    .bind(&suffix[..2].to_uppercase())
+    .bind(format!("T{}", &suffix[..2].to_uppercase()))
+    .bind((suffix.as_bytes()[0] as i32 % 900) + 100)
+    .execute(pool)
+    .await
+    .expect("Failed to create test country");
+
+    // Create state
+    let state_id = Uuid::new_v4();
+    let state_abbr: String = suffix.chars().filter(|c| c.is_alphabetic()).take(2).collect::<String>().to_uppercase();
+    let state_abbr = if state_abbr.len() < 2 { "ZZ".to_string() } else { state_abbr };
+
+    sqlx::query(
+        r#"
+        INSERT INTO states (id, name, abbreviation, ibge_code, country_id, is_active)
+        VALUES ($1, $2, $3, $4, $5, true)
+        ON CONFLICT (abbreviation, country_id) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        "#,
+    )
+    .bind(state_id)
+    .bind(format!("Test State {}", suffix))
+    .bind(&state_abbr)
+    .bind((suffix.as_bytes()[0] as i32 % 40) + 60)
+    .bind(country_id)
+    .execute(pool)
+    .await
+    .expect("Failed to create test state");
+
+    // Create city
+    let city_id = Uuid::new_v4();
+    sqlx::query(
+        r#"
+        INSERT INTO cities (id, name, ibge_code, state_id, is_active)
+        VALUES ($1, $2, $3, $4, true)
+        ON CONFLICT (ibge_code) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id
+        "#,
+    )
+    .bind(city_id)
+    .bind(format!("Test City {}", suffix))
+    .bind((suffix.as_bytes()[0] as i32 % 9000000) + 1000000)
+    .bind(state_id)
+    .execute(pool)
+    .await
+    .expect("Failed to create test city");
+
+    city_id
+}
+
 /// Creates a test warehouse in the database
 async fn create_test_warehouse(pool: &PgPool) -> Uuid {
     let warehouse_id = Uuid::new_v4();
     let name = format!("Test Warehouse {}", &warehouse_id.to_string()[..8]);
+    let city_id = create_test_city(pool).await;
 
     sqlx::query(
         r#"
-        INSERT INTO warehouses (id, name, code, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, true, NOW(), NOW())
+        INSERT INTO warehouses (id, name, code, warehouse_type, city_id, is_active, created_at, updated_at)
+        VALUES ($1, $2, $3, 'SECTOR', $4, true, NOW(), NOW())
         ON CONFLICT (id) DO NOTHING
         "#,
     )
     .bind(warehouse_id)
     .bind(&name)
     .bind(&name[..8])
+    .bind(city_id)
     .execute(pool)
     .await
     .expect("Failed to create test warehouse");
