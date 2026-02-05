@@ -2,10 +2,14 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Algorithm, Argon2, Params, Version,
 };
-use axum::http::{header, HeaderValue, Method};
+use axum::http::{header, HeaderName, HeaderValue, Method};
 use std::time::Duration;
 use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 use zxcvbn::{zxcvbn, Score};
+
+/// Custom header names
+const X_CSRF_TOKEN: HeaderName = HeaderName::from_static("x-csrf-token");
+const X_REQUESTED_WITH: HeaderName = HeaderName::from_static("x-requested-with");
 /// Configuração de CORS para produção
 pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
     let origins: Vec<HeaderValue> = allowed_origins
@@ -23,7 +27,14 @@ pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
             Method::PATCH,
             Method::OPTIONS,
         ])
-        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            header::X_CONTENT_TYPE_OPTIONS,
+            X_CSRF_TOKEN,
+            X_REQUESTED_WITH,
+        ])
         .allow_credentials(true)
         .max_age(Duration::from_secs(3600))
 }
@@ -58,7 +69,14 @@ pub fn cors_development() -> CorsLayer {
             Method::PATCH,
             Method::OPTIONS,
         ])
-        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            header::X_CONTENT_TYPE_OPTIONS,
+            X_CSRF_TOKEN,
+            X_REQUESTED_WITH,
+        ])
         .allow_credentials(true)
 }
 

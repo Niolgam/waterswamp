@@ -148,7 +148,7 @@ async fn test_api_auth_login_invalid_credentials() {
     assert!(body["error"]
         .as_str()
         .unwrap()
-        .contains("Usuário ou senha inválidos."));
+        .contains("Invalid username or password"));
 
     println!("✅ test_api_auth_login_invalid_credentials: PASSED");
 }

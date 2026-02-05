@@ -6,4 +6,5 @@ pub mod conflict_resolution_service;
 pub mod geo_regions_service;
 pub mod mfa_service;
 pub mod organizational_service;
+pub mod requisition_service;
 pub mod user_service;

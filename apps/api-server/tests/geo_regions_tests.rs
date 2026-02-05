@@ -9,14 +9,13 @@ use uuid::Uuid;
 // HELPERS
 // ============================
 
-// Generates a random uppercase code of `len` characters (A-Z)
+// Generates a random uppercase code of `len` characters (A-Z only, no digits)
 fn random_code(len: usize) -> String {
     // Use UUID to get randomness
     let uuid = Uuid::new_v4().simple().to_string();
 
-    // Include digits in the pool to avoid conflicts with real ISO2 codes (which are letters only)
-    // This gives us 36^len combinations instead of 26^len
-    let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chars().collect();
+    // Only uppercase letters for state abbreviations (validation requires A-Z only)
+    let chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().collect();
     uuid.bytes()
         .filter(|b| b.is_ascii_alphanumeric())
         .take(len)

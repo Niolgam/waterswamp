@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod policies;
+pub mod requisitions;
 pub mod users;
 
 use crate::{
@@ -16,6 +17,7 @@ pub fn router() -> Router<AppState> {
         .merge(users::router())
         .merge(policies::router())
         .merge(audit::router())
+        .merge(requisitions::router())
         .nest("/geo_regions", geo_regions::router())
         .nest("/budget-classifications", budget_classifications::router())
         .nest("/catalog", catalog::router())

@@ -17,6 +17,7 @@ use application::services::{
         OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
         OrganizationalUnitTypeService, SystemSettingsService,
     },
+    requisition_service::RequisitionService,
     user_service::UserService,
 };
 use domain::ports::{
@@ -25,6 +26,7 @@ use domain::ports::{
     CityRepositoryPort, CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
     MfaRepositoryPort, OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
+    RequisitionItemRepositoryPort, RequisitionRepositoryPort,
     SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort, SiteRepositoryPort,
     SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
     SystemSettingsRepositoryPort, UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort,
@@ -47,6 +49,7 @@ use persistence::repositories::{
         OrganizationRepository, OrganizationalUnitCategoryRepository,
         OrganizationalUnitRepository, OrganizationalUnitTypeRepository, SystemSettingsRepository,
     },
+    requisition_repository::{RequisitionItemRepository, RequisitionRepository},
     user_repository::UserRepository,
 };
 
@@ -217,6 +220,17 @@ pub fn build_application_state(
         unit_type_repo_port,
     ));
 
+    // Requisition repositories and service
+    let requisition_repo_port: Arc<dyn RequisitionRepositoryPort> =
+        Arc::new(RequisitionRepository::new(pool_auth.clone()));
+    let requisition_item_repo_port: Arc<dyn RequisitionItemRepositoryPort> =
+        Arc::new(RequisitionItemRepository::new(pool_auth.clone()));
+
+    let requisition_service = Arc::new(RequisitionService::new(
+        requisition_repo_port,
+        requisition_item_repo_port,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -245,6 +259,7 @@ pub fn build_application_state(
         siorg_sync_service,
         siorg_sync_queue_repository: siorg_sync_queue_repo_port,
         siorg_history_repository: siorg_history_repo_port,
+        requisition_service,
         config,
 
         site_repository: site_repo_port,

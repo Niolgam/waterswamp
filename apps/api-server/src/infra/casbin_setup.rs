@@ -776,6 +776,29 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
     enforcer
         .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/fulfill", ACTION_POST])
         .await?;
+    // Requisition audit/history endpoints
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/cancel", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/history", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/rollback-points", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/rollback", ACTION_POST])
+        .await?;
+    // Requisition items endpoints
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{id}/items", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{req_id}/items/{item_id}/delete", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/requisitions/{req_id}/items/{item_id}/restore", ACTION_POST])
+        .await?;
 
     info!("Políticas de Requisitions carregadas");
 
