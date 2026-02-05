@@ -331,7 +331,7 @@ impl RequisitionService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{NaiveDate, Utc};
+    use chrono::Utc;
     use rust_decimal::Decimal;
 
     // ========================================================================
@@ -344,11 +344,13 @@ mod tests {
             requisition_number: "REQ2024001".to_string(),
             warehouse_id: Uuid::new_v4(),
             destination_unit_id: None,
+            destination_unit_name: None,
             requester_id: Uuid::new_v4(),
+            requester_name: None,
             status,
             priority: RequisitionPriority::Normal,
             total_value: Some(Decimal::new(1000, 2)),
-            request_date: NaiveDate::from_ymd_opt(2024, 1, 15).unwrap(),
+            request_date: Utc::now(),
             needed_by: None,
             approved_by: None,
             approved_at: None,

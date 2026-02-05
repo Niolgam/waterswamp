@@ -164,7 +164,7 @@ impl From<domain::models::requisition::RequisitionDto> for RequisitionResponse {
             status: format!("{:?}", dto.status),
             priority: format!("{:?}", dto.priority),
             total_value: dto.total_value,
-            request_date: dto.request_date,
+            request_date: dto.request_date.date_naive(),
             needed_by: dto.needed_by,
             approved_by: dto.approved_by,
             approved_at: dto.approved_at,
