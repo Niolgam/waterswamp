@@ -20,70 +20,65 @@ use uuid::Uuid;
 async fn create_test_city(pool: &PgPool) -> Uuid {
     let unique_id = Uuid::new_v4();
     let suffix = unique_id.to_string();
+    let bytes = unique_id.as_bytes();
 
-    // Use large random numbers to avoid conflicts
-    let bacen_code = (unique_id.as_bytes()[0] as i32 * 1000) + (unique_id.as_bytes()[1] as i32) + 10000;
-    let state_ibge = (unique_id.as_bytes()[2] as i32 % 40) + 60;
-    let city_ibge = (unique_id.as_bytes()[0] as i32 * 100000) + (unique_id.as_bytes()[1] as i32 * 1000) + (unique_id.as_bytes()[2] as i32) + 2000000;
+    // Use large random numbers based on UUID bytes to avoid conflicts
+    let bacen_code = (bytes[0] as i32 * 1000) + (bytes[1] as i32 * 10) + (bytes[2] as i32) + 50000;
+    let state_ibge = (bytes[3] as i32 * 100) + (bytes[4] as i32) + 1000; // Range 1000-26555 to avoid real codes
+    let city_ibge = (bytes[5] as i32 * 100000) + (bytes[6] as i32 * 1000) + (bytes[7] as i32 * 10) + 10000000;
 
-    // Create country (schema: id, name, iso2, bacen_code)
-    let country_id = Uuid::new_v4();
+    // Create country - use fetch_one to get the actual ID (new or existing)
     let iso2: String = suffix.chars().filter(|c| c.is_alphabetic()).take(2).collect::<String>().to_uppercase();
     let iso2 = if iso2.len() < 2 { "ZZ".to_string() } else { iso2 };
 
-    sqlx::query(
+    let country_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO countries (id, name, iso2, bacen_code)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (bacen_code) DO UPDATE SET id = countries.id
+        INSERT INTO countries (name, iso2, bacen_code)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (bacen_code) DO UPDATE SET name = countries.name
         RETURNING id
         "#,
     )
-    .bind(country_id)
     .bind(format!("Test Country {}", &suffix[..8]))
     .bind(&iso2)
     .bind(bacen_code)
-    .execute(pool)
+    .fetch_one(pool)
     .await
     .expect("Failed to create test country");
 
-    // Create state (schema: id, country_id, name, abbreviation, ibge_code)
-    let state_id = Uuid::new_v4();
+    // Create state - use fetch_one to get the actual ID
     let state_abbr: String = suffix.chars().filter(|c| c.is_alphabetic()).skip(2).take(2).collect::<String>().to_uppercase();
     let state_abbr = if state_abbr.len() < 2 { "YY".to_string() } else { state_abbr };
 
-    sqlx::query(
+    let state_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO states (id, country_id, name, abbreviation, ibge_code)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (ibge_code) DO UPDATE SET id = states.id
+        INSERT INTO states (country_id, name, abbreviation, ibge_code)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (ibge_code) DO UPDATE SET name = states.name
         RETURNING id
         "#,
     )
-    .bind(state_id)
     .bind(country_id)
     .bind(format!("Test State {}", &suffix[..8]))
     .bind(&state_abbr)
     .bind(state_ibge)
-    .execute(pool)
+    .fetch_one(pool)
     .await
     .expect("Failed to create test state");
 
-    // Create city (schema: id, state_id, name, ibge_code)
-    let city_id = Uuid::new_v4();
-    sqlx::query(
+    // Create city - use fetch_one to get the actual ID
+    let city_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO cities (id, state_id, name, ibge_code)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (ibge_code) DO UPDATE SET id = cities.id
+        INSERT INTO cities (state_id, name, ibge_code)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (ibge_code) DO UPDATE SET name = cities.name
         RETURNING id
         "#,
     )
-    .bind(city_id)
     .bind(state_id)
     .bind(format!("Test City {}", &suffix[..8]))
     .bind(city_ibge)
-    .execute(pool)
+    .fetch_one(pool)
     .await
     .expect("Failed to create test city");
 
@@ -92,24 +87,23 @@ async fn create_test_city(pool: &PgPool) -> Uuid {
 
 /// Creates a test warehouse in the database
 async fn create_test_warehouse(pool: &PgPool) -> Uuid {
-    let warehouse_id = Uuid::new_v4();
-    let code = format!("WH{}", &warehouse_id.to_string()[..12]); // Use longer code to avoid collision
-    let name = format!("Test Warehouse {}", &warehouse_id.to_string()[..8]);
+    let unique_id = Uuid::new_v4();
+    let code = format!("WH{}", &unique_id.to_string().replace("-", "")[..16]);
+    let name = format!("Test Warehouse {}", &unique_id.to_string()[..8]);
     let city_id = create_test_city(pool).await;
 
-    sqlx::query(
+    let warehouse_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO warehouses (id, name, code, warehouse_type, city_id, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, 'SECTOR', $4, true, NOW(), NOW())
-        ON CONFLICT (code) DO UPDATE SET id = warehouses.id
+        INSERT INTO warehouses (name, code, warehouse_type, city_id, is_active)
+        VALUES ($1, $2, 'SECTOR', $3, true)
+        ON CONFLICT (code) DO UPDATE SET name = warehouses.name
         RETURNING id
         "#,
     )
-    .bind(warehouse_id)
     .bind(&name)
     .bind(&code)
     .bind(city_id)
-    .execute(pool)
+    .fetch_one(pool)
     .await
     .expect("Failed to create test warehouse");
 
