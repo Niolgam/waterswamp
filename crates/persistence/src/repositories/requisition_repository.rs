@@ -183,12 +183,47 @@ impl RequisitionRepositoryPort for RequisitionRepository {
         id: Uuid,
         limit: i32,
     ) -> Result<Vec<RollbackPoint>, RepositoryError> {
-        sqlx::query_as::<_, RollbackPoint>("SELECT * FROM fn_list_rollback_points($1, $2)")
-            .bind(id)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(map_db_error)
+        sqlx::query_as::<_, RollbackPoint>(
+            r#"
+            SELECT
+                rh.id AS history_id,
+                rh.operation::TEXT AS operation,
+                rh.status_after,
+                rh.performed_at,
+                rh.performed_by_name,
+                rh.changed_fields,
+                CASE
+                    WHEN rh.is_rollback_point = FALSE THEN FALSE
+                    WHEN rh.operation IN ('DELETE', 'SOFT_DELETE') THEN FALSE
+                    WHEN EXISTS (
+                        SELECT 1 FROM stock_movements sm
+                        WHERE sm.requisition_id = $1
+                          AND sm.movement_date > rh.performed_at
+                    ) THEN FALSE
+                    ELSE TRUE
+                END AS can_rollback,
+                CASE
+                    WHEN rh.is_rollback_point = FALSE THEN 'Estado marcado como não-reversível'
+                    WHEN rh.operation IN ('DELETE', 'SOFT_DELETE') THEN 'Não é possível reverter para estado de exclusão'
+                    WHEN EXISTS (
+                        SELECT 1 FROM stock_movements sm
+                        WHERE sm.requisition_id = $1
+                          AND sm.movement_date > rh.performed_at
+                    ) THEN 'Existem movimentações de estoque posteriores a este ponto'
+                    ELSE NULL
+                END AS rollback_blocked_reason
+            FROM requisition_history rh
+            WHERE rh.requisition_id = $1
+              AND rh.data_after IS NOT NULL
+            ORDER BY rh.performed_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_db_error)
     }
 
     async fn list(
