@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS vehicle_status_history;
+DROP TABLE IF EXISTS vehicle_documents;
+DROP TABLE IF EXISTS vehicles;
+DROP TABLE IF EXISTS vehicle_transmission_types;
+DROP TABLE IF EXISTS vehicle_fuel_types;
+DROP TABLE IF EXISTS vehicle_colors;
+DROP TABLE IF EXISTS vehicle_models;
+DROP TABLE IF EXISTS vehicle_makes;
+DROP TABLE IF EXISTS vehicle_categories;
+DROP TYPE IF EXISTS document_type_enum;
+DROP TYPE IF EXISTS decommission_destination_enum;
+DROP TYPE IF EXISTS decommission_reason_enum;
+DROP TYPE IF EXISTS acquisition_type_enum;
+DROP TYPE IF EXISTS vehicle_status_enum;

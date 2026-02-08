@@ -8,3 +8,4 @@ pub mod mfa_service;
 pub mod organizational_service;
 pub mod requisition_service;
 pub mod user_service;
+pub mod vehicle_service;

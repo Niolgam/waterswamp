@@ -10,6 +10,7 @@ pub mod organizational;
 pub mod requisition;
 pub mod session;
 pub mod user;
+pub mod vehicle;
 
 pub use auth::*;
 pub use budget_classifications::*;
@@ -23,3 +24,4 @@ pub use organizational::*;
 pub use requisition::*;
 pub use session::*;
 pub use user::*;
+pub use vehicle::*;

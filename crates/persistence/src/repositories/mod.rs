@@ -12,3 +12,4 @@ pub mod requisition_repository;
 pub mod session_repository;
 pub mod siorg_sync_repository;
 pub mod user_repository;
+pub mod vehicle_repository;
