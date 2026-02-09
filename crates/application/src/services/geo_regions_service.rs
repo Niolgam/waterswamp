@@ -308,7 +308,14 @@ impl GeoRegionsService {
 
         let city = self
             .city_repo
-            .create(&payload.name, payload.ibge_code, payload.state_id)
+            .create(
+                &payload.name,
+                payload.ibge_code,
+                payload.siafi_code,
+                payload.latitude,
+                payload.longitude,
+                payload.state_id,
+            )
             .await?;
 
         Ok(city)
@@ -350,7 +357,15 @@ impl GeoRegionsService {
 
         let city = self
             .city_repo
-            .update(id, payload.name.as_ref(), payload.ibge_code, payload.state_id)
+            .update(
+                id,
+                payload.name.as_ref(),
+                payload.ibge_code,
+                payload.siafi_code,
+                payload.latitude,
+                payload.longitude,
+                payload.state_id,
+            )
             .await?;
 
         Ok(city)
