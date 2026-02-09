@@ -77,24 +77,14 @@ async fn create_vehicle_with_deps(app: &TestApp) -> (Value, String) {
     let category = create_category(app, &random_name("Cat")).await;
     let fuel_type = create_fuel_type(app, &random_name("Fuel")).await;
 
-    let plate = format!(
-        "{}{}{}",
-        &"ABCDEFGHIJKLMNOPQRSTUVWXYZ"[..3],
-        rand_digit(),
-        &"ABCDEFGHIJKLMNOPQRSTUVWXYZ"[..1],
-    );
-    // Use a simple unique plate
-    let unique = &Uuid::new_v4().simple().to_string()[..4];
-    let plate = format!("TST{}", unique).chars().take(7).collect::<String>();
-
     let response = app
         .api
         .post("/api/admin/fleet/vehicles")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "license_plate": format!("ABC{}", &Uuid::new_v4().simple().to_string()[..4].to_uppercase().replace(|c: char| !c.is_ascii_alphanumeric(), "")),
+            "license_plate": generate_plate(),
             "chassis_number": generate_chassis(),
-            "renavam": "00891749802",
+            "renavam": generate_renavam(),
             "category_id": category["id"],
             "make_id": make["id"],
             "model_id": model["id"],
@@ -125,7 +115,6 @@ async fn create_vehicle_with_deps(app: &TestApp) -> (Value, String) {
 }
 
 fn generate_chassis() -> String {
-    use std::collections::HashSet;
     let valid_chars: Vec<char> = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789".chars().collect();
     let mut result = String::new();
     let uuid = Uuid::new_v4().simple().to_string().to_uppercase();
@@ -140,9 +129,46 @@ fn generate_chassis() -> String {
     result
 }
 
-fn rand_digit() -> char {
+/// Generates a unique Mercosul-format license plate (ABC1D23 pattern)
+fn generate_plate() -> String {
+    let uuid = Uuid::new_v4().simple().to_string().to_uppercase();
+    let letters: Vec<char> = uuid.chars().filter(|c| c.is_ascii_uppercase()).collect();
+    let digits: Vec<char> = uuid.chars().filter(|c| c.is_ascii_digit()).collect();
+    // Mercosul pattern: 3 letters, 1 digit, 1 letter, 2 digits
+    format!(
+        "{}{}{}{}{}",
+        &letters.get(0).unwrap_or(&'A'),
+        &letters.get(1).unwrap_or(&'B'),
+        &letters.get(2).unwrap_or(&'C'),
+        &digits.get(0).unwrap_or(&'1'),
+        &letters.get(3).unwrap_or(&'D'),
+    ) + &format!("{}{}", digits.get(1).unwrap_or(&'2'), digits.get(2).unwrap_or(&'3'))
+}
+
+/// Generates a valid Renavam with correct check digit
+fn generate_renavam() -> String {
     let uuid = Uuid::new_v4().simple().to_string();
-    uuid.chars().find(|c| c.is_ascii_digit()).unwrap_or('1')
+    let base_digits: Vec<u32> = uuid
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .take(10)
+        .map(|c| c.to_digit(10).unwrap())
+        .collect();
+
+    // Pad to 10 digits if needed
+    let mut digits = base_digits;
+    while digits.len() < 10 {
+        digits.push(0);
+    }
+
+    // Compute check digit using standard Renavam algorithm
+    let weights = [3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    let sum: u32 = digits.iter().zip(weights.iter()).map(|(d, w)| d * w).sum();
+    let check = (sum * 10) % 11;
+    let check_digit = if check >= 10 { 0 } else { check };
+
+    let renavam: String = digits.iter().map(|d| d.to_string()).collect::<String>() + &check_digit.to_string();
+    renavam
 }
 
 // ============================
@@ -278,15 +304,16 @@ async fn test_create_vehicle_with_valid_data() {
     let fuel_type = create_fuel_type(&app, &random_name("Flex")).await;
 
     let chassis = generate_chassis();
+    let plate = generate_plate();
 
     let response = app
         .api
         .post("/api/admin/fleet/vehicles")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "license_plate": "ABC1D23",
+            "license_plate": plate,
             "chassis_number": chassis,
-            "renavam": "00891749802",
+            "renavam": generate_renavam(),
             "category_id": category["id"],
             "make_id": make["id"],
             "model_id": model["id"],
@@ -302,7 +329,7 @@ async fn test_create_vehicle_with_valid_data() {
 
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let vehicle: Value = response.json();
-    assert_eq!(vehicle["license_plate"], "ABC1D23");
+    assert_eq!(vehicle["license_plate"], plate);
     assert!(vehicle["category_name"].as_str().is_some());
     assert!(vehicle["make_name"].as_str().is_some());
 }
@@ -324,7 +351,7 @@ async fn test_create_vehicle_invalid_plate() {
         .json(&json!({
             "license_plate": "INVALID",
             "chassis_number": generate_chassis(),
-            "renavam": "00891749802",
+            "renavam": generate_renavam(),
             "category_id": category["id"],
             "make_id": make["id"],
             "model_id": model["id"],
@@ -354,9 +381,9 @@ async fn test_create_vehicle_invalid_chassis() {
         .post("/api/admin/fleet/vehicles")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "license_plate": "XYZ5678",
+            "license_plate": generate_plate(),
             "chassis_number": "SHORT",
-            "renavam": "00891749802",
+            "renavam": generate_renavam(),
             "category_id": category["id"],
             "make_id": make["id"],
             "model_id": model["id"],
@@ -391,9 +418,9 @@ async fn test_change_vehicle_status() {
         .post("/api/admin/fleet/vehicles")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "license_plate": "DEF4G56",
+            "license_plate": generate_plate(),
             "chassis_number": chassis,
-            "renavam": "00891749802",
+            "renavam": generate_renavam(),
             "category_id": category["id"],
             "make_id": make["id"],
             "model_id": model["id"],
@@ -453,9 +480,9 @@ async fn test_soft_delete_vehicle() {
         .post("/api/admin/fleet/vehicles")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "license_plate": "GHI7J89",
+            "license_plate": generate_plate(),
             "chassis_number": chassis,
-            "renavam": "00891749802",
+            "renavam": generate_renavam(),
             "category_id": category["id"],
             "make_id": make["id"],
             "model_id": model["id"],
