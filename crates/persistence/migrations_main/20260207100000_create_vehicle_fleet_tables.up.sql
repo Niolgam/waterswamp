@@ -57,7 +57,7 @@ CREATE TABLE vehicle_categories (
 
 CREATE TRIGGER set_vehicle_categories_updated_at
     BEFORE UPDATE ON vehicle_categories
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================
 -- Vehicle Makes (Marcas)
@@ -73,7 +73,7 @@ CREATE TABLE vehicle_makes (
 
 CREATE TRIGGER set_vehicle_makes_updated_at
     BEFORE UPDATE ON vehicle_makes
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================
 -- Vehicle Models (Modelos)
@@ -90,7 +90,7 @@ CREATE TABLE vehicle_models (
 
 CREATE TRIGGER set_vehicle_models_updated_at
     BEFORE UPDATE ON vehicle_models
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================
 -- Colors
@@ -107,7 +107,7 @@ CREATE TABLE vehicle_colors (
 
 CREATE TRIGGER set_vehicle_colors_updated_at
     BEFORE UPDATE ON vehicle_colors
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================
 -- Fuel Types
@@ -123,7 +123,7 @@ CREATE TABLE vehicle_fuel_types (
 
 CREATE TRIGGER set_vehicle_fuel_types_updated_at
     BEFORE UPDATE ON vehicle_fuel_types
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================
 -- Transmission Types
@@ -139,7 +139,7 @@ CREATE TABLE vehicle_transmission_types (
 
 CREATE TRIGGER set_vehicle_transmission_types_updated_at
     BEFORE UPDATE ON vehicle_transmission_types
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================
 -- Vehicles (Main table)
@@ -205,7 +205,7 @@ CREATE INDEX idx_vehicles_is_deleted ON vehicles (is_deleted);
 
 CREATE TRIGGER set_vehicles_updated_at
     BEFORE UPDATE ON vehicles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================
 -- Vehicle Documents
@@ -229,7 +229,7 @@ CREATE INDEX idx_vehicle_documents_type ON vehicle_documents (document_type);
 
 CREATE TRIGGER set_vehicle_documents_updated_at
     BEFORE UPDATE ON vehicle_documents
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================
 -- Vehicle Status History (Audit trail)
