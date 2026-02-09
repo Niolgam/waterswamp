@@ -136,13 +136,15 @@ fn generate_plate() -> String {
     let digits: Vec<char> = uuid.chars().filter(|c| c.is_ascii_digit()).collect();
     // Mercosul pattern: 3 letters, 1 digit, 1 letter, 2 digits
     format!(
-        "{}{}{}{}{}",
-        &letters.get(0).unwrap_or(&'A'),
-        &letters.get(1).unwrap_or(&'B'),
-        &letters.get(2).unwrap_or(&'C'),
-        &digits.get(0).unwrap_or(&'1'),
-        &letters.get(3).unwrap_or(&'D'),
-    ) + &format!("{}{}", digits.get(1).unwrap_or(&'2'), digits.get(2).unwrap_or(&'3'))
+        "{}{}{}{}{}{}{}",
+        letters.get(0).unwrap_or(&'A'),
+        letters.get(1).unwrap_or(&'B'),
+        letters.get(2).unwrap_or(&'C'),
+        digits.get(0).unwrap_or(&'1'),
+        letters.get(3).unwrap_or(&'D'),
+        digits.get(1).unwrap_or(&'2'),
+        digits.get(2).unwrap_or(&'3'),
+    )
 }
 
 /// Generates a valid Renavam with correct check digit
@@ -167,7 +169,8 @@ fn generate_renavam() -> String {
     let check = (sum * 10) % 11;
     let check_digit = if check >= 10 { 0 } else { check };
 
-    let renavam: String = digits.iter().map(|d| d.to_string()).collect::<String>() + &check_digit.to_string();
+    let mut renavam: String = digits.iter().map(|d| d.to_string()).collect();
+    renavam.push_str(&check_digit.to_string());
     renavam
 }
 
