@@ -259,6 +259,29 @@ impl VehicleModelRepositoryPort for VehicleModelRepository {
             .map_err(map_db_error)
     }
 
+    async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<VehicleModelWithDetailsDto>, RepositoryError> {
+        sqlx::query_as::<_, VehicleModelWithDetailsDto>(
+            r#"
+            SELECT
+                m.id, m.make_id, mk.name AS make_name,
+                m.category_id, cat.name AS category_name,
+                m.name,
+                m.passenger_capacity, m.engine_displacement, m.horsepower,
+                m.capacidade_carga,
+                m.media_min, m.media_max, m.media_desejada,
+                m.is_active, m.created_at, m.updated_at
+            FROM vehicle_models m
+            JOIN vehicle_makes mk ON m.make_id = mk.id
+            LEFT JOIN vehicle_categories cat ON m.category_id = cat.id
+            WHERE m.id = $1
+            "#
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_error)
+    }
+
     async fn exists_by_name_in_make(&self, name: &str, make_id: Uuid) -> Result<bool, RepositoryError> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vehicle_models WHERE name = $1 AND make_id = $2")
             .bind(name)
@@ -280,23 +303,64 @@ impl VehicleModelRepositoryPort for VehicleModelRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, make_id: Uuid, name: &str) -> Result<VehicleModelDto, RepositoryError> {
+    async fn create(
+        &self,
+        make_id: Uuid,
+        category_id: Option<Uuid>,
+        name: &str,
+        passenger_capacity: Option<i32>,
+        engine_displacement: Option<i32>,
+        horsepower: Option<i32>,
+        capacidade_carga: Option<Decimal>,
+        media_min: Option<Decimal>,
+        media_max: Option<Decimal>,
+        media_desejada: Option<Decimal>,
+    ) -> Result<VehicleModelDto, RepositoryError> {
         sqlx::query_as::<_, VehicleModelDto>(
-            "INSERT INTO vehicle_models (make_id, name) VALUES ($1, $2) RETURNING *"
+            "INSERT INTO vehicle_models (make_id, category_id, name, passenger_capacity, engine_displacement, horsepower, capacidade_carga, media_min, media_max, media_desejada) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *"
         )
         .bind(make_id)
+        .bind(category_id)
         .bind(name)
+        .bind(passenger_capacity)
+        .bind(engine_displacement)
+        .bind(horsepower)
+        .bind(capacidade_carga)
+        .bind(media_min)
+        .bind(media_max)
+        .bind(media_desejada)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
     }
 
-    async fn update(&self, id: Uuid, name: Option<&str>, is_active: Option<bool>) -> Result<VehicleModelDto, RepositoryError> {
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        category_id: Option<Uuid>,
+        passenger_capacity: Option<i32>,
+        engine_displacement: Option<i32>,
+        horsepower: Option<i32>,
+        capacidade_carga: Option<Decimal>,
+        media_min: Option<Decimal>,
+        media_max: Option<Decimal>,
+        media_desejada: Option<Decimal>,
+        is_active: Option<bool>,
+    ) -> Result<VehicleModelDto, RepositoryError> {
         sqlx::query_as::<_, VehicleModelDto>(
             r#"
             UPDATE vehicle_models
             SET name = COALESCE($2, name),
-                is_active = COALESCE($3, is_active),
+                category_id = CASE WHEN $3::UUID IS NOT NULL THEN $3 ELSE category_id END,
+                passenger_capacity = CASE WHEN $4::INT IS NOT NULL THEN $4 ELSE passenger_capacity END,
+                engine_displacement = CASE WHEN $5::INT IS NOT NULL THEN $5 ELSE engine_displacement END,
+                horsepower = CASE WHEN $6::INT IS NOT NULL THEN $6 ELSE horsepower END,
+                capacidade_carga = CASE WHEN $7::NUMERIC IS NOT NULL THEN $7 ELSE capacidade_carga END,
+                media_min = CASE WHEN $8::NUMERIC IS NOT NULL THEN $8 ELSE media_min END,
+                media_max = CASE WHEN $9::NUMERIC IS NOT NULL THEN $9 ELSE media_max END,
+                media_desejada = CASE WHEN $10::NUMERIC IS NOT NULL THEN $10 ELSE media_desejada END,
+                is_active = COALESCE($11, is_active),
                 updated_at = NOW()
             WHERE id = $1
             RETURNING *
@@ -304,6 +368,14 @@ impl VehicleModelRepositoryPort for VehicleModelRepository {
         )
         .bind(id)
         .bind(name)
+        .bind(category_id)
+        .bind(passenger_capacity)
+        .bind(engine_displacement)
+        .bind(horsepower)
+        .bind(capacidade_carga)
+        .bind(media_min)
+        .bind(media_max)
+        .bind(media_desejada)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
@@ -319,14 +391,24 @@ impl VehicleModelRepositoryPort for VehicleModelRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn list(&self, limit: i64, offset: i64, search: Option<String>, make_id: Option<Uuid>) -> Result<(Vec<VehicleModelDto>, i64), RepositoryError> {
+    async fn list(&self, limit: i64, offset: i64, search: Option<String>, make_id: Option<Uuid>) -> Result<(Vec<VehicleModelWithDetailsDto>, i64), RepositoryError> {
         let search_pattern = search.map(|s| format!("%{}%", s));
-        let items = sqlx::query_as::<_, VehicleModelDto>(
+        let items = sqlx::query_as::<_, VehicleModelWithDetailsDto>(
             r#"
-            SELECT * FROM vehicle_models
-            WHERE ($1::TEXT IS NULL OR name ILIKE $1)
-              AND ($2::UUID IS NULL OR make_id = $2)
-            ORDER BY name
+            SELECT
+                m.id, m.make_id, mk.name AS make_name,
+                m.category_id, cat.name AS category_name,
+                m.name,
+                m.passenger_capacity, m.engine_displacement, m.horsepower,
+                m.capacidade_carga,
+                m.media_min, m.media_max, m.media_desejada,
+                m.is_active, m.created_at, m.updated_at
+            FROM vehicle_models m
+            JOIN vehicle_makes mk ON m.make_id = mk.id
+            LEFT JOIN vehicle_categories cat ON m.category_id = cat.id
+            WHERE ($1::TEXT IS NULL OR m.name ILIKE $1)
+              AND ($2::UUID IS NULL OR m.make_id = $2)
+            ORDER BY m.name
             LIMIT $3 OFFSET $4
             "#
         )
@@ -340,9 +422,9 @@ impl VehicleModelRepositoryPort for VehicleModelRepository {
 
         let total: i64 = sqlx::query_scalar(
             r#"
-            SELECT COUNT(*) FROM vehicle_models
-            WHERE ($1::TEXT IS NULL OR name ILIKE $1)
-              AND ($2::UUID IS NULL OR make_id = $2)
+            SELECT COUNT(*) FROM vehicle_models m
+            WHERE ($1::TEXT IS NULL OR m.name ILIKE $1)
+              AND ($2::UUID IS NULL OR m.make_id = $2)
             "#
         )
         .bind(&search_pattern)
@@ -717,23 +799,23 @@ impl VehicleRepositoryPort for VehicleRepository {
             r#"
             SELECT
                 v.id, v.license_plate, v.chassis_number, v.renavam, v.engine_number,
-                v.category_id, vc.name as category_name,
-                v.make_id, vm.name as make_name,
-                v.model_id, vmod.name as model_name,
+                v.bomba_injetora, v.caixa_cambio, v.diferencial,
+                v.model_id, m.name as model_name,
+                mk.name as make_name,
+                cat.name as category_name,
                 v.color_id, vcol.name as color_name,
                 v.fuel_type_id, vft.name as fuel_type_name,
                 v.transmission_type_id, vtt.name as transmission_type_name,
                 v.manufacture_year, v.model_year,
-                v.passenger_capacity, v.load_capacity_kg,
-                v.engine_displacement, v.horsepower,
+                v.frota, v.rateio, v.km_inicial, v.cap_tanque_comb,
                 v.acquisition_type, v.acquisition_date, v.purchase_value,
                 v.patrimony_number, v.department_id,
-                v.status,
+                v.status, v.observacoes,
                 v.created_at, v.updated_at
             FROM vehicles v
-            JOIN vehicle_categories vc ON v.category_id = vc.id
-            JOIN vehicle_makes vm ON v.make_id = vm.id
-            JOIN vehicle_models vmod ON v.model_id = vmod.id
+            JOIN vehicle_models m ON v.model_id = m.id
+            JOIN vehicle_makes mk ON m.make_id = mk.id
+            LEFT JOIN vehicle_categories cat ON m.category_id = cat.id
             JOIN vehicle_colors vcol ON v.color_id = vcol.id
             JOIN vehicle_fuel_types vft ON v.fuel_type_id = vft.id
             LEFT JOIN vehicle_transmission_types vtt ON v.transmission_type_id = vtt.id
@@ -751,12 +833,13 @@ impl VehicleRepositoryPort for VehicleRepository {
             chassis_number: r.get("chassis_number"),
             renavam: r.get("renavam"),
             engine_number: r.get("engine_number"),
-            category_id: r.get("category_id"),
-            category_name: r.get("category_name"),
-            make_id: r.get("make_id"),
-            make_name: r.get("make_name"),
+            bomba_injetora: r.get("bomba_injetora"),
+            caixa_cambio: r.get("caixa_cambio"),
+            diferencial: r.get("diferencial"),
             model_id: r.get("model_id"),
             model_name: r.get("model_name"),
+            make_name: r.get("make_name"),
+            category_name: r.get("category_name"),
             color_id: r.get("color_id"),
             color_name: r.get("color_name"),
             fuel_type_id: r.get("fuel_type_id"),
@@ -765,16 +848,17 @@ impl VehicleRepositoryPort for VehicleRepository {
             transmission_type_name: r.get("transmission_type_name"),
             manufacture_year: r.get("manufacture_year"),
             model_year: r.get("model_year"),
-            passenger_capacity: r.get("passenger_capacity"),
-            load_capacity_kg: r.get("load_capacity_kg"),
-            engine_displacement: r.get("engine_displacement"),
-            horsepower: r.get("horsepower"),
+            frota: r.get("frota"),
+            rateio: r.get("rateio"),
+            km_inicial: r.get("km_inicial"),
+            cap_tanque_comb: r.get("cap_tanque_comb"),
             acquisition_type: r.get("acquisition_type"),
             acquisition_date: r.get("acquisition_date"),
             purchase_value: r.get("purchase_value"),
             patrimony_number: r.get("patrimony_number"),
             department_id: r.get("department_id"),
             status: r.get("status"),
+            observacoes: r.get("observacoes"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }))
@@ -843,37 +927,40 @@ impl VehicleRepositoryPort for VehicleRepository {
         chassis_number: &str,
         renavam: &str,
         engine_number: Option<&str>,
-        category_id: Uuid,
-        make_id: Uuid,
+        bomba_injetora: Option<&str>,
+        caixa_cambio: Option<&str>,
+        diferencial: Option<&str>,
         model_id: Uuid,
         color_id: Uuid,
         fuel_type_id: Uuid,
         transmission_type_id: Option<Uuid>,
         manufacture_year: i32,
         model_year: i32,
-        passenger_capacity: Option<i32>,
-        load_capacity_kg: Option<Decimal>,
-        engine_displacement: Option<i32>,
-        horsepower: Option<i32>,
+        frota: Option<&str>,
+        rateio: bool,
+        km_inicial: Option<Decimal>,
+        cap_tanque_comb: Option<Decimal>,
         acquisition_type: AcquisitionType,
         acquisition_date: Option<NaiveDate>,
         purchase_value: Option<Decimal>,
         patrimony_number: Option<&str>,
         department_id: Option<Uuid>,
         status: VehicleStatus,
+        observacoes: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<VehicleDto, RepositoryError> {
         sqlx::query_as::<_, VehicleDto>(
             r#"
             INSERT INTO vehicles (
                 license_plate, chassis_number, renavam, engine_number,
-                category_id, make_id, model_id, color_id, fuel_type_id, transmission_type_id,
+                bomba_injetora, caixa_cambio, diferencial,
+                model_id, color_id, fuel_type_id, transmission_type_id,
                 manufacture_year, model_year,
-                passenger_capacity, load_capacity_kg, engine_displacement, horsepower,
+                frota, rateio, km_inicial, cap_tanque_comb,
                 acquisition_type, acquisition_date, purchase_value,
-                patrimony_number, department_id, status, created_by
+                patrimony_number, department_id, status, observacoes, created_by
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
             RETURNING *
             "#
         )
@@ -881,24 +968,26 @@ impl VehicleRepositoryPort for VehicleRepository {
         .bind(chassis_number)
         .bind(renavam)
         .bind(engine_number)
-        .bind(category_id)
-        .bind(make_id)
+        .bind(bomba_injetora)
+        .bind(caixa_cambio)
+        .bind(diferencial)
         .bind(model_id)
         .bind(color_id)
         .bind(fuel_type_id)
         .bind(transmission_type_id)
         .bind(manufacture_year)
         .bind(model_year)
-        .bind(passenger_capacity)
-        .bind(load_capacity_kg)
-        .bind(engine_displacement)
-        .bind(horsepower)
+        .bind(frota)
+        .bind(rateio)
+        .bind(km_inicial)
+        .bind(cap_tanque_comb)
         .bind(acquisition_type)
         .bind(acquisition_date)
         .bind(purchase_value)
         .bind(patrimony_number)
         .bind(department_id)
         .bind(status)
+        .bind(observacoes)
         .bind(created_by)
         .fetch_one(&self.pool)
         .await
@@ -912,24 +1001,26 @@ impl VehicleRepositoryPort for VehicleRepository {
         chassis_number: Option<&str>,
         renavam: Option<&str>,
         engine_number: Option<&str>,
-        category_id: Option<Uuid>,
-        make_id: Option<Uuid>,
+        bomba_injetora: Option<&str>,
+        caixa_cambio: Option<&str>,
+        diferencial: Option<&str>,
         model_id: Option<Uuid>,
         color_id: Option<Uuid>,
         fuel_type_id: Option<Uuid>,
         transmission_type_id: Option<Uuid>,
         manufacture_year: Option<i32>,
         model_year: Option<i32>,
-        passenger_capacity: Option<i32>,
-        load_capacity_kg: Option<Decimal>,
-        engine_displacement: Option<i32>,
-        horsepower: Option<i32>,
+        frota: Option<&str>,
+        rateio: Option<bool>,
+        km_inicial: Option<Decimal>,
+        cap_tanque_comb: Option<Decimal>,
         acquisition_type: Option<AcquisitionType>,
         acquisition_date: Option<NaiveDate>,
         purchase_value: Option<Decimal>,
         patrimony_number: Option<&str>,
         department_id: Option<Uuid>,
         status: Option<VehicleStatus>,
+        observacoes: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<VehicleDto, RepositoryError> {
         sqlx::query_as::<_, VehicleDto>(
@@ -939,25 +1030,27 @@ impl VehicleRepositoryPort for VehicleRepository {
                 chassis_number = COALESCE($3, chassis_number),
                 renavam = COALESCE($4, renavam),
                 engine_number = CASE WHEN $5::TEXT IS NOT NULL THEN $5 ELSE engine_number END,
-                category_id = COALESCE($6, category_id),
-                make_id = COALESCE($7, make_id),
-                model_id = COALESCE($8, model_id),
-                color_id = COALESCE($9, color_id),
-                fuel_type_id = COALESCE($10, fuel_type_id),
-                transmission_type_id = CASE WHEN $11::UUID IS NOT NULL THEN $11 ELSE transmission_type_id END,
-                manufacture_year = COALESCE($12, manufacture_year),
-                model_year = COALESCE($13, model_year),
-                passenger_capacity = CASE WHEN $14::INT IS NOT NULL THEN $14 ELSE passenger_capacity END,
-                load_capacity_kg = CASE WHEN $15::NUMERIC IS NOT NULL THEN $15 ELSE load_capacity_kg END,
-                engine_displacement = CASE WHEN $16::INT IS NOT NULL THEN $16 ELSE engine_displacement END,
-                horsepower = CASE WHEN $17::INT IS NOT NULL THEN $17 ELSE horsepower END,
-                acquisition_type = COALESCE($18, acquisition_type),
-                acquisition_date = CASE WHEN $19::DATE IS NOT NULL THEN $19 ELSE acquisition_date END,
-                purchase_value = CASE WHEN $20::NUMERIC IS NOT NULL THEN $20 ELSE purchase_value END,
-                patrimony_number = CASE WHEN $21::TEXT IS NOT NULL THEN $21 ELSE patrimony_number END,
-                department_id = CASE WHEN $22::UUID IS NOT NULL THEN $22 ELSE department_id END,
-                status = COALESCE($23, status),
-                updated_by = $24,
+                bomba_injetora = CASE WHEN $6::TEXT IS NOT NULL THEN $6 ELSE bomba_injetora END,
+                caixa_cambio = CASE WHEN $7::TEXT IS NOT NULL THEN $7 ELSE caixa_cambio END,
+                diferencial = CASE WHEN $8::TEXT IS NOT NULL THEN $8 ELSE diferencial END,
+                model_id = COALESCE($9, model_id),
+                color_id = COALESCE($10, color_id),
+                fuel_type_id = COALESCE($11, fuel_type_id),
+                transmission_type_id = CASE WHEN $12::UUID IS NOT NULL THEN $12 ELSE transmission_type_id END,
+                manufacture_year = COALESCE($13, manufacture_year),
+                model_year = COALESCE($14, model_year),
+                frota = CASE WHEN $15::TEXT IS NOT NULL THEN $15 ELSE frota END,
+                rateio = COALESCE($16, rateio),
+                km_inicial = CASE WHEN $17::NUMERIC IS NOT NULL THEN $17 ELSE km_inicial END,
+                cap_tanque_comb = CASE WHEN $18::NUMERIC IS NOT NULL THEN $18 ELSE cap_tanque_comb END,
+                acquisition_type = COALESCE($19, acquisition_type),
+                acquisition_date = CASE WHEN $20::DATE IS NOT NULL THEN $20 ELSE acquisition_date END,
+                purchase_value = CASE WHEN $21::NUMERIC IS NOT NULL THEN $21 ELSE purchase_value END,
+                patrimony_number = CASE WHEN $22::TEXT IS NOT NULL THEN $22 ELSE patrimony_number END,
+                department_id = CASE WHEN $23::UUID IS NOT NULL THEN $23 ELSE department_id END,
+                status = COALESCE($24, status),
+                observacoes = CASE WHEN $25::TEXT IS NOT NULL THEN $25 ELSE observacoes END,
+                updated_by = $26,
                 updated_at = NOW()
             WHERE id = $1 AND is_deleted = false
             RETURNING *
@@ -968,24 +1061,26 @@ impl VehicleRepositoryPort for VehicleRepository {
         .bind(chassis_number)
         .bind(renavam)
         .bind(engine_number)
-        .bind(category_id)
-        .bind(make_id)
+        .bind(bomba_injetora)
+        .bind(caixa_cambio)
+        .bind(diferencial)
         .bind(model_id)
         .bind(color_id)
         .bind(fuel_type_id)
         .bind(transmission_type_id)
         .bind(manufacture_year)
         .bind(model_year)
-        .bind(passenger_capacity)
-        .bind(load_capacity_kg)
-        .bind(engine_displacement)
-        .bind(horsepower)
+        .bind(frota)
+        .bind(rateio)
+        .bind(km_inicial)
+        .bind(cap_tanque_comb)
         .bind(acquisition_type)
         .bind(acquisition_date)
         .bind(purchase_value)
         .bind(patrimony_number)
         .bind(department_id)
         .bind(status)
+        .bind(observacoes)
         .bind(updated_by)
         .fetch_one(&self.pool)
         .await
@@ -1021,8 +1116,7 @@ impl VehicleRepositoryPort for VehicleRepository {
         offset: i64,
         search: Option<String>,
         status: Option<VehicleStatus>,
-        category_id: Option<Uuid>,
-        make_id: Option<Uuid>,
+        model_id: Option<Uuid>,
         fuel_type_id: Option<Uuid>,
         department_id: Option<Uuid>,
         include_deleted: bool,
@@ -1033,42 +1127,40 @@ impl VehicleRepositoryPort for VehicleRepository {
             r#"
             SELECT
                 v.id, v.license_plate, v.chassis_number, v.renavam, v.engine_number,
-                v.category_id, vc.name as category_name,
-                v.make_id, vm.name as make_name,
-                v.model_id, vmod.name as model_name,
+                v.bomba_injetora, v.caixa_cambio, v.diferencial,
+                v.model_id, m.name as model_name,
+                mk.name as make_name,
+                cat.name as category_name,
                 v.color_id, vcol.name as color_name,
                 v.fuel_type_id, vft.name as fuel_type_name,
                 v.transmission_type_id, vtt.name as transmission_type_name,
                 v.manufacture_year, v.model_year,
-                v.passenger_capacity, v.load_capacity_kg,
-                v.engine_displacement, v.horsepower,
+                v.frota, v.rateio, v.km_inicial, v.cap_tanque_comb,
                 v.acquisition_type, v.acquisition_date, v.purchase_value,
                 v.patrimony_number, v.department_id,
-                v.status,
+                v.status, v.observacoes,
                 v.created_at, v.updated_at
             FROM vehicles v
-            JOIN vehicle_categories vc ON v.category_id = vc.id
-            JOIN vehicle_makes vm ON v.make_id = vm.id
-            JOIN vehicle_models vmod ON v.model_id = vmod.id
+            JOIN vehicle_models m ON v.model_id = m.id
+            JOIN vehicle_makes mk ON m.make_id = mk.id
+            LEFT JOIN vehicle_categories cat ON m.category_id = cat.id
             JOIN vehicle_colors vcol ON v.color_id = vcol.id
             JOIN vehicle_fuel_types vft ON v.fuel_type_id = vft.id
             LEFT JOIN vehicle_transmission_types vtt ON v.transmission_type_id = vtt.id
             WHERE ($1::BOOLEAN OR v.is_deleted = false)
-              AND ($2::TEXT IS NULL OR v.license_plate ILIKE $2 OR v.chassis_number ILIKE $2 OR v.renavam ILIKE $2 OR vm.name ILIKE $2 OR vmod.name ILIKE $2)
+              AND ($2::TEXT IS NULL OR v.license_plate ILIKE $2 OR v.chassis_number ILIKE $2 OR v.renavam ILIKE $2 OR mk.name ILIKE $2 OR m.name ILIKE $2)
               AND ($3::vehicle_status_enum IS NULL OR v.status = $3)
-              AND ($4::UUID IS NULL OR v.category_id = $4)
-              AND ($5::UUID IS NULL OR v.make_id = $5)
-              AND ($6::UUID IS NULL OR v.fuel_type_id = $6)
-              AND ($7::UUID IS NULL OR v.department_id = $7)
+              AND ($4::UUID IS NULL OR v.model_id = $4)
+              AND ($5::UUID IS NULL OR v.fuel_type_id = $5)
+              AND ($6::UUID IS NULL OR v.department_id = $6)
             ORDER BY v.updated_at DESC
-            LIMIT $8 OFFSET $9
+            LIMIT $7 OFFSET $8
             "#
         )
         .bind(include_deleted)
         .bind(&search_pattern)
         .bind(&status)
-        .bind(category_id)
-        .bind(make_id)
+        .bind(model_id)
         .bind(fuel_type_id)
         .bind(department_id)
         .bind(limit)
@@ -1083,12 +1175,13 @@ impl VehicleRepositoryPort for VehicleRepository {
             chassis_number: r.get("chassis_number"),
             renavam: r.get("renavam"),
             engine_number: r.get("engine_number"),
-            category_id: r.get("category_id"),
-            category_name: r.get("category_name"),
-            make_id: r.get("make_id"),
-            make_name: r.get("make_name"),
+            bomba_injetora: r.get("bomba_injetora"),
+            caixa_cambio: r.get("caixa_cambio"),
+            diferencial: r.get("diferencial"),
             model_id: r.get("model_id"),
             model_name: r.get("model_name"),
+            make_name: r.get("make_name"),
+            category_name: r.get("category_name"),
             color_id: r.get("color_id"),
             color_name: r.get("color_name"),
             fuel_type_id: r.get("fuel_type_id"),
@@ -1097,16 +1190,17 @@ impl VehicleRepositoryPort for VehicleRepository {
             transmission_type_name: r.get("transmission_type_name"),
             manufacture_year: r.get("manufacture_year"),
             model_year: r.get("model_year"),
-            passenger_capacity: r.get("passenger_capacity"),
-            load_capacity_kg: r.get("load_capacity_kg"),
-            engine_displacement: r.get("engine_displacement"),
-            horsepower: r.get("horsepower"),
+            frota: r.get("frota"),
+            rateio: r.get("rateio"),
+            km_inicial: r.get("km_inicial"),
+            cap_tanque_comb: r.get("cap_tanque_comb"),
             acquisition_type: r.get("acquisition_type"),
             acquisition_date: r.get("acquisition_date"),
             purchase_value: r.get("purchase_value"),
             patrimony_number: r.get("patrimony_number"),
             department_id: r.get("department_id"),
             status: r.get("status"),
+            observacoes: r.get("observacoes"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }).collect();
@@ -1114,22 +1208,20 @@ impl VehicleRepositoryPort for VehicleRepository {
         let total: i64 = sqlx::query_scalar(
             r#"
             SELECT COUNT(*) FROM vehicles v
-            JOIN vehicle_makes vm ON v.make_id = vm.id
-            JOIN vehicle_models vmod ON v.model_id = vmod.id
+            JOIN vehicle_models m ON v.model_id = m.id
+            JOIN vehicle_makes mk ON m.make_id = mk.id
             WHERE ($1::BOOLEAN OR v.is_deleted = false)
-              AND ($2::TEXT IS NULL OR v.license_plate ILIKE $2 OR v.chassis_number ILIKE $2 OR v.renavam ILIKE $2 OR vm.name ILIKE $2 OR vmod.name ILIKE $2)
+              AND ($2::TEXT IS NULL OR v.license_plate ILIKE $2 OR v.chassis_number ILIKE $2 OR v.renavam ILIKE $2 OR mk.name ILIKE $2 OR m.name ILIKE $2)
               AND ($3::vehicle_status_enum IS NULL OR v.status = $3)
-              AND ($4::UUID IS NULL OR v.category_id = $4)
-              AND ($5::UUID IS NULL OR v.make_id = $5)
-              AND ($6::UUID IS NULL OR v.fuel_type_id = $6)
-              AND ($7::UUID IS NULL OR v.department_id = $7)
+              AND ($4::UUID IS NULL OR v.model_id = $4)
+              AND ($5::UUID IS NULL OR v.fuel_type_id = $5)
+              AND ($6::UUID IS NULL OR v.department_id = $6)
             "#
         )
         .bind(include_deleted)
         .bind(&search_pattern)
         .bind(&status)
-        .bind(category_id)
-        .bind(make_id)
+        .bind(model_id)
         .bind(fuel_type_id)
         .bind(department_id)
         .fetch_one(&self.pool)
@@ -1143,10 +1235,12 @@ impl VehicleRepositoryPort for VehicleRepository {
         let pattern = format!("%{}%", query);
         sqlx::query_as::<_, VehicleDto>(
             r#"
-            SELECT * FROM vehicles
-            WHERE is_deleted = false
-              AND (license_plate ILIKE $1 OR chassis_number ILIKE $1 OR renavam ILIKE $1 OR patrimony_number ILIKE $1)
-            ORDER BY license_plate
+            SELECT v.* FROM vehicles v
+            JOIN vehicle_models m ON v.model_id = m.id
+            JOIN vehicle_makes mk ON m.make_id = mk.id
+            WHERE v.is_deleted = false
+              AND (v.license_plate ILIKE $1 OR v.chassis_number ILIKE $1 OR v.renavam ILIKE $1 OR v.patrimony_number ILIKE $1 OR mk.name ILIKE $1 OR m.name ILIKE $1)
+            ORDER BY v.license_plate
             LIMIT $2
             "#
         )

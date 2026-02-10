@@ -209,16 +209,40 @@ impl VehicleService {
     // ============================
 
     pub async fn create_vehicle_model(&self, payload: CreateVehicleModelPayload) -> Result<VehicleModelDto, ServiceError> {
+        // Validate make exists
         let _ = self.get_vehicle_make(payload.make_id).await?;
+
+        // Validate category exists (if provided)
+        if let Some(category_id) = payload.category_id {
+            let _ = self.category_repo.find_by_id(category_id).await.map_err(ServiceError::from)?
+                .ok_or(ServiceError::NotFound("Categoria não encontrada".to_string()))?;
+        }
+
+        // Check uniqueness within make
         if self.model_repo.exists_by_name_in_make(&payload.name, payload.make_id).await.map_err(ServiceError::from)? {
             return Err(ServiceError::Conflict(format!("Modelo '{}' já existe para esta marca", payload.name)));
         }
-        self.model_repo.create(payload.make_id, &payload.name).await.map_err(ServiceError::from)
+
+        self.model_repo
+            .create(
+                payload.make_id,
+                payload.category_id,
+                &payload.name,
+                payload.passenger_capacity,
+                payload.engine_displacement,
+                payload.horsepower,
+                payload.capacidade_carga,
+                payload.media_min,
+                payload.media_max,
+                payload.media_desejada,
+            )
+            .await
+            .map_err(ServiceError::from)
     }
 
-    pub async fn get_vehicle_model(&self, id: Uuid) -> Result<VehicleModelDto, ServiceError> {
+    pub async fn get_vehicle_model(&self, id: Uuid) -> Result<VehicleModelWithDetailsDto, ServiceError> {
         self.model_repo
-            .find_by_id(id)
+            .find_with_details_by_id(id)
             .await
             .map_err(ServiceError::from)?
             .ok_or(ServiceError::NotFound("Modelo de veículo não encontrado".to_string()))
@@ -226,19 +250,43 @@ impl VehicleService {
 
     pub async fn update_vehicle_model(&self, id: Uuid, payload: UpdateVehicleModelPayload) -> Result<VehicleModelDto, ServiceError> {
         let current = self.get_vehicle_model(id).await?;
+
+        // Validate category exists (if provided)
+        if let Some(category_id) = payload.category_id {
+            let _ = self.category_repo.find_by_id(category_id).await.map_err(ServiceError::from)?
+                .ok_or(ServiceError::NotFound("Categoria não encontrada".to_string()))?;
+        }
+
+        // Check uniqueness within make (if name is being changed)
         if let Some(ref name) = payload.name {
             if self.model_repo.exists_by_name_in_make_excluding(name, current.make_id, id).await.map_err(ServiceError::from)? {
                 return Err(ServiceError::Conflict(format!("Modelo '{}' já existe para esta marca", name)));
             }
         }
-        self.model_repo.update(id, payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
+
+        self.model_repo
+            .update(
+                id,
+                payload.name.as_deref(),
+                payload.category_id,
+                payload.passenger_capacity,
+                payload.engine_displacement,
+                payload.horsepower,
+                payload.capacidade_carga,
+                payload.media_min,
+                payload.media_max,
+                payload.media_desejada,
+                payload.is_active,
+            )
+            .await
+            .map_err(ServiceError::from)
     }
 
     pub async fn delete_vehicle_model(&self, id: Uuid) -> Result<bool, ServiceError> {
         self.model_repo.delete(id).await.map_err(ServiceError::from)
     }
 
-    pub async fn list_vehicle_models(&self, limit: i64, offset: i64, search: Option<String>, make_id: Option<Uuid>) -> Result<(Vec<VehicleModelDto>, i64), ServiceError> {
+    pub async fn list_vehicle_models(&self, limit: i64, offset: i64, search: Option<String>, make_id: Option<Uuid>) -> Result<(Vec<VehicleModelWithDetailsDto>, i64), ServiceError> {
         self.model_repo.list(limit, offset, search, make_id).await.map_err(ServiceError::from)
     }
 
@@ -376,11 +424,7 @@ impl VehicleService {
             return Err(ServiceError::Conflict(format!("Veículo com Renavam '{}' já existe", payload.renavam)));
         }
 
-        // Validate foreign keys exist
-        let _ = self.category_repo.find_by_id(payload.category_id).await.map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Categoria não encontrada".to_string()))?;
-        let _ = self.make_repo.find_by_id(payload.make_id).await.map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Marca não encontrada".to_string()))?;
+        // Validate foreign keys exist (model, color, fuel_type, transmission_type)
         let _ = self.model_repo.find_by_id(payload.model_id).await.map_err(ServiceError::from)?
             .ok_or(ServiceError::NotFound("Modelo não encontrado".to_string()))?;
         let _ = self.color_repo.find_by_id(payload.color_id).await.map_err(ServiceError::from)?
@@ -401,6 +445,7 @@ impl VehicleService {
         }
 
         let status = payload.status.unwrap_or(VehicleStatus::Active);
+        let rateio = payload.rateio.unwrap_or(false);
 
         let vehicle = self.vehicle_repo
             .create(
@@ -408,24 +453,26 @@ impl VehicleService {
                 &chassis,
                 &payload.renavam,
                 payload.engine_number.as_deref(),
-                payload.category_id,
-                payload.make_id,
+                payload.bomba_injetora.as_deref(),
+                payload.caixa_cambio.as_deref(),
+                payload.diferencial.as_deref(),
                 payload.model_id,
                 payload.color_id,
                 payload.fuel_type_id,
                 payload.transmission_type_id,
                 payload.manufacture_year,
                 payload.model_year,
-                payload.passenger_capacity,
-                payload.load_capacity_kg,
-                payload.engine_displacement,
-                payload.horsepower,
+                payload.frota.as_deref(),
+                rateio,
+                payload.km_inicial,
+                payload.cap_tanque_comb,
                 payload.acquisition_type,
                 payload.acquisition_date,
                 payload.purchase_value,
                 payload.patrimony_number.as_deref(),
                 payload.department_id,
                 status.clone(),
+                payload.observacoes.as_deref(),
                 created_by,
             )
             .await
@@ -503,24 +550,26 @@ impl VehicleService {
                 chassis.as_deref(),
                 payload.renavam.as_deref(),
                 payload.engine_number.as_deref(),
-                payload.category_id,
-                payload.make_id,
+                payload.bomba_injetora.as_deref(),
+                payload.caixa_cambio.as_deref(),
+                payload.diferencial.as_deref(),
                 payload.model_id,
                 payload.color_id,
                 payload.fuel_type_id,
                 payload.transmission_type_id,
                 payload.manufacture_year,
                 payload.model_year,
-                payload.passenger_capacity,
-                payload.load_capacity_kg,
-                payload.engine_displacement,
-                payload.horsepower,
+                payload.frota.as_deref(),
+                payload.rateio,
+                payload.km_inicial,
+                payload.cap_tanque_comb,
                 payload.acquisition_type,
                 payload.acquisition_date,
                 payload.purchase_value,
                 payload.patrimony_number.as_deref(),
                 payload.department_id,
                 payload.status,
+                payload.observacoes.as_deref(),
                 updated_by,
             )
             .await
@@ -558,12 +607,19 @@ impl VehicleService {
             .create(id, Some(current.status), payload.status.clone(), payload.reason.as_deref(), changed_by)
             .await;
 
-        // Update status
+        // Update status only
         let _ = self.vehicle_repo
             .update(
-                id, None, None, None, None, None, None, None, None, None, None,
-                None, None, None, None, None, None, None, None, None, None, None,
-                Some(payload.status), changed_by,
+                id,
+                None, None, None, None, None, None, None, // plate, chassis, renavam, engine, bomba, caixa, diferencial
+                None, None, None, None,                     // model_id, color_id, fuel_type_id, transmission_type_id
+                None, None,                                 // manufacture_year, model_year
+                None, None, None, None,                     // frota, rateio, km_inicial, cap_tanque_comb
+                None, None, None,                           // acquisition_type, acquisition_date, purchase_value
+                None, None,                                 // patrimony_number, department_id
+                Some(payload.status),                       // status
+                None,                                       // observacoes
+                changed_by,                                 // updated_by
             )
             .await
             .map_err(ServiceError::from)?;
@@ -577,14 +633,13 @@ impl VehicleService {
         offset: i64,
         search: Option<String>,
         status: Option<VehicleStatus>,
-        category_id: Option<Uuid>,
-        make_id: Option<Uuid>,
+        model_id: Option<Uuid>,
         fuel_type_id: Option<Uuid>,
         department_id: Option<Uuid>,
         include_deleted: bool,
     ) -> Result<(Vec<VehicleWithDetailsDto>, i64), ServiceError> {
         self.vehicle_repo
-            .list(limit, offset, search, status, category_id, make_id, fuel_type_id, department_id, include_deleted)
+            .list(limit, offset, search, status, model_id, fuel_type_id, department_id, include_deleted)
             .await
             .map_err(ServiceError::from)
     }

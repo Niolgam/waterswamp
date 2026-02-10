@@ -42,12 +42,48 @@ pub trait VehicleMakeRepositoryPort: Send + Sync {
 #[async_trait]
 pub trait VehicleModelRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<VehicleModelDto>, RepositoryError>;
+    async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<VehicleModelWithDetailsDto>, RepositoryError>;
     async fn exists_by_name_in_make(&self, name: &str, make_id: Uuid) -> Result<bool, RepositoryError>;
     async fn exists_by_name_in_make_excluding(&self, name: &str, make_id: Uuid, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, make_id: Uuid, name: &str) -> Result<VehicleModelDto, RepositoryError>;
-    async fn update(&self, id: Uuid, name: Option<&str>, is_active: Option<bool>) -> Result<VehicleModelDto, RepositoryError>;
+
+    async fn create(
+        &self,
+        make_id: Uuid,
+        category_id: Option<Uuid>,
+        name: &str,
+        passenger_capacity: Option<i32>,
+        engine_displacement: Option<i32>,
+        horsepower: Option<i32>,
+        capacidade_carga: Option<Decimal>,
+        media_min: Option<Decimal>,
+        media_max: Option<Decimal>,
+        media_desejada: Option<Decimal>,
+    ) -> Result<VehicleModelDto, RepositoryError>;
+
+    async fn update(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        category_id: Option<Uuid>,
+        passenger_capacity: Option<i32>,
+        engine_displacement: Option<i32>,
+        horsepower: Option<i32>,
+        capacidade_carga: Option<Decimal>,
+        media_min: Option<Decimal>,
+        media_max: Option<Decimal>,
+        media_desejada: Option<Decimal>,
+        is_active: Option<bool>,
+    ) -> Result<VehicleModelDto, RepositoryError>;
+
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
-    async fn list(&self, limit: i64, offset: i64, search: Option<String>, make_id: Option<Uuid>) -> Result<(Vec<VehicleModelDto>, i64), RepositoryError>;
+
+    async fn list(
+        &self,
+        limit: i64,
+        offset: i64,
+        search: Option<String>,
+        make_id: Option<Uuid>,
+    ) -> Result<(Vec<VehicleModelWithDetailsDto>, i64), RepositoryError>;
 }
 
 // ============================
@@ -116,24 +152,26 @@ pub trait VehicleRepositoryPort: Send + Sync {
         chassis_number: &str,
         renavam: &str,
         engine_number: Option<&str>,
-        category_id: Uuid,
-        make_id: Uuid,
+        bomba_injetora: Option<&str>,
+        caixa_cambio: Option<&str>,
+        diferencial: Option<&str>,
         model_id: Uuid,
         color_id: Uuid,
         fuel_type_id: Uuid,
         transmission_type_id: Option<Uuid>,
         manufacture_year: i32,
         model_year: i32,
-        passenger_capacity: Option<i32>,
-        load_capacity_kg: Option<Decimal>,
-        engine_displacement: Option<i32>,
-        horsepower: Option<i32>,
+        frota: Option<&str>,
+        rateio: bool,
+        km_inicial: Option<Decimal>,
+        cap_tanque_comb: Option<Decimal>,
         acquisition_type: AcquisitionType,
         acquisition_date: Option<NaiveDate>,
         purchase_value: Option<Decimal>,
         patrimony_number: Option<&str>,
         department_id: Option<Uuid>,
         status: VehicleStatus,
+        observacoes: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<VehicleDto, RepositoryError>;
 
@@ -144,24 +182,26 @@ pub trait VehicleRepositoryPort: Send + Sync {
         chassis_number: Option<&str>,
         renavam: Option<&str>,
         engine_number: Option<&str>,
-        category_id: Option<Uuid>,
-        make_id: Option<Uuid>,
+        bomba_injetora: Option<&str>,
+        caixa_cambio: Option<&str>,
+        diferencial: Option<&str>,
         model_id: Option<Uuid>,
         color_id: Option<Uuid>,
         fuel_type_id: Option<Uuid>,
         transmission_type_id: Option<Uuid>,
         manufacture_year: Option<i32>,
         model_year: Option<i32>,
-        passenger_capacity: Option<i32>,
-        load_capacity_kg: Option<Decimal>,
-        engine_displacement: Option<i32>,
-        horsepower: Option<i32>,
+        frota: Option<&str>,
+        rateio: Option<bool>,
+        km_inicial: Option<Decimal>,
+        cap_tanque_comb: Option<Decimal>,
         acquisition_type: Option<AcquisitionType>,
         acquisition_date: Option<NaiveDate>,
         purchase_value: Option<Decimal>,
         patrimony_number: Option<&str>,
         department_id: Option<Uuid>,
         status: Option<VehicleStatus>,
+        observacoes: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<VehicleDto, RepositoryError>;
 
@@ -174,8 +214,7 @@ pub trait VehicleRepositoryPort: Send + Sync {
         offset: i64,
         search: Option<String>,
         status: Option<VehicleStatus>,
-        category_id: Option<Uuid>,
-        make_id: Option<Uuid>,
+        model_id: Option<Uuid>,
         fuel_type_id: Option<Uuid>,
         department_id: Option<Uuid>,
         include_deleted: bool,

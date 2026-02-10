@@ -25,11 +25,19 @@ async fn create_make(app: &TestApp, name: &str) -> Value {
 }
 
 async fn create_model(app: &TestApp, make_id: &str, name: &str) -> Value {
+    create_model_with_category(app, make_id, name, None).await
+}
+
+async fn create_model_with_category(app: &TestApp, make_id: &str, name: &str, category_id: Option<&str>) -> Value {
+    let mut payload = json!({ "make_id": make_id, "name": name });
+    if let Some(cat_id) = category_id {
+        payload["category_id"] = json!(cat_id);
+    }
     let response = app
         .api
         .post("/api/admin/fleet/models")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&json!({ "make_id": make_id, "name": name }))
+        .json(&payload)
         .await;
     assert_eq!(response.status_code(), StatusCode::CREATED);
     response.json()
@@ -72,9 +80,10 @@ async fn create_fuel_type(app: &TestApp, name: &str) -> Value {
 async fn create_vehicle_with_deps(app: &TestApp) -> (Value, String) {
     let make = create_make(app, &random_name("Make")).await;
     let make_id = make["id"].as_str().unwrap().to_string();
-    let model = create_model(app, &make_id, &random_name("Model")).await;
-    let color = create_color(app, &random_name("Color")).await;
     let category = create_category(app, &random_name("Cat")).await;
+    let cat_id = category["id"].as_str().unwrap();
+    let model = create_model_with_category(app, &make_id, &random_name("Model"), Some(cat_id)).await;
+    let color = create_color(app, &random_name("Color")).await;
     let fuel_type = create_fuel_type(app, &random_name("Fuel")).await;
 
     let response = app
@@ -85,15 +94,12 @@ async fn create_vehicle_with_deps(app: &TestApp) -> (Value, String) {
             "license_plate": generate_plate(),
             "chassis_number": generate_chassis(),
             "renavam": generate_renavam(),
-            "category_id": category["id"],
-            "make_id": make["id"],
             "model_id": model["id"],
             "color_id": color["id"],
             "fuel_type_id": fuel_type["id"],
             "manufacture_year": 2024,
             "model_year": 2025,
             "acquisition_type": "PURCHASE",
-            "passenger_capacity": 5,
         }))
         .await;
 
@@ -301,9 +307,10 @@ async fn test_create_vehicle_with_valid_data() {
     let app = common::spawn_app().await;
     let make = create_make(&app, &random_name("Honda")).await;
     let make_id = make["id"].as_str().unwrap();
-    let model = create_model(&app, make_id, &random_name("Civic")).await;
-    let color = create_color(&app, &random_name("Azul")).await;
     let category = create_category(&app, &random_name("Passeio")).await;
+    let cat_id = category["id"].as_str().unwrap();
+    let model = create_model_with_category(&app, make_id, &random_name("Civic"), Some(cat_id)).await;
+    let color = create_color(&app, &random_name("Azul")).await;
     let fuel_type = create_fuel_type(&app, &random_name("Flex")).await;
 
     let chassis = generate_chassis();
@@ -317,15 +324,12 @@ async fn test_create_vehicle_with_valid_data() {
             "license_plate": plate,
             "chassis_number": chassis,
             "renavam": generate_renavam(),
-            "category_id": category["id"],
-            "make_id": make["id"],
             "model_id": model["id"],
             "color_id": color["id"],
             "fuel_type_id": fuel_type["id"],
             "manufacture_year": 2024,
             "model_year": 2025,
             "acquisition_type": "PURCHASE",
-            "passenger_capacity": 5,
             "purchase_value": 85000.00,
         }))
         .await;
@@ -344,7 +348,6 @@ async fn test_create_vehicle_invalid_plate() {
     let make_id = make["id"].as_str().unwrap();
     let model = create_model(&app, make_id, &random_name("Ka")).await;
     let color = create_color(&app, &random_name("Preto")).await;
-    let category = create_category(&app, &random_name("PasseioInv")).await;
     let fuel_type = create_fuel_type(&app, &random_name("Gas")).await;
 
     let response = app
@@ -355,8 +358,6 @@ async fn test_create_vehicle_invalid_plate() {
             "license_plate": "INVALID",
             "chassis_number": generate_chassis(),
             "renavam": generate_renavam(),
-            "category_id": category["id"],
-            "make_id": make["id"],
             "model_id": model["id"],
             "color_id": color["id"],
             "fuel_type_id": fuel_type["id"],
@@ -376,7 +377,6 @@ async fn test_create_vehicle_invalid_chassis() {
     let make_id = make["id"].as_str().unwrap();
     let model = create_model(&app, make_id, &random_name("Uno")).await;
     let color = create_color(&app, &random_name("Vermelho")).await;
-    let category = create_category(&app, &random_name("PassCh")).await;
     let fuel_type = create_fuel_type(&app, &random_name("Eta")).await;
 
     let response = app
@@ -387,8 +387,6 @@ async fn test_create_vehicle_invalid_chassis() {
             "license_plate": generate_plate(),
             "chassis_number": "SHORT",
             "renavam": generate_renavam(),
-            "category_id": category["id"],
-            "make_id": make["id"],
             "model_id": model["id"],
             "color_id": color["id"],
             "fuel_type_id": fuel_type["id"],
@@ -412,7 +410,6 @@ async fn test_change_vehicle_status() {
     let make_id = make["id"].as_str().unwrap();
     let model = create_model(&app, make_id, &random_name("Gol")).await;
     let color = create_color(&app, &random_name("Prata")).await;
-    let category = create_category(&app, &random_name("UtilSt")).await;
     let fuel_type = create_fuel_type(&app, &random_name("Diesel")).await;
 
     let chassis = generate_chassis();
@@ -424,8 +421,6 @@ async fn test_change_vehicle_status() {
             "license_plate": generate_plate(),
             "chassis_number": chassis,
             "renavam": generate_renavam(),
-            "category_id": category["id"],
-            "make_id": make["id"],
             "model_id": model["id"],
             "color_id": color["id"],
             "fuel_type_id": fuel_type["id"],
@@ -474,7 +469,6 @@ async fn test_soft_delete_vehicle() {
     let make_id = make["id"].as_str().unwrap();
     let model = create_model(&app, make_id, &random_name("Sandero")).await;
     let color = create_color(&app, &random_name("Branco")).await;
-    let category = create_category(&app, &random_name("UtilDel")).await;
     let fuel_type = create_fuel_type(&app, &random_name("FlexDel")).await;
 
     let chassis = generate_chassis();
@@ -486,8 +480,6 @@ async fn test_soft_delete_vehicle() {
             "license_plate": generate_plate(),
             "chassis_number": chassis,
             "renavam": generate_renavam(),
-            "category_id": category["id"],
-            "make_id": make["id"],
             "model_id": model["id"],
             "color_id": color["id"],
             "fuel_type_id": fuel_type["id"],

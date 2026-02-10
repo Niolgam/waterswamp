@@ -10,8 +10,8 @@ pub use domain::models::vehicle::{
     UpdateVehicleFuelTypePayload, UpdateVehicleMakePayload, UpdateVehicleModelPayload,
     UpdateVehiclePayload, UpdateVehicleTransmissionTypePayload, VehicleCategoryDto,
     VehicleColorDto, VehicleDocumentDto, VehicleDto, VehicleFuelTypeDto, VehicleMakeDto,
-    VehicleModelDto, VehicleStatus, VehicleStatusHistoryDto, VehicleTransmissionTypeDto,
-    VehicleWithDetailsDto,
+    VehicleModelDto, VehicleModelWithDetailsDto, VehicleStatus, VehicleStatusHistoryDto,
+    VehicleTransmissionTypeDto, VehicleWithDetailsDto,
 };
 
 // ============================
@@ -36,7 +36,7 @@ pub struct VehicleMakesListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct VehicleModelsListResponse {
-    pub models: Vec<VehicleModelDto>,
+    pub models: Vec<VehicleModelWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

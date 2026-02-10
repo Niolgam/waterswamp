@@ -42,8 +42,7 @@ pub struct VehicleListQuery {
     pub offset: i64,
     pub search: Option<String>,
     pub status: Option<VehicleStatus>,
-    pub category_id: Option<Uuid>,
-    pub make_id: Option<Uuid>,
+    pub model_id: Option<Uuid>,
     pub fuel_type_id: Option<Uuid>,
     pub department_id: Option<Uuid>,
     #[serde(default)]
@@ -236,7 +235,7 @@ pub async fn get_vehicle_model(
     _user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<VehicleModelDto>, (StatusCode, String)> {
+) -> Result<Json<VehicleModelWithDetailsDto>, (StatusCode, String)> {
     state
         .vehicle_service
         .get_vehicle_model(id)
@@ -557,8 +556,7 @@ pub async fn list_vehicles(
             query.offset,
             query.search,
             query.status,
-            query.category_id,
-            query.make_id,
+            query.model_id,
             query.fuel_type_id,
             query.department_id,
             query.include_deleted,

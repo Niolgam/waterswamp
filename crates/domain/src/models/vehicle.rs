@@ -102,7 +102,39 @@ pub struct UpdateVehicleMakePayload {
 pub struct VehicleModelDto {
     pub id: Uuid,
     pub make_id: Uuid,
+    pub category_id: Option<Uuid>,
     pub name: String,
+    // Especificações técnicas do modelo
+    pub passenger_capacity: Option<i32>,
+    pub engine_displacement: Option<i32>,
+    pub horsepower: Option<i32>,
+    pub capacidade_carga: Option<Decimal>,
+    // Médias de consumo (km/l)
+    pub media_min: Option<Decimal>,
+    pub media_max: Option<Decimal>,
+    pub media_desejada: Option<Decimal>,
+    //
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Model with joined make and category names
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct VehicleModelWithDetailsDto {
+    pub id: Uuid,
+    pub make_id: Uuid,
+    pub make_name: String,
+    pub category_id: Option<Uuid>,
+    pub category_name: Option<String>,
+    pub name: String,
+    pub passenger_capacity: Option<i32>,
+    pub engine_displacement: Option<i32>,
+    pub horsepower: Option<i32>,
+    pub capacidade_carga: Option<Decimal>,
+    pub media_min: Option<Decimal>,
+    pub media_max: Option<Decimal>,
+    pub media_desejada: Option<Decimal>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -111,12 +143,28 @@ pub struct VehicleModelDto {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateVehicleModelPayload {
     pub make_id: Uuid,
+    pub category_id: Option<Uuid>,
     pub name: String,
+    pub passenger_capacity: Option<i32>,
+    pub engine_displacement: Option<i32>,
+    pub horsepower: Option<i32>,
+    pub capacidade_carga: Option<Decimal>,
+    pub media_min: Option<Decimal>,
+    pub media_max: Option<Decimal>,
+    pub media_desejada: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateVehicleModelPayload {
     pub name: Option<String>,
+    pub category_id: Option<Uuid>,
+    pub passenger_capacity: Option<i32>,
+    pub engine_displacement: Option<i32>,
+    pub horsepower: Option<i32>,
+    pub capacidade_carga: Option<Decimal>,
+    pub media_min: Option<Decimal>,
+    pub media_max: Option<Decimal>,
+    pub media_desejada: Option<Decimal>,
     pub is_active: Option<bool>,
 }
 
@@ -202,65 +250,81 @@ pub struct UpdateVehicleTransmissionTypePayload {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct VehicleDto {
     pub id: Uuid,
+    // Identificação
     pub license_plate: String,
     pub chassis_number: String,
     pub renavam: String,
     pub engine_number: Option<String>,
-    pub category_id: Uuid,
-    pub make_id: Uuid,
+    // Componentes mecânicos
+    pub bomba_injetora: Option<String>,
+    pub caixa_cambio: Option<String>,
+    pub diferencial: Option<String>,
+    // Classificação
     pub model_id: Uuid,
     pub color_id: Uuid,
     pub fuel_type_id: Uuid,
     pub transmission_type_id: Option<Uuid>,
+    // Ano
     pub manufacture_year: i32,
     pub model_year: i32,
-    pub passenger_capacity: Option<i32>,
-    pub load_capacity_kg: Option<Decimal>,
-    pub engine_displacement: Option<i32>,
-    pub horsepower: Option<i32>,
+    // Operacional
+    pub frota: Option<String>,
+    pub rateio: bool,
+    pub km_inicial: Option<Decimal>,
+    pub cap_tanque_comb: Option<Decimal>,
+    // Aquisição
     pub acquisition_type: AcquisitionType,
     pub acquisition_date: Option<NaiveDate>,
     pub purchase_value: Option<Decimal>,
+    // Institucional
     pub patrimony_number: Option<String>,
     pub department_id: Option<Uuid>,
+    // Status
     pub status: VehicleStatus,
+    // Observações
+    pub observacoes: Option<String>,
+    // Soft delete
     pub is_deleted: bool,
     pub deleted_at: Option<DateTime<Utc>>,
     pub deleted_by: Option<Uuid>,
+    // Timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub created_by: Option<Uuid>,
     pub updated_by: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+/// Vehicle with all joined names (make/category come through model)
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct VehicleWithDetailsDto {
     pub id: Uuid,
     pub license_plate: String,
     pub chassis_number: String,
     pub renavam: String,
     pub engine_number: Option<String>,
-    // Classification with names
-    pub category_id: Uuid,
-    pub category_name: String,
-    pub make_id: Uuid,
-    pub make_name: String,
+    // Componentes mecânicos
+    pub bomba_injetora: Option<String>,
+    pub caixa_cambio: Option<String>,
+    pub diferencial: Option<String>,
+    // Classification with names (via model)
     pub model_id: Uuid,
     pub model_name: String,
+    pub make_name: String,
+    pub category_name: Option<String>,
     pub color_id: Uuid,
     pub color_name: String,
     pub fuel_type_id: Uuid,
     pub fuel_type_name: String,
     pub transmission_type_id: Option<Uuid>,
     pub transmission_type_name: Option<String>,
-    // Year
+    // Ano
     pub manufacture_year: i32,
     pub model_year: i32,
-    // Technical specs
-    pub passenger_capacity: Option<i32>,
-    pub load_capacity_kg: Option<Decimal>,
-    pub engine_displacement: Option<i32>,
-    pub horsepower: Option<i32>,
+    // Operacional
+    pub frota: Option<String>,
+    pub rateio: bool,
+    pub km_inicial: Option<Decimal>,
+    pub cap_tanque_comb: Option<Decimal>,
     // Acquisition
     pub acquisition_type: AcquisitionType,
     pub acquisition_date: Option<NaiveDate>,
@@ -270,6 +334,7 @@ pub struct VehicleWithDetailsDto {
     pub department_id: Option<Uuid>,
     // Status
     pub status: VehicleStatus,
+    pub observacoes: Option<String>,
     // Timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -281,24 +346,32 @@ pub struct CreateVehiclePayload {
     pub chassis_number: String,
     pub renavam: String,
     pub engine_number: Option<String>,
-    pub category_id: Uuid,
-    pub make_id: Uuid,
+    // Componentes mecânicos
+    pub bomba_injetora: Option<String>,
+    pub caixa_cambio: Option<String>,
+    pub diferencial: Option<String>,
+    // Classificação
     pub model_id: Uuid,
     pub color_id: Uuid,
     pub fuel_type_id: Uuid,
     pub transmission_type_id: Option<Uuid>,
+    // Ano
     pub manufacture_year: i32,
     pub model_year: i32,
-    pub passenger_capacity: Option<i32>,
-    pub load_capacity_kg: Option<Decimal>,
-    pub engine_displacement: Option<i32>,
-    pub horsepower: Option<i32>,
+    // Operacional
+    pub frota: Option<String>,
+    pub rateio: Option<bool>,
+    pub km_inicial: Option<Decimal>,
+    pub cap_tanque_comb: Option<Decimal>,
+    // Aquisição
     pub acquisition_type: AcquisitionType,
     pub acquisition_date: Option<NaiveDate>,
     pub purchase_value: Option<Decimal>,
+    // Institucional
     pub patrimony_number: Option<String>,
     pub department_id: Option<Uuid>,
     pub status: Option<VehicleStatus>,
+    pub observacoes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -307,24 +380,26 @@ pub struct UpdateVehiclePayload {
     pub chassis_number: Option<String>,
     pub renavam: Option<String>,
     pub engine_number: Option<String>,
-    pub category_id: Option<Uuid>,
-    pub make_id: Option<Uuid>,
+    pub bomba_injetora: Option<String>,
+    pub caixa_cambio: Option<String>,
+    pub diferencial: Option<String>,
     pub model_id: Option<Uuid>,
     pub color_id: Option<Uuid>,
     pub fuel_type_id: Option<Uuid>,
     pub transmission_type_id: Option<Uuid>,
     pub manufacture_year: Option<i32>,
     pub model_year: Option<i32>,
-    pub passenger_capacity: Option<i32>,
-    pub load_capacity_kg: Option<Decimal>,
-    pub engine_displacement: Option<i32>,
-    pub horsepower: Option<i32>,
+    pub frota: Option<String>,
+    pub rateio: Option<bool>,
+    pub km_inicial: Option<Decimal>,
+    pub cap_tanque_comb: Option<Decimal>,
     pub acquisition_type: Option<AcquisitionType>,
     pub acquisition_date: Option<NaiveDate>,
     pub purchase_value: Option<Decimal>,
     pub patrimony_number: Option<String>,
     pub department_id: Option<Uuid>,
     pub status: Option<VehicleStatus>,
+    pub observacoes: Option<String>,
 }
 
 // ============================
