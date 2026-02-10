@@ -11,6 +11,7 @@ use application::services::organizational_service::{
 };
 use application::services::requisition_service::RequisitionService;
 use application::services::user_service::UserService;
+use application::services::supplier_service::SupplierService;
 use application::services::vehicle_service::VehicleService;
 use application::external::SiorgSyncService;
 use casbin::Enforcer;
@@ -53,6 +54,7 @@ pub struct AppState {
     pub siorg_sync_queue_repository: Arc<dyn SiorgSyncQueueRepositoryPort>,
     pub siorg_history_repository: Arc<dyn SiorgHistoryRepositoryPort>,
     pub requisition_service: Arc<RequisitionService>,
+    pub supplier_service: Arc<SupplierService>,
     pub vehicle_service: Arc<VehicleService>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers

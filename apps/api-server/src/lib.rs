@@ -18,6 +18,7 @@ use application::services::{
         OrganizationalUnitTypeService, SystemSettingsService,
     },
     requisition_service::RequisitionService,
+    supplier_service::SupplierService,
     user_service::UserService,
     vehicle_service::VehicleService,
 };
@@ -34,6 +35,7 @@ use domain::ports::{
     UserRepositoryPort,
     VehicleCategoryRepositoryPort, VehicleMakeRepositoryPort, VehicleModelRepositoryPort,
     VehicleColorRepositoryPort, VehicleFuelTypeRepositoryPort, VehicleTransmissionTypeRepositoryPort,
+    SupplierRepositoryPort,
     VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
 use persistence::repositories::{
@@ -55,6 +57,7 @@ use persistence::repositories::{
     },
     requisition_repository::{RequisitionItemRepository, RequisitionRepository},
     user_repository::UserRepository,
+    supplier_repository::SupplierRepository,
     vehicle_repository::{
         VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
         VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
@@ -240,6 +243,11 @@ pub fn build_application_state(
         requisition_item_repo_port,
     ));
 
+    // Supplier repository and service
+    let supplier_repo: Arc<dyn SupplierRepositoryPort> =
+        Arc::new(SupplierRepository::new(pool_auth.clone()));
+    let supplier_service = Arc::new(SupplierService::new(supplier_repo));
+
     // Vehicle fleet repositories and service
     let vehicle_category_repo: Arc<dyn VehicleCategoryRepositoryPort> =
         Arc::new(VehicleCategoryRepository::new(pool_auth.clone()));
@@ -301,6 +309,7 @@ pub fn build_application_state(
         siorg_sync_queue_repository: siorg_sync_queue_repo_port,
         siorg_history_repository: siorg_history_repo_port,
         requisition_service,
+        supplier_service,
         vehicle_service,
         config,
 
