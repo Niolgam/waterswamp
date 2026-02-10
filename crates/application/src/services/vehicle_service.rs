@@ -231,10 +231,10 @@ impl VehicleService {
                 payload.passenger_capacity,
                 payload.engine_displacement,
                 payload.horsepower,
-                payload.capacidade_carga,
-                payload.media_min,
-                payload.media_max,
-                payload.media_desejada,
+                payload.load_capacity,
+                payload.avg_consumption_min,
+                payload.avg_consumption_max,
+                payload.avg_consumption_target,
             )
             .await
             .map_err(ServiceError::from)
@@ -272,10 +272,10 @@ impl VehicleService {
                 payload.passenger_capacity,
                 payload.engine_displacement,
                 payload.horsepower,
-                payload.capacidade_carga,
-                payload.media_min,
-                payload.media_max,
-                payload.media_desejada,
+                payload.load_capacity,
+                payload.avg_consumption_min,
+                payload.avg_consumption_max,
+                payload.avg_consumption_target,
                 payload.is_active,
             )
             .await
@@ -445,7 +445,7 @@ impl VehicleService {
         }
 
         let status = payload.status.unwrap_or(VehicleStatus::Active);
-        let rateio = payload.rateio.unwrap_or(false);
+        let cost_sharing = payload.cost_sharing.unwrap_or(false);
 
         let vehicle = self.vehicle_repo
             .create(
@@ -453,26 +453,26 @@ impl VehicleService {
                 &chassis,
                 &payload.renavam,
                 payload.engine_number.as_deref(),
-                payload.bomba_injetora.as_deref(),
-                payload.caixa_cambio.as_deref(),
-                payload.diferencial.as_deref(),
+                payload.injection_pump.as_deref(),
+                payload.gearbox.as_deref(),
+                payload.differential.as_deref(),
                 payload.model_id,
                 payload.color_id,
                 payload.fuel_type_id,
                 payload.transmission_type_id,
                 payload.manufacture_year,
                 payload.model_year,
-                payload.frota.as_deref(),
-                rateio,
-                payload.km_inicial,
-                payload.cap_tanque_comb,
+                payload.fleet_code.as_deref(),
+                cost_sharing,
+                payload.initial_mileage,
+                payload.fuel_tank_capacity,
                 payload.acquisition_type,
                 payload.acquisition_date,
                 payload.purchase_value,
                 payload.patrimony_number.as_deref(),
                 payload.department_id,
                 status.clone(),
-                payload.observacoes.as_deref(),
+                payload.notes.as_deref(),
                 created_by,
             )
             .await
@@ -550,26 +550,26 @@ impl VehicleService {
                 chassis.as_deref(),
                 payload.renavam.as_deref(),
                 payload.engine_number.as_deref(),
-                payload.bomba_injetora.as_deref(),
-                payload.caixa_cambio.as_deref(),
-                payload.diferencial.as_deref(),
+                payload.injection_pump.as_deref(),
+                payload.gearbox.as_deref(),
+                payload.differential.as_deref(),
                 payload.model_id,
                 payload.color_id,
                 payload.fuel_type_id,
                 payload.transmission_type_id,
                 payload.manufacture_year,
                 payload.model_year,
-                payload.frota.as_deref(),
-                payload.rateio,
-                payload.km_inicial,
-                payload.cap_tanque_comb,
+                payload.fleet_code.as_deref(),
+                payload.cost_sharing,
+                payload.initial_mileage,
+                payload.fuel_tank_capacity,
                 payload.acquisition_type,
                 payload.acquisition_date,
                 payload.purchase_value,
                 payload.patrimony_number.as_deref(),
                 payload.department_id,
                 payload.status,
-                payload.observacoes.as_deref(),
+                payload.notes.as_deref(),
                 updated_by,
             )
             .await
@@ -611,14 +611,14 @@ impl VehicleService {
         let _ = self.vehicle_repo
             .update(
                 id,
-                None, None, None, None, None, None, None, // plate, chassis, renavam, engine, bomba, caixa, diferencial
+                None, None, None, None, None, None, None, // plate, chassis, renavam, engine, bomba, caixa, differential
                 None, None, None, None,                     // model_id, color_id, fuel_type_id, transmission_type_id
                 None, None,                                 // manufacture_year, model_year
-                None, None, None, None,                     // frota, rateio, km_inicial, cap_tanque_comb
+                None, None, None, None,                     // fleet_code, cost_sharing, initial_mileage, fuel_tank_capacity
                 None, None, None,                           // acquisition_type, acquisition_date, purchase_value
                 None, None,                                 // patrimony_number, department_id
                 Some(payload.status),                       // status
-                None,                                       // observacoes
+                None,                                       // notes
                 changed_by,                                 // updated_by
             )
             .await

@@ -3,25 +3,25 @@ CREATE TABLE vehicle_models (
     make_id UUID NOT NULL REFERENCES vehicle_makes(id),
     category_id UUID REFERENCES vehicle_categories(id),
     name VARCHAR(100) NOT NULL,
-    -- Especificações técnicas do modelo
+    -- Technical specifications
     passenger_capacity INT,
-    engine_displacement INT,              -- cilindradas (cc)
+    engine_displacement INT,              -- cc
     horsepower INT,
-    capacidade_carga NUMERIC(10,2),       -- capacidade de carga (kg)
-    -- Médias de consumo (km/l)
-    media_min NUMERIC(10,2),
-    media_max NUMERIC(10,2),
-    media_desejada NUMERIC(10,2),
+    load_capacity NUMERIC(10,2),          -- kg
+    -- Fuel consumption averages (km/l)
+    avg_consumption_min NUMERIC(10,2),
+    avg_consumption_max NUMERIC(10,2),
+    avg_consumption_target NUMERIC(10,2),
     --
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_vehicle_models_name_make UNIQUE (make_id, name),
     CONSTRAINT chk_vehicle_models_passenger_capacity CHECK (passenger_capacity IS NULL OR passenger_capacity > 0),
-    CONSTRAINT chk_vehicle_models_capacidade_carga CHECK (capacidade_carga IS NULL OR capacidade_carga > 0),
-    CONSTRAINT chk_vehicle_models_media_min CHECK (media_min IS NULL OR media_min > 0),
-    CONSTRAINT chk_vehicle_models_media_max CHECK (media_max IS NULL OR media_max > 0),
-    CONSTRAINT chk_vehicle_models_media_desejada CHECK (media_desejada IS NULL OR media_desejada > 0)
+    CONSTRAINT chk_vehicle_models_load_capacity CHECK (load_capacity IS NULL OR load_capacity > 0),
+    CONSTRAINT chk_vehicle_models_avg_consumption_min CHECK (avg_consumption_min IS NULL OR avg_consumption_min > 0),
+    CONSTRAINT chk_vehicle_models_avg_consumption_max CHECK (avg_consumption_max IS NULL OR avg_consumption_max > 0),
+    CONSTRAINT chk_vehicle_models_avg_consumption_target CHECK (avg_consumption_target IS NULL OR avg_consumption_target > 0)
 );
 
 CREATE INDEX idx_vehicle_models_make ON vehicle_models (make_id);
