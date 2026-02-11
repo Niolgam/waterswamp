@@ -18,7 +18,9 @@ use application::services::{
         OrganizationalUnitTypeService, SystemSettingsService,
     },
     requisition_service::RequisitionService,
+    supplier_service::SupplierService,
     user_service::UserService,
+    vehicle_service::VehicleService,
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
@@ -31,6 +33,10 @@ use domain::ports::{
     SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
     SystemSettingsRepositoryPort, UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort,
     UserRepositoryPort,
+    VehicleCategoryRepositoryPort, VehicleMakeRepositoryPort, VehicleModelRepositoryPort,
+    VehicleColorRepositoryPort, VehicleFuelTypeRepositoryPort, VehicleTransmissionTypeRepositoryPort,
+    SupplierRepositoryPort,
+    VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
@@ -51,6 +57,12 @@ use persistence::repositories::{
     },
     requisition_repository::{RequisitionItemRepository, RequisitionRepository},
     user_repository::UserRepository,
+    supplier_repository::SupplierRepository,
+    vehicle_repository::{
+        VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
+        VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
+        VehicleRepository, VehicleDocumentRepository, VehicleStatusHistoryRepository,
+    },
 };
 
 // Core & Infra
@@ -231,6 +243,43 @@ pub fn build_application_state(
         requisition_item_repo_port,
     ));
 
+    // Supplier repository and service
+    let supplier_repo: Arc<dyn SupplierRepositoryPort> =
+        Arc::new(SupplierRepository::new(pool_auth.clone()));
+    let supplier_service = Arc::new(SupplierService::new(supplier_repo));
+
+    // Vehicle fleet repositories and service
+    let vehicle_category_repo: Arc<dyn VehicleCategoryRepositoryPort> =
+        Arc::new(VehicleCategoryRepository::new(pool_auth.clone()));
+    let vehicle_make_repo: Arc<dyn VehicleMakeRepositoryPort> =
+        Arc::new(VehicleMakeRepository::new(pool_auth.clone()));
+    let vehicle_model_repo: Arc<dyn VehicleModelRepositoryPort> =
+        Arc::new(VehicleModelRepository::new(pool_auth.clone()));
+    let vehicle_color_repo: Arc<dyn VehicleColorRepositoryPort> =
+        Arc::new(VehicleColorRepository::new(pool_auth.clone()));
+    let vehicle_fuel_type_repo: Arc<dyn VehicleFuelTypeRepositoryPort> =
+        Arc::new(VehicleFuelTypeRepository::new(pool_auth.clone()));
+    let vehicle_transmission_type_repo: Arc<dyn VehicleTransmissionTypeRepositoryPort> =
+        Arc::new(VehicleTransmissionTypeRepository::new(pool_auth.clone()));
+    let vehicle_repo: Arc<dyn VehicleRepositoryPort> =
+        Arc::new(VehicleRepository::new(pool_auth.clone()));
+    let vehicle_document_repo: Arc<dyn VehicleDocumentRepositoryPort> =
+        Arc::new(VehicleDocumentRepository::new(pool_auth.clone()));
+    let vehicle_status_history_repo: Arc<dyn VehicleStatusHistoryRepositoryPort> =
+        Arc::new(VehicleStatusHistoryRepository::new(pool_auth.clone()));
+
+    let vehicle_service = Arc::new(VehicleService::new(
+        vehicle_repo,
+        vehicle_category_repo,
+        vehicle_make_repo,
+        vehicle_model_repo,
+        vehicle_color_repo,
+        vehicle_fuel_type_repo,
+        vehicle_transmission_type_repo,
+        vehicle_document_repo,
+        vehicle_status_history_repo,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -260,6 +309,8 @@ pub fn build_application_state(
         siorg_sync_queue_repository: siorg_sync_queue_repo_port,
         siorg_history_repository: siorg_history_repo_port,
         requisition_service,
+        supplier_service,
+        vehicle_service,
         config,
 
         site_repository: site_repo_port,

@@ -105,6 +105,9 @@ pub struct CityDto {
     pub id: Uuid,
     pub name: LocationName,
     pub ibge_code: i32, // Código IBGE do município
+    pub siafi_code: Option<i32>, // Código SIAFI do município
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
     pub state_id: Uuid,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -115,6 +118,9 @@ pub struct CityWithStateDto {
     pub id: Uuid,
     pub name: LocationName,
     pub ibge_code: i32,
+    pub siafi_code: Option<i32>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
     pub state_id: Uuid,
     pub state_name: LocationName,
     pub state_abbreviation: StateCode,
@@ -139,6 +145,9 @@ pub struct ListCitiesQuery {
 pub struct CreateCityPayload {
     pub name: LocationName,
     pub ibge_code: i32,
+    pub siafi_code: Option<i32>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
     pub state_id: Uuid,
 }
 
@@ -146,5 +155,8 @@ pub struct CreateCityPayload {
 pub struct UpdateCityPayload {
     pub name: Option<LocationName>,
     pub ibge_code: Option<i32>,
+    pub siafi_code: Option<i32>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
     pub state_id: Option<Uuid>,
 }

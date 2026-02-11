@@ -149,6 +149,9 @@ pub trait CityRepositoryPort: Send + Sync {
         &self,
         name: &LocationName,
         ibge_code: i32,
+        siafi_code: Option<i32>,
+        latitude: Option<f64>,
+        longitude: Option<f64>,
         state_id: Uuid,
     ) -> Result<CityDto, RepositoryError>;
 
@@ -157,6 +160,9 @@ pub trait CityRepositoryPort: Send + Sync {
         id: Uuid,
         name: Option<&LocationName>,
         ibge_code: Option<i32>,
+        siafi_code: Option<i32>,
+        latitude: Option<f64>,
+        longitude: Option<f64>,
         state_id: Option<Uuid>,
     ) -> Result<CityDto, RepositoryError>;
 

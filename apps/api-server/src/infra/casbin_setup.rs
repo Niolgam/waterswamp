@@ -802,6 +802,174 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Requisitions carregadas");
 
+    // ============================
+    // FLEET MANAGEMENT POLICIES
+    // ============================
+
+    // Vehicle Categories
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/categories", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/categories", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/categories/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/categories/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/categories/{id}", ACTION_DELETE])
+        .await?;
+
+    // Vehicle Makes
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/makes", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/makes", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/makes/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/makes/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/makes/{id}", ACTION_DELETE])
+        .await?;
+
+    // Vehicle Models
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/models", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/models", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/models/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/models/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/models/{id}", ACTION_DELETE])
+        .await?;
+
+    // Vehicle Colors
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/colors", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/colors", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/colors/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/colors/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/colors/{id}", ACTION_DELETE])
+        .await?;
+
+    // Vehicle Fuel Types
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/fuel-types", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/fuel-types", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/fuel-types/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/fuel-types/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/fuel-types/{id}", ACTION_DELETE])
+        .await?;
+
+    // Vehicle Transmission Types
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/transmission-types", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/transmission-types", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/transmission-types/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/transmission-types/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/transmission-types/{id}", ACTION_DELETE])
+        .await?;
+
+    // Vehicles (main CRUD)
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/search", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/{id}", ACTION_DELETE])
+        .await?;
+
+    // Vehicle status change and history
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/{id}/status", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/{id}/history", ACTION_GET])
+        .await?;
+
+    // Vehicle documents
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/{id}/documents", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/{id}/documents", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fleet/vehicles/{vehicle_id}/documents/{doc_id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Fleet Management carregadas");
+
+    // ============================
+    // Supplier Management Policies
+    // ============================
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/suppliers", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/suppliers", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/suppliers/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/suppliers/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/suppliers/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Supplier Management carregadas");
+
     match enforcer.save_policy().await {
         Ok(_) => {
             info!("Políticas do Casbin carregadas e salvas no banco.");

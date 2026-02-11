@@ -12,6 +12,8 @@ pub mod policy;
 pub mod requisition;
 pub mod session;
 pub mod user;
+pub mod supplier;
+pub mod vehicle;
 
 pub use audit::*;
 pub use auth::*;
@@ -27,3 +29,5 @@ pub use policy::*;
 pub use requisition::*;
 pub use session::*;
 pub use user::*;
+pub use supplier::*;
+pub use vehicle::*;

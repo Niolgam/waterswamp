@@ -81,6 +81,12 @@ pub struct CityResponse {
     pub name: LocationName,
     /// Código IBGE
     pub ibge_code: i32,
+    /// Código SIAFI
+    pub siafi_code: Option<i32>,
+    /// Latitude
+    pub latitude: Option<f64>,
+    /// Longitude
+    pub longitude: Option<f64>,
     /// ID do estado
     pub state_id: Uuid,
     /// Data de criação
@@ -97,6 +103,12 @@ pub struct CityWithStateResponse {
     pub name: LocationName,
     /// Código IBGE
     pub ibge_code: i32,
+    /// Código SIAFI
+    pub siafi_code: Option<i32>,
+    /// Latitude
+    pub latitude: Option<f64>,
+    /// Longitude
+    pub longitude: Option<f64>,
     /// ID do estado
     pub state_id: Uuid,
     /// Nome do estado

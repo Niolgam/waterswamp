@@ -517,7 +517,9 @@ impl CityRepository {
 impl CityRepositoryPort for CityRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CityDto>, RepositoryError> {
         sqlx::query_as::<_, CityDto>(
-            "SELECT id, name, ibge_code, state_id, created_at, updated_at FROM cities WHERE id = $1",
+            r#"SELECT id, name, ibge_code, siafi_code,
+                ST_Y(location::geometry) as latitude, ST_X(location::geometry) as longitude,
+                state_id, created_at, updated_at FROM cities WHERE id = $1"#,
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -532,7 +534,9 @@ impl CityRepositoryPort for CityRepository {
         let result = sqlx::query_as::<_, CityWithStateDto>(
             r#"
             SELECT
-                c.id, c.name, c.ibge_code, c.state_id,
+                c.id, c.name, c.ibge_code, c.siafi_code,
+                ST_Y(c.location::geometry) as latitude, ST_X(c.location::geometry) as longitude,
+                c.state_id,
                 s.name as state_name, s.abbreviation as state_abbreviation, s.ibge_code as state_ibge_code,
                 co.id as country_id, co.name as country_name, co.iso2 as country_iso2, co.bacen_code as country_bacen_code,
                 c.created_at, c.updated_at
@@ -552,7 +556,9 @@ impl CityRepositoryPort for CityRepository {
 
     async fn find_by_ibge_code(&self, ibge_code: i32) -> Result<Option<CityDto>, RepositoryError> {
         sqlx::query_as::<_, CityDto>(
-            "SELECT id, name, ibge_code, state_id, created_at, updated_at FROM cities WHERE ibge_code = $1",
+            r#"SELECT id, name, ibge_code, siafi_code,
+                ST_Y(location::geometry) as latitude, ST_X(location::geometry) as longitude,
+                state_id, created_at, updated_at FROM cities WHERE ibge_code = $1"#,
         )
         .bind(ibge_code)
         .fetch_optional(&self.pool)
@@ -588,14 +594,27 @@ impl CityRepositoryPort for CityRepository {
         &self,
         name: &LocationName,
         ibge_code: i32,
+        siafi_code: Option<i32>,
+        latitude: Option<f64>,
+        longitude: Option<f64>,
         state_id: Uuid,
     ) -> Result<CityDto, RepositoryError> {
         sqlx::query_as::<_, CityDto>(
-            "INSERT INTO cities (name, ibge_code, state_id) VALUES ($1, $2, $3)
-             RETURNING id, name, ibge_code, state_id, created_at, updated_at",
+            r#"INSERT INTO cities (name, ibge_code, siafi_code, location, state_id)
+             VALUES ($1, $2, $3,
+                CASE WHEN $4::float8 IS NOT NULL AND $5::float8 IS NOT NULL
+                    THEN ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography
+                    ELSE NULL END,
+                $6)
+             RETURNING id, name, ibge_code, siafi_code,
+                ST_Y(location::geometry) as latitude, ST_X(location::geometry) as longitude,
+                state_id, created_at, updated_at"#,
         )
         .bind(name.as_str())
         .bind(ibge_code)
+        .bind(siafi_code)
+        .bind(latitude)
+        .bind(longitude)
         .bind(state_id)
         .fetch_one(&self.pool)
         .await
@@ -607,6 +626,9 @@ impl CityRepositoryPort for CityRepository {
         id: Uuid,
         name: Option<&LocationName>,
         ibge_code: Option<i32>,
+        siafi_code: Option<i32>,
+        latitude: Option<f64>,
+        longitude: Option<f64>,
         state_id: Option<Uuid>,
     ) -> Result<CityDto, RepositoryError> {
         let mut query_parts = vec![];
@@ -620,6 +642,17 @@ impl CityRepositoryPort for CityRepository {
             query_parts.push(format!("ibge_code = ${}", bind_index));
             bind_index += 1;
         }
+        if siafi_code.is_some() {
+            query_parts.push(format!("siafi_code = ${}", bind_index));
+            bind_index += 1;
+        }
+        if latitude.is_some() && longitude.is_some() {
+            query_parts.push(format!(
+                "location = ST_SetSRID(ST_MakePoint(${}, ${}), 4326)::geography",
+                bind_index + 1, bind_index
+            ));
+            bind_index += 2;
+        }
         if state_id.is_some() {
             query_parts.push(format!("state_id = ${}", bind_index));
             bind_index += 1;
@@ -630,7 +663,10 @@ impl CityRepositoryPort for CityRepository {
         }
 
         let query_str = format!(
-            "UPDATE cities SET {} WHERE id = ${} RETURNING id, name, ibge_code, state_id, created_at, updated_at",
+            r#"UPDATE cities SET {} WHERE id = ${}
+            RETURNING id, name, ibge_code, siafi_code,
+                ST_Y(location::geometry) as latitude, ST_X(location::geometry) as longitude,
+                state_id, created_at, updated_at"#,
             query_parts.join(", "),
             bind_index
         );
@@ -642,6 +678,15 @@ impl CityRepositoryPort for CityRepository {
         }
         if let Some(ibge_code_val) = ibge_code {
             query = query.bind(ibge_code_val);
+        }
+        if let Some(siafi_code_val) = siafi_code {
+            query = query.bind(siafi_code_val);
+        }
+        if let Some(lat) = latitude {
+            if longitude.is_some() {
+                query = query.bind(lat);
+                query = query.bind(longitude.unwrap());
+            }
         }
         if let Some(state_id_val) = state_id {
             query = query.bind(state_id_val);
@@ -673,7 +718,9 @@ impl CityRepositoryPort for CityRepository {
         // Base query with joins
         let base_query = r#"
             SELECT
-                c.id, c.name, c.ibge_code, c.state_id,
+                c.id, c.name, c.ibge_code, c.siafi_code,
+                ST_Y(c.location::geometry) as latitude, ST_X(c.location::geometry) as longitude,
+                c.state_id,
                 s.name as state_name, s.abbreviation as state_abbreviation, s.ibge_code as state_ibge_code,
                 co.id as country_id, co.name as country_name, co.iso2 as country_iso2, co.bacen_code as country_bacen_code,
                 c.created_at, c.updated_at
