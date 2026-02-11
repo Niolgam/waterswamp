@@ -11,6 +11,7 @@ pub mod email_verification;
 pub mod fleet;
 pub mod geo_regions;
 pub mod suppliers;
+pub mod drivers;
 pub mod locations;
 pub mod mfa;
 pub mod organizational;

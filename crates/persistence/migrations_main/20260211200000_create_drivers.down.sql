@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS drivers CASCADE;
+DROP TYPE IF EXISTS driver_type_enum CASCADE;

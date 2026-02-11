@@ -14,6 +14,7 @@ pub mod session;
 pub mod user;
 pub mod supplier;
 pub mod vehicle;
+pub mod driver;
 
 pub use audit::*;
 pub use auth::*;
@@ -31,3 +32,4 @@ pub use session::*;
 pub use user::*;
 pub use supplier::*;
 pub use vehicle::*;
+pub use driver::*;
