@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 pub use domain::models::supplier::{
-    CreateSupplierPayload, SupplierDto, SupplierType, SupplierWithDetailsDto,
+    CreateSupplierPayload, SupplierDto, SupplierWithDetailsDto,
     UpdateSupplierPayload,
 };
 

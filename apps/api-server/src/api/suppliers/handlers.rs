@@ -17,7 +17,6 @@ pub struct SupplierListQuery {
     #[serde(default)]
     pub offset: i64,
     pub search: Option<String>,
-    pub supplier_type: Option<SupplierType>,
     pub is_active: Option<bool>,
 }
 
@@ -85,7 +84,7 @@ pub async fn list_suppliers(
 ) -> Result<Json<SuppliersListResponse>, (StatusCode, String)> {
     state
         .supplier_service
-        .list_suppliers(query.limit, query.offset, query.search, query.supplier_type, query.is_active)
+        .list_suppliers(query.limit, query.offset, query.search, query.is_active)
         .await
         .map(|(suppliers, total)| {
             Json(SuppliersListResponse {

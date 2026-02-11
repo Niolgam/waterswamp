@@ -114,48 +114,33 @@ impl SupplierService {
         // Normalize document
         let doc = normalize_document(&payload.document_number);
 
-        // Validate document based on supplier type
-        match payload.supplier_type {
-            SupplierType::Individual => {
-                validate_cpf(&doc).map_err(ServiceError::BadRequest)?;
-            }
-            SupplierType::LegalEntity => {
-                validate_cnpj(&doc).map_err(ServiceError::BadRequest)?;
-            }
-            SupplierType::GovernmentUnit => {
-                // UG/GESTÃO code - just ensure it's not empty
-                if doc.is_empty() && payload.document_number.trim().is_empty() {
-                    return Err(ServiceError::BadRequest("Código UG/Gestão é obrigatório".to_string()));
-                }
+        // Auto-detect document type by digit count and validate
+        match doc.len() {
+            11 => validate_cpf(&doc).map_err(ServiceError::BadRequest)?,
+            14 => validate_cnpj(&doc).map_err(ServiceError::BadRequest)?,
+            _ => {
+                return Err(ServiceError::BadRequest(
+                    "Documento deve ser CPF (11 dígitos) ou CNPJ (14 dígitos)".to_string(),
+                ));
             }
         }
 
-        // Use normalized digits for CPF/CNPJ, original for UG
-        let document_to_store = match payload.supplier_type {
-            SupplierType::GovernmentUnit => payload.document_number.trim().to_string(),
-            _ => doc,
-        };
-
         // Check uniqueness
-        if self.supplier_repo.exists_by_document_number(&document_to_store).await.map_err(ServiceError::from)? {
+        if self.supplier_repo.exists_by_document_number(&doc).await.map_err(ServiceError::from)? {
             return Err(ServiceError::Conflict(format!(
                 "Fornecedor com documento '{}' já existe",
-                document_to_store
+                doc
             )));
         }
 
-        let is_intl = payload.is_international_neighborhood.unwrap_or(false);
-
         let supplier = self.supplier_repo
             .create(
-                &payload.supplier_type,
                 &payload.legal_name,
                 payload.trade_name.as_deref(),
-                &document_to_store,
+                &doc,
                 payload.representative_name.as_deref(),
                 payload.address.as_deref(),
                 payload.neighborhood.as_deref(),
-                is_intl,
                 payload.city_id,
                 payload.zip_code.as_deref(),
                 payload.email.as_deref(),
@@ -187,40 +172,29 @@ impl SupplierService {
         payload: UpdateSupplierPayload,
         updated_by: Option<Uuid>,
     ) -> Result<SupplierWithDetailsDto, ServiceError> {
-        let current = self.supplier_repo.find_by_id(id).await.map_err(ServiceError::from)?
+        let _current = self.supplier_repo.find_by_id(id).await.map_err(ServiceError::from)?
             .ok_or(ServiceError::NotFound("Fornecedor não encontrado".to_string()))?;
-
-        // Determine effective supplier type for validation
-        let effective_type = payload.supplier_type.as_ref().unwrap_or(&current.supplier_type);
 
         // Validate and normalize document if being changed
         let normalized_doc = if let Some(ref doc) = payload.document_number {
             let d = normalize_document(doc);
-            match effective_type {
-                SupplierType::Individual => {
-                    validate_cpf(&d).map_err(ServiceError::BadRequest)?;
-                }
-                SupplierType::LegalEntity => {
-                    validate_cnpj(&d).map_err(ServiceError::BadRequest)?;
-                }
-                SupplierType::GovernmentUnit => {
-                    if d.is_empty() && doc.trim().is_empty() {
-                        return Err(ServiceError::BadRequest("Código UG/Gestão é obrigatório".to_string()));
-                    }
+            match d.len() {
+                11 => validate_cpf(&d).map_err(ServiceError::BadRequest)?,
+                14 => validate_cnpj(&d).map_err(ServiceError::BadRequest)?,
+                _ => {
+                    return Err(ServiceError::BadRequest(
+                        "Documento deve ser CPF (11 dígitos) ou CNPJ (14 dígitos)".to_string(),
+                    ));
                 }
             }
-            let document_to_store = match effective_type {
-                SupplierType::GovernmentUnit => doc.trim().to_string(),
-                _ => d,
-            };
             // Check uniqueness
-            if self.supplier_repo.exists_by_document_number_excluding(&document_to_store, id).await.map_err(ServiceError::from)? {
+            if self.supplier_repo.exists_by_document_number_excluding(&d, id).await.map_err(ServiceError::from)? {
                 return Err(ServiceError::Conflict(format!(
                     "Fornecedor com documento '{}' já existe",
-                    document_to_store
+                    d
                 )));
             }
-            Some(document_to_store)
+            Some(d)
         } else {
             None
         };
@@ -228,14 +202,12 @@ impl SupplierService {
         let _ = self.supplier_repo
             .update(
                 id,
-                payload.supplier_type.as_ref(),
                 payload.legal_name.as_deref(),
                 payload.trade_name.as_deref(),
                 normalized_doc.as_deref(),
                 payload.representative_name.as_deref(),
                 payload.address.as_deref(),
                 payload.neighborhood.as_deref(),
-                payload.is_international_neighborhood,
                 payload.city_id,
                 payload.zip_code.as_deref(),
                 payload.email.as_deref(),
@@ -264,11 +236,10 @@ impl SupplierService {
         limit: i64,
         offset: i64,
         search: Option<String>,
-        supplier_type: Option<SupplierType>,
         is_active: Option<bool>,
     ) -> Result<(Vec<SupplierWithDetailsDto>, i64), ServiceError> {
         self.supplier_repo
-            .list(limit, offset, search, supplier_type, is_active)
+            .list(limit, offset, search, is_active)
             .await
             .map_err(ServiceError::from)
     }

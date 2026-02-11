@@ -95,7 +95,6 @@ async fn create_supplier_individual(app: &TestApp) -> Value {
         .post("/api/admin/suppliers")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "supplier_type": "INDIVIDUAL",
             "legal_name": random_name("PF Fornecedor"),
             "document_number": generate_cpf(),
             "representative_name": "João da Silva",
@@ -116,7 +115,6 @@ async fn create_supplier_legal_entity(app: &TestApp) -> Value {
         .post("/api/admin/suppliers")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "supplier_type": "LEGAL_ENTITY",
             "legal_name": random_name("PJ Empresa"),
             "trade_name": random_name("Fantasia"),
             "document_number": generate_cnpj(),
@@ -138,7 +136,6 @@ async fn create_supplier_legal_entity(app: &TestApp) -> Value {
 async fn test_create_supplier_individual() {
     let app = common::spawn_app().await;
     let supplier = create_supplier_individual(&app).await;
-    assert_eq!(supplier["supplier_type"], "INDIVIDUAL");
     assert!(supplier["legal_name"].as_str().is_some());
     assert!(supplier["document_number"].as_str().is_some());
 }
@@ -147,26 +144,7 @@ async fn test_create_supplier_individual() {
 async fn test_create_supplier_legal_entity() {
     let app = common::spawn_app().await;
     let supplier = create_supplier_legal_entity(&app).await;
-    assert_eq!(supplier["supplier_type"], "LEGAL_ENTITY");
     assert!(supplier["trade_name"].as_str().is_some());
-}
-
-#[tokio::test]
-async fn test_create_supplier_government_unit() {
-    let app = common::spawn_app().await;
-    let response = app
-        .api
-        .post("/api/admin/suppliers")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&json!({
-            "supplier_type": "GOVERNMENT_UNIT",
-            "legal_name": random_name("UG Federal"),
-            "document_number": format!("153072/{}", &Uuid::new_v4().simple().to_string()[..5]),
-        }))
-        .await;
-    assert_eq!(response.status_code(), StatusCode::CREATED, "Failed: {}", response.text());
-    let supplier: Value = response.json();
-    assert_eq!(supplier["supplier_type"], "GOVERNMENT_UNIT");
 }
 
 #[tokio::test]
@@ -247,24 +225,6 @@ async fn test_list_suppliers() {
     assert!(list["suppliers"].as_array().is_some());
 }
 
-#[tokio::test]
-async fn test_list_suppliers_filter_by_type() {
-    let app = common::spawn_app().await;
-    create_supplier_individual(&app).await;
-
-    let response = app
-        .api
-        .get("/api/admin/suppliers?supplier_type=INDIVIDUAL")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .await;
-    assert_eq!(response.status_code(), StatusCode::OK);
-    let list: Value = response.json();
-    // All returned suppliers should be INDIVIDUAL
-    for s in list["suppliers"].as_array().unwrap() {
-        assert_eq!(s["supplier_type"], "INDIVIDUAL");
-    }
-}
-
 // ============================
 // VALIDATION TESTS
 // ============================
@@ -277,7 +237,6 @@ async fn test_create_supplier_invalid_cpf() {
         .post("/api/admin/suppliers")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "supplier_type": "INDIVIDUAL",
             "legal_name": "Teste CPF Invalido",
             "document_number": "11111111111",
         }))
@@ -293,7 +252,6 @@ async fn test_create_supplier_invalid_cnpj() {
         .post("/api/admin/suppliers")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "supplier_type": "LEGAL_ENTITY",
             "legal_name": "Teste CNPJ Invalido",
             "document_number": "12345678000199",
         }))
@@ -312,7 +270,6 @@ async fn test_create_supplier_duplicate_document() {
         .post("/api/admin/suppliers")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "supplier_type": "INDIVIDUAL",
             "legal_name": random_name("Dup1"),
             "document_number": &cpf,
         }))
@@ -325,7 +282,6 @@ async fn test_create_supplier_duplicate_document() {
         .post("/api/admin/suppliers")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "supplier_type": "INDIVIDUAL",
             "legal_name": random_name("Dup2"),
             "document_number": &cpf,
         }))
@@ -342,7 +298,6 @@ async fn test_create_supplier_formatted_cpf() {
         .post("/api/admin/suppliers")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "supplier_type": "INDIVIDUAL",
             "legal_name": random_name("Formatted"),
             "document_number": "529.982.247-25",
         }))
