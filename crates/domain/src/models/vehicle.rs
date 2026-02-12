@@ -283,6 +283,10 @@ pub struct VehicleDto {
     pub status: VehicleStatus,
     // Notes
     pub notes: Option<String>,
+    // Last odometer (updated by trigger from fuelings)
+    pub last_odometer_km: Option<i32>,
+    pub last_odometer_date: Option<DateTime<Utc>>,
+    pub last_fueling_id: Option<Uuid>,
     // Soft delete
     pub is_deleted: bool,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -335,6 +339,10 @@ pub struct VehicleWithDetailsDto {
     // Status
     pub status: VehicleStatus,
     pub notes: Option<String>,
+    // Last odometer (updated by trigger from fuelings)
+    pub last_odometer_km: Option<i32>,
+    pub last_odometer_date: Option<DateTime<Utc>>,
+    pub last_fueling_id: Option<Uuid>,
     // Timestamps
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
