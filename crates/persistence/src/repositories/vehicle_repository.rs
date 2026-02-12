@@ -811,6 +811,7 @@ impl VehicleRepositoryPort for VehicleRepository {
                 v.acquisition_type, v.acquisition_date, v.purchase_value,
                 v.patrimony_number, v.department_id,
                 v.status, v.notes,
+                v.last_odometer_km, v.last_odometer_date, v.last_fueling_id,
                 v.created_at, v.updated_at
             FROM vehicles v
             JOIN vehicle_models m ON v.model_id = m.id
@@ -859,6 +860,9 @@ impl VehicleRepositoryPort for VehicleRepository {
             department_id: r.get("department_id"),
             status: r.get("status"),
             notes: r.get("notes"),
+            last_odometer_km: r.get("last_odometer_km"),
+            last_odometer_date: r.get("last_odometer_date"),
+            last_fueling_id: r.get("last_fueling_id"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }))
@@ -1139,6 +1143,7 @@ impl VehicleRepositoryPort for VehicleRepository {
                 v.acquisition_type, v.acquisition_date, v.purchase_value,
                 v.patrimony_number, v.department_id,
                 v.status, v.notes,
+                v.last_odometer_km, v.last_odometer_date, v.last_fueling_id,
                 v.created_at, v.updated_at
             FROM vehicles v
             JOIN vehicle_models m ON v.model_id = m.id
@@ -1201,6 +1206,9 @@ impl VehicleRepositoryPort for VehicleRepository {
             department_id: r.get("department_id"),
             status: r.get("status"),
             notes: r.get("notes"),
+            last_odometer_km: r.get("last_odometer_km"),
+            last_odometer_date: r.get("last_odometer_date"),
+            last_fueling_id: r.get("last_fueling_id"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }).collect();

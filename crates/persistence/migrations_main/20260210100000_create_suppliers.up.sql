@@ -1,3 +1,8 @@
+-- Drop old suppliers table (from migration 20251212160315) to recreate with new schema
+DROP TRIGGER IF EXISTS set_timestamp_suppliers ON suppliers;
+DROP TABLE IF EXISTS suppliers CASCADE;
+DROP TYPE IF EXISTS supplier_type_enum;
+
 -- Supplier type enum
 CREATE TYPE supplier_type_enum AS ENUM ('INDIVIDUAL', 'LEGAL_ENTITY', 'GOVERNMENT_UNIT');
 

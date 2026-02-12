@@ -19,6 +19,8 @@ use application::services::{
     },
     requisition_service::RequisitionService,
     supplier_service::SupplierService,
+    driver_service::DriverService,
+    fueling_service::FuelingService,
     user_service::UserService,
     vehicle_service::VehicleService,
 };
@@ -36,6 +38,8 @@ use domain::ports::{
     VehicleCategoryRepositoryPort, VehicleMakeRepositoryPort, VehicleModelRepositoryPort,
     VehicleColorRepositoryPort, VehicleFuelTypeRepositoryPort, VehicleTransmissionTypeRepositoryPort,
     SupplierRepositoryPort,
+    DriverRepositoryPort,
+    FuelingRepositoryPort,
     VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
 use persistence::repositories::{
@@ -58,6 +62,8 @@ use persistence::repositories::{
     requisition_repository::{RequisitionItemRepository, RequisitionRepository},
     user_repository::UserRepository,
     supplier_repository::SupplierRepository,
+    driver_repository::DriverRepository,
+    fueling_repository::FuelingRepository,
     vehicle_repository::{
         VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
         VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
@@ -248,6 +254,16 @@ pub fn build_application_state(
         Arc::new(SupplierRepository::new(pool_auth.clone()));
     let supplier_service = Arc::new(SupplierService::new(supplier_repo));
 
+    // Driver repository and service
+    let driver_repo: Arc<dyn DriverRepositoryPort> =
+        Arc::new(DriverRepository::new(pool_auth.clone()));
+    let driver_service = Arc::new(DriverService::new(driver_repo));
+
+    // Fueling repository and service
+    let fueling_repo: Arc<dyn FuelingRepositoryPort> =
+        Arc::new(FuelingRepository::new(pool_auth.clone()));
+    let fueling_service = Arc::new(FuelingService::new(fueling_repo));
+
     // Vehicle fleet repositories and service
     let vehicle_category_repo: Arc<dyn VehicleCategoryRepositoryPort> =
         Arc::new(VehicleCategoryRepository::new(pool_auth.clone()));
@@ -311,6 +327,8 @@ pub fn build_application_state(
         requisition_service,
         supplier_service,
         vehicle_service,
+        driver_service,
+        fueling_service,
         config,
 
         site_repository: site_repo_port,

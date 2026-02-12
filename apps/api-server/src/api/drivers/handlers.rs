@@ -11,12 +11,13 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, IntoParams)]
-pub struct SupplierListQuery {
+pub struct DriverListQuery {
     #[serde(default = "default_limit")]
     pub limit: i64,
     #[serde(default)]
     pub offset: i64,
     pub search: Option<String>,
+    pub driver_type: Option<DriverType>,
     pub is_active: Option<bool>,
 }
 
@@ -24,71 +25,71 @@ fn default_limit() -> i64 {
     50
 }
 
-pub async fn create_supplier(
+pub async fn create_driver(
     user: CurrentUser,
     State(state): State<AppState>,
-    Json(payload): Json<CreateSupplierPayload>,
-) -> Result<(StatusCode, Json<SupplierWithDetailsDto>), (StatusCode, String)> {
+    Json(payload): Json<CreateDriverPayload>,
+) -> Result<(StatusCode, Json<DriverDto>), (StatusCode, String)> {
     state
-        .supplier_service
-        .create_supplier(payload, Some(user.id))
+        .driver_service
+        .create_driver(payload, Some(user.id))
         .await
-        .map(|s| (StatusCode::CREATED, Json(s)))
+        .map(|d| (StatusCode::CREATED, Json(d)))
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-pub async fn get_supplier(
+pub async fn get_driver(
     _user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<SupplierWithDetailsDto>, (StatusCode, String)> {
+) -> Result<Json<DriverDto>, (StatusCode, String)> {
     state
-        .supplier_service
-        .get_supplier(id)
+        .driver_service
+        .get_driver(id)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-pub async fn update_supplier(
+pub async fn update_driver(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(payload): Json<UpdateSupplierPayload>,
-) -> Result<Json<SupplierWithDetailsDto>, (StatusCode, String)> {
+    Json(payload): Json<UpdateDriverPayload>,
+) -> Result<Json<DriverDto>, (StatusCode, String)> {
     state
-        .supplier_service
-        .update_supplier(id, payload, Some(user.id))
+        .driver_service
+        .update_driver(id, payload, Some(user.id))
         .await
         .map(Json)
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-pub async fn delete_supplier(
+pub async fn delete_driver(
     _user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     state
-        .supplier_service
-        .delete_supplier(id)
+        .driver_service
+        .delete_driver(id)
         .await
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-pub async fn list_suppliers(
+pub async fn list_drivers(
     _user: CurrentUser,
     State(state): State<AppState>,
-    Query(query): Query<SupplierListQuery>,
-) -> Result<Json<SuppliersListResponse>, (StatusCode, String)> {
+    Query(query): Query<DriverListQuery>,
+) -> Result<Json<DriversListResponse>, (StatusCode, String)> {
     state
-        .supplier_service
-        .list_suppliers(query.limit, query.offset, query.search, query.is_active)
+        .driver_service
+        .list_drivers(query.limit, query.offset, query.search, query.driver_type, query.is_active)
         .await
-        .map(|(suppliers, total)| {
-            Json(SuppliersListResponse {
-                suppliers,
+        .map(|(drivers, total)| {
+            Json(DriversListResponse {
+                drivers,
                 total,
                 limit: query.limit,
                 offset: query.offset,

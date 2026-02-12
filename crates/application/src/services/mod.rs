@@ -10,3 +10,5 @@ pub mod requisition_service;
 pub mod user_service;
 pub mod supplier_service;
 pub mod vehicle_service;
+pub mod driver_service;
+pub mod fueling_service;

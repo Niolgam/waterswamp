@@ -11,14 +11,12 @@ pub trait SupplierRepositoryPort: Send + Sync {
     async fn exists_by_document_number_excluding(&self, document_number: &str, id: Uuid) -> Result<bool, RepositoryError>;
     async fn create(
         &self,
-        supplier_type: &SupplierType,
         legal_name: &str,
         trade_name: Option<&str>,
         document_number: &str,
         representative_name: Option<&str>,
         address: Option<&str>,
         neighborhood: Option<&str>,
-        is_international_neighborhood: bool,
         city_id: Option<Uuid>,
         zip_code: Option<&str>,
         email: Option<&str>,
@@ -28,14 +26,12 @@ pub trait SupplierRepositoryPort: Send + Sync {
     async fn update(
         &self,
         id: Uuid,
-        supplier_type: Option<&SupplierType>,
         legal_name: Option<&str>,
         trade_name: Option<&str>,
         document_number: Option<&str>,
         representative_name: Option<&str>,
         address: Option<&str>,
         neighborhood: Option<&str>,
-        is_international_neighborhood: Option<bool>,
         city_id: Option<Uuid>,
         zip_code: Option<&str>,
         email: Option<&str>,
@@ -49,7 +45,6 @@ pub trait SupplierRepositoryPort: Send + Sync {
         limit: i64,
         offset: i64,
         search: Option<String>,
-        supplier_type: Option<SupplierType>,
         is_active: Option<bool>,
     ) -> Result<(Vec<SupplierWithDetailsDto>, i64), RepositoryError>;
 }

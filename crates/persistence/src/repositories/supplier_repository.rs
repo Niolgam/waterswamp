@@ -31,8 +31,8 @@ impl SupplierRepositoryPort for SupplierRepository {
 
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<SupplierWithDetailsDto>, RepositoryError> {
         sqlx::query_as::<_, SupplierWithDetailsDto>(
-            r#"SELECT s.id, s.supplier_type, s.legal_name, s.trade_name, s.document_number,
-                      s.representative_name, s.address, s.neighborhood, s.is_international_neighborhood,
+            r#"SELECT s.id, s.legal_name, s.trade_name, s.document_number,
+                      s.representative_name, s.address, s.neighborhood,
                       s.city_id, c.name AS city_name, st.abbreviation AS state_abbreviation,
                       s.zip_code, s.email, s.phone, s.is_active,
                       s.created_at, s.updated_at
@@ -68,14 +68,12 @@ impl SupplierRepositoryPort for SupplierRepository {
 
     async fn create(
         &self,
-        supplier_type: &SupplierType,
         legal_name: &str,
         trade_name: Option<&str>,
         document_number: &str,
         representative_name: Option<&str>,
         address: Option<&str>,
         neighborhood: Option<&str>,
-        is_international_neighborhood: bool,
         city_id: Option<Uuid>,
         zip_code: Option<&str>,
         email: Option<&str>,
@@ -83,20 +81,18 @@ impl SupplierRepositoryPort for SupplierRepository {
         created_by: Option<Uuid>,
     ) -> Result<SupplierDto, RepositoryError> {
         sqlx::query_as::<_, SupplierDto>(
-            r#"INSERT INTO suppliers (supplier_type, legal_name, trade_name, document_number,
-                                      representative_name, address, neighborhood, is_international_neighborhood,
+            r#"INSERT INTO suppliers (legal_name, trade_name, document_number,
+                                      representative_name, address, neighborhood,
                                       city_id, zip_code, email, phone, created_by, updated_by)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
                RETURNING *"#,
         )
-        .bind(supplier_type)
         .bind(legal_name)
         .bind(trade_name)
         .bind(document_number)
         .bind(representative_name)
         .bind(address)
         .bind(neighborhood)
-        .bind(is_international_neighborhood)
         .bind(city_id)
         .bind(zip_code)
         .bind(email)
@@ -110,14 +106,12 @@ impl SupplierRepositoryPort for SupplierRepository {
     async fn update(
         &self,
         id: Uuid,
-        supplier_type: Option<&SupplierType>,
         legal_name: Option<&str>,
         trade_name: Option<&str>,
         document_number: Option<&str>,
         representative_name: Option<&str>,
         address: Option<&str>,
         neighborhood: Option<&str>,
-        is_international_neighborhood: Option<bool>,
         city_id: Option<Uuid>,
         zip_code: Option<&str>,
         email: Option<&str>,
@@ -127,32 +121,28 @@ impl SupplierRepositoryPort for SupplierRepository {
     ) -> Result<SupplierDto, RepositoryError> {
         sqlx::query_as::<_, SupplierDto>(
             r#"UPDATE suppliers SET
-                supplier_type = COALESCE($2, supplier_type),
-                legal_name = COALESCE($3, legal_name),
-                trade_name = COALESCE($4, trade_name),
-                document_number = COALESCE($5, document_number),
-                representative_name = COALESCE($6, representative_name),
-                address = COALESCE($7, address),
-                neighborhood = COALESCE($8, neighborhood),
-                is_international_neighborhood = COALESCE($9, is_international_neighborhood),
-                city_id = COALESCE($10, city_id),
-                zip_code = COALESCE($11, zip_code),
-                email = COALESCE($12, email),
-                phone = COALESCE($13, phone),
-                is_active = COALESCE($14, is_active),
-                updated_by = COALESCE($15, updated_by)
+                legal_name = COALESCE($2, legal_name),
+                trade_name = COALESCE($3, trade_name),
+                document_number = COALESCE($4, document_number),
+                representative_name = COALESCE($5, representative_name),
+                address = COALESCE($6, address),
+                neighborhood = COALESCE($7, neighborhood),
+                city_id = COALESCE($8, city_id),
+                zip_code = COALESCE($9, zip_code),
+                email = COALESCE($10, email),
+                phone = COALESCE($11, phone),
+                is_active = COALESCE($12, is_active),
+                updated_by = COALESCE($13, updated_by)
                WHERE id = $1
                RETURNING *"#,
         )
         .bind(id)
-        .bind(supplier_type)
         .bind(legal_name)
         .bind(trade_name)
         .bind(document_number)
         .bind(representative_name)
         .bind(address)
         .bind(neighborhood)
-        .bind(is_international_neighborhood)
         .bind(city_id)
         .bind(zip_code)
         .bind(email)
@@ -178,7 +168,6 @@ impl SupplierRepositoryPort for SupplierRepository {
         limit: i64,
         offset: i64,
         search: Option<String>,
-        supplier_type: Option<SupplierType>,
         is_active: Option<bool>,
     ) -> Result<(Vec<SupplierWithDetailsDto>, i64), RepositoryError> {
         let mut where_clauses = Vec::new();
@@ -189,10 +178,6 @@ impl SupplierRepositoryPort for SupplierRepository {
                 "(s.legal_name ILIKE ${p} OR s.trade_name ILIKE ${p} OR s.document_number ILIKE ${p})",
                 p = param_index
             ));
-            param_index += 1;
-        }
-        if supplier_type.is_some() {
-            where_clauses.push(format!("s.supplier_type = ${}", param_index));
             param_index += 1;
         }
         if is_active.is_some() {
@@ -208,8 +193,8 @@ impl SupplierRepositoryPort for SupplierRepository {
 
         let count_sql = format!("SELECT COUNT(*) AS total FROM suppliers s {}", where_sql);
         let list_sql = format!(
-            r#"SELECT s.id, s.supplier_type, s.legal_name, s.trade_name, s.document_number,
-                      s.representative_name, s.address, s.neighborhood, s.is_international_neighborhood,
+            r#"SELECT s.id, s.legal_name, s.trade_name, s.document_number,
+                      s.representative_name, s.address, s.neighborhood,
                       s.city_id, c.name AS city_name, st.abbreviation AS state_abbreviation,
                       s.zip_code, s.email, s.phone, s.is_active,
                       s.created_at, s.updated_at
@@ -230,10 +215,6 @@ impl SupplierRepositoryPort for SupplierRepository {
             let pattern = format!("%{}%", s);
             count_query = count_query.bind(pattern.clone());
             list_query = list_query.bind(pattern);
-        }
-        if let Some(ref st) = supplier_type {
-            count_query = count_query.bind(st);
-            list_query = list_query.bind(st);
         }
         if let Some(active) = is_active {
             count_query = count_query.bind(active);

@@ -11,84 +11,85 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, IntoParams)]
-pub struct SupplierListQuery {
+pub struct FuelingListQuery {
     #[serde(default = "default_limit")]
     pub limit: i64,
     #[serde(default)]
     pub offset: i64,
-    pub search: Option<String>,
-    pub is_active: Option<bool>,
+    pub vehicle_id: Option<Uuid>,
+    pub driver_id: Option<Uuid>,
+    pub supplier_id: Option<Uuid>,
 }
 
 fn default_limit() -> i64 {
     50
 }
 
-pub async fn create_supplier(
+pub async fn create_fueling(
     user: CurrentUser,
     State(state): State<AppState>,
-    Json(payload): Json<CreateSupplierPayload>,
-) -> Result<(StatusCode, Json<SupplierWithDetailsDto>), (StatusCode, String)> {
+    Json(payload): Json<CreateFuelingPayload>,
+) -> Result<(StatusCode, Json<FuelingWithDetailsDto>), (StatusCode, String)> {
     state
-        .supplier_service
-        .create_supplier(payload, Some(user.id))
+        .fueling_service
+        .create_fueling(payload, Some(user.id))
         .await
-        .map(|s| (StatusCode::CREATED, Json(s)))
+        .map(|f| (StatusCode::CREATED, Json(f)))
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-pub async fn get_supplier(
+pub async fn get_fueling(
     _user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<SupplierWithDetailsDto>, (StatusCode, String)> {
+) -> Result<Json<FuelingWithDetailsDto>, (StatusCode, String)> {
     state
-        .supplier_service
-        .get_supplier(id)
+        .fueling_service
+        .get_fueling(id)
         .await
         .map(Json)
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-pub async fn update_supplier(
+pub async fn update_fueling(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(payload): Json<UpdateSupplierPayload>,
-) -> Result<Json<SupplierWithDetailsDto>, (StatusCode, String)> {
+    Json(payload): Json<UpdateFuelingPayload>,
+) -> Result<Json<FuelingWithDetailsDto>, (StatusCode, String)> {
     state
-        .supplier_service
-        .update_supplier(id, payload, Some(user.id))
+        .fueling_service
+        .update_fueling(id, payload, Some(user.id))
         .await
         .map(Json)
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-pub async fn delete_supplier(
+pub async fn delete_fueling(
     _user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     state
-        .supplier_service
-        .delete_supplier(id)
+        .fueling_service
+        .delete_fueling(id)
         .await
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-pub async fn list_suppliers(
+pub async fn list_fuelings(
     _user: CurrentUser,
     State(state): State<AppState>,
-    Query(query): Query<SupplierListQuery>,
-) -> Result<Json<SuppliersListResponse>, (StatusCode, String)> {
+    Query(query): Query<FuelingListQuery>,
+) -> Result<Json<FuelingsListResponse>, (StatusCode, String)> {
     state
-        .supplier_service
-        .list_suppliers(query.limit, query.offset, query.search, query.is_active)
+        .fueling_service
+        .list_fuelings(query.limit, query.offset, query.vehicle_id, query.driver_id, query.supplier_id)
         .await
-        .map(|(suppliers, total)| {
-            Json(SuppliersListResponse {
-                suppliers,
+        .map(|(fuelings, total)| {
+            Json(FuelingsListResponse {
+                fuelings,
                 total,
                 limit: query.limit,
                 offset: query.offset,
