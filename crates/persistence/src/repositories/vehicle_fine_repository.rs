@@ -206,7 +206,7 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
                       vf.auto_number, vf.fine_date, vf.notification_date, vf.due_date,
                       vf.location, vf.sei_process_number,
                       vf.fine_amount, vf.discount_amount, vf.paid_amount, vf.payment_date,
-                      vf.payment_status, vf.notes, vf.is_deleted,
+                      vf.status, vf.notes, vf.is_deleted,
                       vf.created_at, vf.updated_at
                FROM vehicle_fines vf
                LEFT JOIN vehicles v ON v.id = vf.vehicle_id
@@ -283,7 +283,6 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
         discount_amount: Option<Decimal>,
         paid_amount: Option<Decimal>,
         payment_date: Option<DateTime<Utc>>,
-        payment_status: Option<&FinePaymentStatus>,
         notes: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<VehicleFineDto, RepositoryError> {
@@ -303,9 +302,8 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
                 discount_amount = COALESCE($13, discount_amount),
                 paid_amount = COALESCE($14, paid_amount),
                 payment_date = COALESCE($15, payment_date),
-                payment_status = COALESCE($16, payment_status),
-                notes = COALESCE($17, notes),
-                updated_by = COALESCE($18, updated_by)
+                notes = COALESCE($16, notes),
+                updated_by = COALESCE($17, updated_by)
                WHERE id = $1
                RETURNING *"#,
         )
@@ -324,8 +322,26 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
         .bind(discount_amount)
         .bind(paid_amount)
         .bind(payment_date)
-        .bind(payment_status)
         .bind(notes)
+        .bind(updated_by)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_error)
+    }
+
+    async fn update_status(
+        &self,
+        id: Uuid,
+        status: &FineStatus,
+        updated_by: Option<Uuid>,
+    ) -> Result<VehicleFineDto, RepositoryError> {
+        sqlx::query_as::<_, VehicleFineDto>(
+            r#"UPDATE vehicle_fines SET status = $2, updated_by = COALESCE($3, updated_by)
+               WHERE id = $1
+               RETURNING *"#,
+        )
+        .bind(id)
+        .bind(status)
         .bind(updated_by)
         .fetch_one(&self.pool)
         .await
@@ -365,7 +381,7 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
         fine_type_id: Option<Uuid>,
         supplier_id: Option<Uuid>,
         driver_id: Option<Uuid>,
-        payment_status: Option<FinePaymentStatus>,
+        status: Option<FineStatus>,
         search: Option<String>,
         include_deleted: bool,
     ) -> Result<(Vec<VehicleFineWithDetailsDto>, i64), RepositoryError> {
@@ -380,7 +396,7 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
                       vf.auto_number, vf.fine_date, vf.notification_date, vf.due_date,
                       vf.location, vf.sei_process_number,
                       vf.fine_amount, vf.discount_amount, vf.paid_amount, vf.payment_date,
-                      vf.payment_status, vf.notes, vf.is_deleted,
+                      vf.status, vf.notes, vf.is_deleted,
                       vf.created_at, vf.updated_at
                FROM vehicle_fines vf
                LEFT JOIN vehicles v ON v.id = vf.vehicle_id
@@ -392,7 +408,7 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
                  AND ($3::UUID IS NULL OR vf.fine_type_id = $3)
                  AND ($4::UUID IS NULL OR vf.supplier_id = $4)
                  AND ($5::UUID IS NULL OR vf.driver_id = $5)
-                 AND ($6::fine_payment_status_enum IS NULL OR vf.payment_status = $6)
+                 AND ($6::fine_status_enum IS NULL OR vf.status = $6)
                  AND ($7::TEXT IS NULL OR vf.auto_number ILIKE $7 OR vf.sei_process_number ILIKE $7 OR v.license_plate ILIKE $7)
                ORDER BY vf.due_date DESC
                LIMIT $8 OFFSET $9"#,
@@ -402,7 +418,7 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
         .bind(fine_type_id)
         .bind(supplier_id)
         .bind(driver_id)
-        .bind(&payment_status)
+        .bind(&status)
         .bind(&search_pattern)
         .bind(limit)
         .bind(offset)
@@ -418,7 +434,7 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
                  AND ($3::UUID IS NULL OR vf.fine_type_id = $3)
                  AND ($4::UUID IS NULL OR vf.supplier_id = $4)
                  AND ($5::UUID IS NULL OR vf.driver_id = $5)
-                 AND ($6::fine_payment_status_enum IS NULL OR vf.payment_status = $6)
+                 AND ($6::fine_status_enum IS NULL OR vf.status = $6)
                  AND ($7::TEXT IS NULL OR vf.auto_number ILIKE $7 OR vf.sei_process_number ILIKE $7 OR v.license_plate ILIKE $7)"#,
         )
         .bind(include_deleted)
@@ -426,12 +442,62 @@ impl VehicleFineRepositoryPort for VehicleFineRepository {
         .bind(fine_type_id)
         .bind(supplier_id)
         .bind(driver_id)
-        .bind(&payment_status)
+        .bind(&status)
         .bind(&search_pattern)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)?;
 
         Ok((items, total))
+    }
+}
+
+// ============================
+// Vehicle Fine Status History Repository
+// ============================
+
+pub struct VehicleFineStatusHistoryRepository {
+    pool: PgPool,
+}
+
+impl VehicleFineStatusHistoryRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl VehicleFineStatusHistoryRepositoryPort for VehicleFineStatusHistoryRepository {
+    async fn create(
+        &self,
+        vehicle_fine_id: Uuid,
+        old_status: Option<FineStatus>,
+        new_status: FineStatus,
+        reason: Option<&str>,
+        changed_by: Option<Uuid>,
+    ) -> Result<VehicleFineStatusHistoryDto, RepositoryError> {
+        sqlx::query_as::<_, VehicleFineStatusHistoryDto>(
+            r#"INSERT INTO vehicle_fine_status_history (vehicle_fine_id, old_status, new_status, reason, changed_by)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING *"#,
+        )
+        .bind(vehicle_fine_id)
+        .bind(old_status)
+        .bind(new_status)
+        .bind(reason)
+        .bind(changed_by)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_error)
+    }
+
+    async fn list_by_fine(&self, vehicle_fine_id: Uuid) -> Result<Vec<VehicleFineStatusHistoryDto>, RepositoryError> {
+        sqlx::query_as::<_, VehicleFineStatusHistoryDto>(
+            "SELECT * FROM vehicle_fine_status_history WHERE vehicle_fine_id = $1 ORDER BY created_at DESC"
+        )
+        .bind(vehicle_fine_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_db_error)
     }
 }

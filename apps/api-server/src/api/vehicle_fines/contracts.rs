@@ -2,10 +2,11 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 pub use domain::models::vehicle_fine::{
+    ChangeFineStatusPayload,
     CreateVehicleFinePayload, CreateVehicleFineTypePayload,
-    FinePaymentStatus, FineSeverity,
+    FineStatus, FineSeverity,
     UpdateVehicleFinePayload, UpdateVehicleFineTypePayload,
-    VehicleFineDto, VehicleFineTypeDto, VehicleFineWithDetailsDto,
+    VehicleFineDto, VehicleFineStatusHistoryDto, VehicleFineTypeDto, VehicleFineWithDetailsDto,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

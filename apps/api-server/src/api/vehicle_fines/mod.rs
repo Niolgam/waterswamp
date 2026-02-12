@@ -19,7 +19,9 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", get(handlers::get_fine)
             .put(handlers::update_fine)
             .delete(handlers::delete_fine))
-        .route("/{id}/restore", axum::routing::put(handlers::restore_fine));
+        .route("/{id}/restore", axum::routing::put(handlers::restore_fine))
+        .route("/{id}/status", axum::routing::put(handlers::change_fine_status))
+        .route("/{id}/history", get(handlers::get_fine_status_history));
 
     Router::new()
         .nest("/fine-types", fine_types_router)

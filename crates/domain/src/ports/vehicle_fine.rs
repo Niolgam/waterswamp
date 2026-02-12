@@ -79,8 +79,13 @@ pub trait VehicleFineRepositoryPort: Send + Sync {
         discount_amount: Option<Decimal>,
         paid_amount: Option<Decimal>,
         payment_date: Option<DateTime<Utc>>,
-        payment_status: Option<&FinePaymentStatus>,
         notes: Option<&str>,
+        updated_by: Option<Uuid>,
+    ) -> Result<VehicleFineDto, RepositoryError>;
+    async fn update_status(
+        &self,
+        id: Uuid,
+        status: &FineStatus,
         updated_by: Option<Uuid>,
     ) -> Result<VehicleFineDto, RepositoryError>;
     async fn soft_delete(&self, id: Uuid, deleted_by: Option<Uuid>) -> Result<bool, RepositoryError>;
@@ -93,8 +98,21 @@ pub trait VehicleFineRepositoryPort: Send + Sync {
         fine_type_id: Option<Uuid>,
         supplier_id: Option<Uuid>,
         driver_id: Option<Uuid>,
-        payment_status: Option<FinePaymentStatus>,
+        status: Option<FineStatus>,
         search: Option<String>,
         include_deleted: bool,
     ) -> Result<(Vec<VehicleFineWithDetailsDto>, i64), RepositoryError>;
+}
+
+#[async_trait]
+pub trait VehicleFineStatusHistoryRepositoryPort: Send + Sync {
+    async fn create(
+        &self,
+        vehicle_fine_id: Uuid,
+        old_status: Option<FineStatus>,
+        new_status: FineStatus,
+        reason: Option<&str>,
+        changed_by: Option<Uuid>,
+    ) -> Result<VehicleFineStatusHistoryDto, RepositoryError>;
+    async fn list_by_fine(&self, vehicle_fine_id: Uuid) -> Result<Vec<VehicleFineStatusHistoryDto>, RepositoryError>;
 }

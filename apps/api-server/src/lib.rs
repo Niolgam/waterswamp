@@ -41,7 +41,7 @@ use domain::ports::{
     SupplierRepositoryPort,
     DriverRepositoryPort,
     FuelingRepositoryPort,
-    VehicleFineTypeRepositoryPort, VehicleFineRepositoryPort,
+    VehicleFineTypeRepositoryPort, VehicleFineRepositoryPort, VehicleFineStatusHistoryRepositoryPort,
     VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
 use persistence::repositories::{
@@ -66,7 +66,7 @@ use persistence::repositories::{
     supplier_repository::SupplierRepository,
     driver_repository::DriverRepository,
     fueling_repository::FuelingRepository,
-    vehicle_fine_repository::{VehicleFineTypeRepository, VehicleFineRepository},
+    vehicle_fine_repository::{VehicleFineTypeRepository, VehicleFineRepository, VehicleFineStatusHistoryRepository},
     vehicle_repository::{
         VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
         VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
@@ -304,9 +304,12 @@ pub fn build_application_state(
         Arc::new(VehicleFineTypeRepository::new(pool_auth.clone()));
     let vehicle_fine_repo: Arc<dyn VehicleFineRepositoryPort> =
         Arc::new(VehicleFineRepository::new(pool_auth.clone()));
+    let vehicle_fine_status_history_repo: Arc<dyn VehicleFineStatusHistoryRepositoryPort> =
+        Arc::new(VehicleFineStatusHistoryRepository::new(pool_auth.clone()));
     let vehicle_fine_service = Arc::new(VehicleFineService::new(
         vehicle_fine_type_repo,
         vehicle_fine_repo,
+        vehicle_fine_status_history_repo,
     ));
 
     // Cache com TTL e tamanho máximo para políticas do Casbin

@@ -116,7 +116,7 @@ pub struct FineListQuery {
     pub fine_type_id: Option<Uuid>,
     pub supplier_id: Option<Uuid>,
     pub driver_id: Option<Uuid>,
-    pub payment_status: Option<FinePaymentStatus>,
+    pub status: Option<FineStatus>,
     pub search: Option<String>,
     #[serde(default)]
     pub include_deleted: bool,
@@ -188,6 +188,33 @@ pub async fn restore_fine(
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
+pub async fn change_fine_status(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ChangeFineStatusPayload>,
+) -> Result<Json<VehicleFineWithDetailsDto>, (StatusCode, String)> {
+    state
+        .vehicle_fine_service
+        .change_fine_status(id, payload, Some(user.id))
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+pub async fn get_fine_status_history(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<VehicleFineStatusHistoryDto>>, (StatusCode, String)> {
+    state
+        .vehicle_fine_service
+        .get_fine_status_history(id)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
 pub async fn list_fines(
     _user: CurrentUser,
     State(state): State<AppState>,
@@ -202,7 +229,7 @@ pub async fn list_fines(
             query.fine_type_id,
             query.supplier_id,
             query.driver_id,
-            query.payment_status,
+            query.status,
             query.search,
             query.include_deleted,
         )

@@ -22,18 +22,34 @@ pub enum FineSeverity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::Type, PartialEq)]
-#[sqlx(type_name = "fine_payment_status_enum", rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum FinePaymentStatus {
-    #[serde(rename = "PENDING")]
-    Pending,
+#[sqlx(type_name = "fine_status_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum FineStatus {
+    #[serde(rename = "PENDING_NOTIFICATION")]
+    PendingNotification,
+    #[serde(rename = "NOTIFIED")]
+    Notified,
+    #[serde(rename = "AWAITING_DRIVER_IDENTIFICATION")]
+    AwaitingDriverIdentification,
+    #[serde(rename = "DRIVER_IDENTIFIED")]
+    DriverIdentified,
+    #[serde(rename = "UNDER_PRIOR_DEFENSE")]
+    UnderPriorDefense,
+    #[serde(rename = "UNDER_APPEAL_FIRST")]
+    UnderAppealFirst,
+    #[serde(rename = "UNDER_APPEAL_SECOND")]
+    UnderAppealSecond,
+    #[serde(rename = "DEFENSE_ACCEPTED")]
+    DefenseAccepted,
+    #[serde(rename = "DEFENSE_REJECTED")]
+    DefenseRejected,
+    #[serde(rename = "PENDING_PAYMENT")]
+    PendingPayment,
     #[serde(rename = "PAID")]
     Paid,
     #[serde(rename = "OVERDUE")]
     Overdue,
     #[serde(rename = "CANCELLED")]
     Cancelled,
-    #[serde(rename = "UNDER_APPEAL")]
-    UnderAppeal,
 }
 
 // ============================
@@ -95,7 +111,7 @@ pub struct VehicleFineDto {
     pub discount_amount: Option<Decimal>,
     pub paid_amount: Option<Decimal>,
     pub payment_date: Option<DateTime<Utc>>,
-    pub payment_status: FinePaymentStatus,
+    pub status: FineStatus,
     pub notes: Option<String>,
     pub is_deleted: bool,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -131,7 +147,7 @@ pub struct VehicleFineWithDetailsDto {
     pub discount_amount: Option<Decimal>,
     pub paid_amount: Option<Decimal>,
     pub payment_date: Option<DateTime<Utc>>,
-    pub payment_status: FinePaymentStatus,
+    pub status: FineStatus,
     pub notes: Option<String>,
     pub is_deleted: bool,
     pub created_at: DateTime<Utc>,
@@ -171,6 +187,26 @@ pub struct UpdateVehicleFinePayload {
     pub discount_amount: Option<Decimal>,
     pub paid_amount: Option<Decimal>,
     pub payment_date: Option<DateTime<Utc>>,
-    pub payment_status: Option<FinePaymentStatus>,
     pub notes: Option<String>,
+}
+
+// ============================
+// Fine Status Change DTOs
+// ============================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ChangeFineStatusPayload {
+    pub status: FineStatus,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct VehicleFineStatusHistoryDto {
+    pub id: Uuid,
+    pub vehicle_fine_id: Uuid,
+    pub old_status: Option<FineStatus>,
+    pub new_status: FineStatus,
+    pub reason: Option<String>,
+    pub changed_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
 }

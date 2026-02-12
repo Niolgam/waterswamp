@@ -10,16 +10,19 @@ use uuid::Uuid;
 pub struct VehicleFineService {
     fine_type_repo: Arc<dyn VehicleFineTypeRepositoryPort>,
     fine_repo: Arc<dyn VehicleFineRepositoryPort>,
+    status_history_repo: Arc<dyn VehicleFineStatusHistoryRepositoryPort>,
 }
 
 impl VehicleFineService {
     pub fn new(
         fine_type_repo: Arc<dyn VehicleFineTypeRepositoryPort>,
         fine_repo: Arc<dyn VehicleFineRepositoryPort>,
+        status_history_repo: Arc<dyn VehicleFineStatusHistoryRepositoryPort>,
     ) -> Self {
         Self {
             fine_type_repo,
             fine_repo,
+            status_history_repo,
         }
     }
 
@@ -179,6 +182,11 @@ impl VehicleFineService {
             .await
             .map_err(ServiceError::from)?;
 
+        // Record initial status in history
+        let _ = self.status_history_repo
+            .create(fine.id, None, fine.status.clone(), Some("Cadastro inicial"), created_by)
+            .await;
+
         self.fine_repo
             .find_with_details_by_id(fine.id)
             .await
@@ -240,7 +248,6 @@ impl VehicleFineService {
                 payload.discount_amount,
                 payload.paid_amount,
                 payload.payment_date,
-                payload.payment_status.as_ref(),
                 payload.notes.as_deref(),
                 updated_by,
             )
@@ -254,9 +261,59 @@ impl VehicleFineService {
             .ok_or(ServiceError::Internal("Falha ao buscar multa atualizada".to_string()))
     }
 
-    pub async fn delete_fine(&self, id: Uuid, deleted_by: Option<Uuid>) -> Result<bool, ServiceError> {
-        let _ = self.fine_repo.find_by_id(id).await.map_err(ServiceError::from)?
+    pub async fn change_fine_status(
+        &self,
+        id: Uuid,
+        payload: ChangeFineStatusPayload,
+        changed_by: Option<Uuid>,
+    ) -> Result<VehicleFineWithDetailsDto, ServiceError> {
+        let current = self.fine_repo.find_by_id(id).await.map_err(ServiceError::from)?
             .ok_or(ServiceError::NotFound("Multa não encontrada".to_string()))?;
+
+        if current.is_deleted {
+            return Err(ServiceError::BadRequest("Não é possível alterar status de multa excluída".to_string()));
+        }
+
+        if current.status == payload.status {
+            return Err(ServiceError::BadRequest("Multa já está neste status".to_string()));
+        }
+
+        // Record status change in history
+        let _ = self.status_history_repo
+            .create(id, Some(current.status), payload.status.clone(), payload.reason.as_deref(), changed_by)
+            .await;
+
+        // Update status
+        let _ = self.fine_repo
+            .update_status(id, &payload.status, changed_by)
+            .await
+            .map_err(ServiceError::from)?;
+
+        self.fine_repo
+            .find_with_details_by_id(id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::Internal("Falha ao buscar multa atualizada".to_string()))
+    }
+
+    pub async fn get_fine_status_history(
+        &self,
+        fine_id: Uuid,
+    ) -> Result<Vec<VehicleFineStatusHistoryDto>, ServiceError> {
+        let _ = self.fine_repo.find_by_id(fine_id).await.map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound("Multa não encontrada".to_string()))?;
+        self.status_history_repo.list_by_fine(fine_id).await.map_err(ServiceError::from)
+    }
+
+    pub async fn delete_fine(&self, id: Uuid, deleted_by: Option<Uuid>) -> Result<bool, ServiceError> {
+        let current = self.fine_repo.find_by_id(id).await.map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound("Multa não encontrada".to_string()))?;
+
+        // Record status change to CANCELLED in history
+        let _ = self.status_history_repo
+            .create(id, Some(current.status), FineStatus::Cancelled, Some("Multa excluída (soft delete)"), deleted_by)
+            .await;
+
         self.fine_repo.soft_delete(id, deleted_by).await.map_err(ServiceError::from)
     }
 
@@ -285,12 +342,12 @@ impl VehicleFineService {
         fine_type_id: Option<Uuid>,
         supplier_id: Option<Uuid>,
         driver_id: Option<Uuid>,
-        payment_status: Option<FinePaymentStatus>,
+        status: Option<FineStatus>,
         search: Option<String>,
         include_deleted: bool,
     ) -> Result<(Vec<VehicleFineWithDetailsDto>, i64), ServiceError> {
         self.fine_repo
-            .list(limit, offset, vehicle_id, fine_type_id, supplier_id, driver_id, payment_status, search, include_deleted)
+            .list(limit, offset, vehicle_id, fine_type_id, supplier_id, driver_id, status, search, include_deleted)
             .await
             .map_err(ServiceError::from)
     }
