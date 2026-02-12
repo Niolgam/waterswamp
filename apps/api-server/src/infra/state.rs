@@ -14,6 +14,7 @@ use application::services::user_service::UserService;
 use application::services::supplier_service::SupplierService;
 use application::services::vehicle_service::VehicleService;
 use application::services::driver_service::DriverService;
+use application::services::fueling_service::FuelingService;
 use application::external::SiorgSyncService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
@@ -58,6 +59,7 @@ pub struct AppState {
     pub supplier_service: Arc<SupplierService>,
     pub vehicle_service: Arc<VehicleService>,
     pub driver_service: Arc<DriverService>,
+    pub fueling_service: Arc<FuelingService>,
     pub config: Arc<Config>,
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,

@@ -15,3 +15,4 @@ pub mod user_repository;
 pub mod supplier_repository;
 pub mod vehicle_repository;
 pub mod driver_repository;
+pub mod fueling_repository;
