@@ -88,7 +88,21 @@ fn random_chassis() -> String {
 
 fn random_renavam() -> String {
     let uuid = Uuid::new_v4().simple().to_string();
-    uuid.chars().filter(|c| c.is_ascii_digit()).take(11).collect::<String>()
+    let mut digits: Vec<u32> = uuid
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .take(10)
+        .map(|c| c.to_digit(10).unwrap())
+        .collect();
+    while digits.len() < 10 {
+        digits.push(0);
+    }
+    let weights = [3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    let sum: u32 = digits.iter().zip(weights.iter()).map(|(d, w)| d * w).sum();
+    let check = (sum * 10) % 11;
+    let check_digit = if check >= 10 { 0 } else { check };
+    digits.push(check_digit);
+    digits.iter().map(|d| d.to_string()).collect()
 }
 
 /// Setup all prerequisite data and return (vehicle_id, driver_id, supplier_id, fuel_type_id)
