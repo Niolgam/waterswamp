@@ -65,16 +65,20 @@ fn generate_cnpj() -> String {
 
 fn random_plate() -> String {
     let hex = Uuid::new_v4().simple().to_string();
-    let chars: Vec<char> = hex.chars().collect();
+    let bytes = hex.as_bytes();
+    // Generate Mercosul format: ABC1D23
+    // Map hex nibbles to letters (A-F range) or digits (0-9 range) as needed
+    let letter = |b: u8| (b'A' + (b % 26)) as char;
+    let digit = |b: u8| (b'0' + (b % 10)) as char;
     format!(
         "{}{}{}{}{}{}{}",
-        chars[0].to_uppercase().next().unwrap_or('A'),
-        chars[1].to_uppercase().next().unwrap_or('B'),
-        chars[2].to_uppercase().next().unwrap_or('C'),
-        chars[3].to_digit(16).unwrap_or(1),
-        chars[4].to_uppercase().next().unwrap_or('D'),
-        chars[5].to_digit(16).unwrap_or(2),
-        chars[6].to_digit(16).unwrap_or(3),
+        letter(bytes[0]),
+        letter(bytes[1]),
+        letter(bytes[2]),
+        digit(bytes[3]),
+        letter(bytes[4]),
+        digit(bytes[5]),
+        digit(bytes[6]),
     )
 }
 

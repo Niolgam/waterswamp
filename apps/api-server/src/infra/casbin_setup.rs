@@ -991,6 +991,75 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Driver Management carregadas");
 
+    // ============================
+    // FUELING MANAGEMENT POLICIES
+    // ============================
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fuelings", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fuelings", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fuelings/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fuelings/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/fuelings/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Fueling Management carregadas");
+
+    // ============================
+    // VEHICLE FINES POLICIES
+    // ============================
+    // Fine Types
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fine-types", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fine-types", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fine-types/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fine-types/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fine-types/{id}", ACTION_DELETE])
+        .await?;
+
+    // Fines
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fines", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fines", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fines/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fines/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fines/{id}", ACTION_DELETE])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fines/{id}/restore", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fines/{id}/status", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/vehicle-fines/fines/{id}/history", ACTION_GET])
+        .await?;
+
+    info!("Políticas de Vehicle Fines carregadas");
+
     match enforcer.save_policy().await {
         Ok(_) => {
             info!("Políticas do Casbin carregadas e salvas no banco.");
