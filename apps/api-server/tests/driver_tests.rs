@@ -332,6 +332,14 @@ async fn test_create_driver_duplicate_cnh() {
 #[tokio::test]
 async fn test_create_driver_formatted_cpf() {
     let app = common::spawn_app().await;
+    let raw_cpf = generate_cpf();
+    let formatted_cpf = format!(
+        "{}.{}.{}-{}",
+        &raw_cpf[0..3],
+        &raw_cpf[3..6],
+        &raw_cpf[6..9],
+        &raw_cpf[9..11]
+    );
     let response = app
         .api
         .post("/api/admin/drivers")
@@ -339,7 +347,7 @@ async fn test_create_driver_formatted_cpf() {
         .json(&json!({
             "driver_type": "OUTSOURCED",
             "full_name": random_name("CPF Formatado"),
-            "cpf": "529.982.247-25",
+            "cpf": &formatted_cpf,
             "cnh_number": generate_cnh(),
             "cnh_category": "E",
             "cnh_expiration": "2028-01-01",
@@ -348,5 +356,5 @@ async fn test_create_driver_formatted_cpf() {
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let driver: Value = response.json();
     // CPF should be stored normalized (digits only)
-    assert_eq!(driver["cpf"], "52998224725");
+    assert_eq!(driver["cpf"], raw_cpf);
 }
