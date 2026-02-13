@@ -970,6 +970,27 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     info!("Políticas de Supplier Management carregadas");
 
+    // ============================
+    // DRIVER MANAGEMENT POLICIES
+    // ============================
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/drivers", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/drivers", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/drivers/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/drivers/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/drivers/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Driver Management carregadas");
+
     match enforcer.save_policy().await {
         Ok(_) => {
             info!("Políticas do Casbin carregadas e salvas no banco.");
