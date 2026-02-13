@@ -21,6 +21,7 @@ use application::services::{
     supplier_service::SupplierService,
     driver_service::DriverService,
     fueling_service::FuelingService,
+    vehicle_fine_service::VehicleFineService,
     user_service::UserService,
     vehicle_service::VehicleService,
 };
@@ -40,6 +41,7 @@ use domain::ports::{
     SupplierRepositoryPort,
     DriverRepositoryPort,
     FuelingRepositoryPort,
+    VehicleFineTypeRepositoryPort, VehicleFineRepositoryPort, VehicleFineStatusHistoryRepositoryPort,
     VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
 use persistence::repositories::{
@@ -64,6 +66,7 @@ use persistence::repositories::{
     supplier_repository::SupplierRepository,
     driver_repository::DriverRepository,
     fueling_repository::FuelingRepository,
+    vehicle_fine_repository::{VehicleFineTypeRepository, VehicleFineRepository, VehicleFineStatusHistoryRepository},
     vehicle_repository::{
         VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
         VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
@@ -296,6 +299,19 @@ pub fn build_application_state(
         vehicle_status_history_repo,
     ));
 
+    // Vehicle fine repositories and service
+    let vehicle_fine_type_repo: Arc<dyn VehicleFineTypeRepositoryPort> =
+        Arc::new(VehicleFineTypeRepository::new(pool_auth.clone()));
+    let vehicle_fine_repo: Arc<dyn VehicleFineRepositoryPort> =
+        Arc::new(VehicleFineRepository::new(pool_auth.clone()));
+    let vehicle_fine_status_history_repo: Arc<dyn VehicleFineStatusHistoryRepositoryPort> =
+        Arc::new(VehicleFineStatusHistoryRepository::new(pool_auth.clone()));
+    let vehicle_fine_service = Arc::new(VehicleFineService::new(
+        vehicle_fine_type_repo,
+        vehicle_fine_repo,
+        vehicle_fine_status_history_repo,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -329,6 +345,7 @@ pub fn build_application_state(
         vehicle_service,
         driver_service,
         fueling_service,
+        vehicle_fine_service,
         config,
 
         site_repository: site_repo_port,
