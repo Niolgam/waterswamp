@@ -23,7 +23,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 async fn main() -> Result<()> {
     // Load environment variables
     dotenvy::from_path("apps/siorg-worker/.env")
-        .or_else(|_| dotenvy::dotenv())
+        .or_else(|_| dotenvy::dotenv().map(|_| ()))
         .ok();
 
     // Initialize logging
@@ -46,19 +46,21 @@ async fn main() -> Result<()> {
 
     // Setup repositories
     info!("📦 Inicializando repositórios...");
+    let arc_pool = Arc::new(pool.clone());
+
     let sync_queue_repo: Arc<dyn SiorgSyncQueueRepositoryPort> =
         Arc::new(SiorgSyncQueueRepository::new(pool.clone()));
     let history_repo: Arc<dyn SiorgHistoryRepositoryPort> =
         Arc::new(SiorgHistoryRepository::new(pool.clone()));
 
     let organization_repo: Arc<dyn OrganizationRepositoryPort> =
-        Arc::new(OrganizationRepository::new(pool.clone()));
+        Arc::new(OrganizationRepository::new(arc_pool.clone()));
     let unit_repo: Arc<dyn OrganizationalUnitRepositoryPort> =
-        Arc::new(OrganizationalUnitRepository::new(pool.clone()));
+        Arc::new(OrganizationalUnitRepository::new(arc_pool.clone()));
     let category_repo: Arc<dyn OrganizationalUnitCategoryRepositoryPort> =
-        Arc::new(OrganizationalUnitCategoryRepository::new(pool.clone()));
+        Arc::new(OrganizationalUnitCategoryRepository::new(arc_pool.clone()));
     let type_repo: Arc<dyn OrganizationalUnitTypeRepositoryPort> =
-        Arc::new(OrganizationalUnitTypeRepository::new(pool.clone()));
+        Arc::new(OrganizationalUnitTypeRepository::new(arc_pool.clone()));
 
     // Setup SIORG client and sync service
     info!("🌐 Inicializando cliente SIORG...");
