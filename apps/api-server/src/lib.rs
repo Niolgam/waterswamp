@@ -225,7 +225,7 @@ pub fn build_application_state(
 
     // SIORG Sync Service
     let siorg_base_url = std::env::var("SIORG_API_URL")
-        .unwrap_or_else(|_| "https://api.siorg.gov.br".to_string());
+        .unwrap_or_else(|_| "https://estruturaorganizacional.dados.gov.br/doc".to_string());
     let siorg_token = std::env::var("SIORG_API_TOKEN").ok();
 
     let siorg_client = Arc::new(

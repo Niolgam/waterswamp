@@ -7,46 +7,113 @@ use std::time::Duration;
 // SIORG API Response Types
 // ============================================================================
 
+/// Envelope de metadados presente em todas as respostas da API.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SiorgOrganization {
-    pub codigo_siorg: i32,
-    pub sigla: String,
+#[serde(rename_all = "camelCase")]
+pub struct SiorgServico {
+    pub codigo_erro: Option<i32>,
+    pub mensagem: Option<String>,
+}
+
+/// Campos base de uma unidade organizacional (presentes na versão resumida e completa).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgUnidade {
+    pub codigo_unidade: String,
+    pub codigo_unidade_pai: Option<String>,
+    pub codigo_orgao_entidade: Option<String>,
+    pub codigo_tipo_unidade: Option<String>,
     pub nome: String,
-    pub cnpj: Option<String>,
-    pub codigo_ug: Option<i32>,
-    pub ativo: bool,
+    pub sigla: Option<String>,
+    pub codigo_esfera: Option<String>,
+    pub codigo_poder: Option<String>,
+    pub nivel_normatizacao: Option<String>,
+    pub versao_consulta: Option<String>,
+    /// Presente em /alteracoes: "INCLUSAO", "ALTERACAO", "EXCLUSAO", etc.
+    pub operacao: Option<String>,
+}
+
+impl SiorgUnidade {
+    /// Converte `codigo_unidade` (String na API) para i32.
+    pub fn siorg_code(&self) -> Option<i32> {
+        self.codigo_unidade.parse().ok()
+    }
+
+    /// Converte `codigo_unidade_pai` (String na API) para i32.
+    pub fn parent_siorg_code(&self) -> Option<i32> {
+        self.codigo_unidade_pai.as_ref().and_then(|s| s.parse().ok())
+    }
+
+    /// Retorna true se a operação indicar extinção/remoção da unidade.
+    pub fn is_exclusao(&self) -> bool {
+        self.operacao
+            .as_deref()
+            .map(|op| op.eq_ignore_ascii_case("EXCLUSAO") || op.eq_ignore_ascii_case("EXTINCAO"))
+            .unwrap_or(false)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SiorgUnit {
-    pub codigo_siorg: i32,
-    pub codigo_unidade_pai: Option<i32>,
-    pub nome: String,
-    pub tipo_unidade: String,
-    pub area_atuacao: String,
-    pub ativo: bool,
-    pub nivel_hierarquico: Option<i32>,
+#[serde(rename_all = "camelCase")]
+pub struct SiorgContato {
+    pub telefone: Option<Vec<String>>,
+    pub email: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SiorgUnitType {
-    pub codigo: String,
-    pub nome: String,
-    pub descricao: Option<String>,
+#[serde(rename_all = "camelCase")]
+pub struct SiorgEndereco {
+    pub logradouro: Option<String>,
+    pub numero: Option<String>,
+    pub complemento: Option<String>,
+    pub bairro: Option<String>,
+    pub cep: Option<String>,
+    pub uf: Option<String>,
+    pub municipio: Option<String>,
+    pub pais: Option<String>,
+    pub tipo_endereco: Option<String>,
 }
 
+/// Unidade organizacional com dados completos (resposta de /completa).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SiorgCategory {
-    pub nome: String,
-    pub descricao: Option<String>,
+#[serde(rename_all = "camelCase")]
+pub struct SiorgUnidadeCompleta {
+    #[serde(flatten)]
+    pub base: SiorgUnidade,
+    pub codigo_categoria_unidade: Option<String>,
+    pub area_atuacao: Option<String>,
+    pub competencia: Option<String>,
+    pub missao: Option<String>,
+    pub contato: Option<Vec<SiorgContato>>,
+    pub endereco: Option<Vec<SiorgEndereco>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SiorgApiResponse<T> {
-    pub data: Vec<T>,
-    pub total: i64,
-    pub page: i32,
-    pub page_size: i32,
+impl SiorgUnidadeCompleta {
+    pub fn siorg_code(&self) -> Option<i32> {
+        self.base.siorg_code()
+    }
+
+    pub fn parent_siorg_code(&self) -> Option<i32> {
+        self.base.parent_siorg_code()
+    }
+}
+
+// Wrappers de resposta da API
+
+/// Resposta de /unidade-organizacional/{cod}/completa e /estrutura-organizacional/completa
+#[derive(Debug, Deserialize)]
+pub struct SiorgEstruturaCompletaResponse {
+    pub servico: SiorgServico,
+    /// A API usa a chave "unidade" (singular) mesmo retornando um array.
+    pub unidade: Vec<SiorgUnidadeCompleta>,
+}
+
+/// Resposta de /estrutura-organizacional/alteracoes
+#[derive(Debug, Deserialize)]
+pub struct SiorgAlteracoesResponse {
+    pub servico: SiorgServico,
+    /// A API usa a chave "unidades" (plural) no endpoint de alterações.
+    pub unidades: Vec<SiorgUnidade>,
 }
 
 // ============================================================================
@@ -57,261 +124,151 @@ pub struct SiorgApiResponse<T> {
 pub struct SiorgClient {
     client: Client,
     base_url: String,
-    api_token: Option<String>,
 }
 
 impl SiorgClient {
-    /// Creates a new SIORG API client
-    pub fn new(base_url: String, api_token: Option<String>) -> Result<Self> {
+    /// Cria um novo cliente da API SIORG.
+    /// `_api_token` é aceito por compatibilidade, mas a API é pública e não exige autenticação.
+    pub fn new(base_url: String, _api_token: Option<String>) -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(10))
             .build()
             .context("Failed to build HTTP client")?;
 
-        Ok(Self {
-            client,
-            base_url,
-            api_token,
-        })
-    }
-
-    /// Helper to add authentication headers
-    fn add_auth_header(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        if let Some(token) = &self.api_token {
-            request.header("Authorization", format!("Bearer {}", token))
-        } else {
-            request
-        }
+        Ok(Self { client, base_url })
     }
 
     // ========================================================================
-    // Organizations
+    // Unidade Organizacional
     // ========================================================================
 
-    /// Fetch organization by SIORG code
-    pub async fn get_organization(&self, siorg_code: i32) -> Result<Option<SiorgOrganization>> {
-        let url = format!("{}/api/v1/organizacoes/{}", self.base_url, siorg_code);
-
-        let request = self.client.get(&url);
-        let request = self.add_auth_header(request);
-
-        let response = request
-            .send()
-            .await
-            .context("Failed to fetch organization from SIORG")?;
-
-        if response.status().is_success() {
-            let org = response
-                .json::<SiorgOrganization>()
-                .await
-                .context("Failed to parse SIORG organization response")?;
-            Ok(Some(org))
-        } else if response.status() == 404 {
-            Ok(None)
-        } else {
-            anyhow::bail!("SIORG API error: {}", response.status())
-        }
-    }
-
-    /// List all organizations with pagination
-    pub async fn list_organizations(
+    /// Busca uma unidade organizacional e toda a hierarquia abaixo dela (dados completos).
+    ///
+    /// Endpoint: `GET /unidade-organizacional/{codigo}/completa`
+    ///
+    /// A resposta contém a própria unidade solicitada como primeiro elemento (ou identificada
+    /// pelo `codigoUnidade`) seguida de todas as unidades-filha na hierarquia.
+    /// Retorna `None` se a unidade não existir (HTTP 404).
+    pub async fn get_unit_complete(
         &self,
-        page: i32,
-        page_size: i32,
-    ) -> Result<SiorgApiResponse<SiorgOrganization>> {
-        let url = format!(
-            "{}/api/v1/organizacoes?page={}&page_size={}",
-            self.base_url, page, page_size
-        );
+        codigo: i32,
+    ) -> Result<Option<SiorgUnidadeCompleta>> {
+        let url = format!("{}/unidade-organizacional/{}/completa", self.base_url, codigo);
 
-        let request = self.client.get(&url);
-        let request = self.add_auth_header(request);
-
-        let response = request
-            .send()
-            .await
-            .context("Failed to list organizations from SIORG")?;
-
-        if response.status().is_success() {
-            response
-                .json::<SiorgApiResponse<SiorgOrganization>>()
-                .await
-                .context("Failed to parse SIORG organizations list")
-        } else {
-            anyhow::bail!("SIORG API error: {}", response.status())
-        }
-    }
-
-    // ========================================================================
-    // Organizational Units
-    // ========================================================================
-
-    /// Fetch organizational unit by SIORG code
-    pub async fn get_unit(&self, siorg_code: i32) -> Result<Option<SiorgUnit>> {
-        let url = format!("{}/api/v1/unidades/{}", self.base_url, siorg_code);
-
-        let request = self.client.get(&url);
-        let request = self.add_auth_header(request);
-
-        let response = request
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .context("Failed to fetch unit from SIORG")?;
 
-        if response.status().is_success() {
-            let unit = response
-                .json::<SiorgUnit>()
-                .await
-                .context("Failed to parse SIORG unit response")?;
-            Ok(Some(unit))
-        } else if response.status() == 404 {
-            Ok(None)
-        } else {
-            anyhow::bail!("SIORG API error: {}", response.status())
+        if response.status() == 404 {
+            return Ok(None);
         }
+
+        if !response.status().is_success() {
+            anyhow::bail!("SIORG API error: {}", response.status());
+        }
+
+        let parsed = response
+            .json::<SiorgEstruturaCompletaResponse>()
+            .await
+            .context("Failed to parse SIORG unit response")?;
+
+        let codigo_str = codigo.to_string();
+        let unit = parsed
+            .unidade
+            .into_iter()
+            .find(|u| u.base.codigo_unidade == codigo_str);
+
+        Ok(unit)
     }
 
-    /// List units for a specific organization
-    pub async fn list_units_by_organization(
+    // ========================================================================
+    // Estrutura Organizacional
+    // ========================================================================
+
+    /// Retorna todos os dados completos de todas as unidades de um órgão/entidade.
+    ///
+    /// Endpoint: `GET /estrutura-organizacional/completa?codigoUnidade={codigo}`
+    ///
+    /// Uma única chamada retorna toda a estrutura hierárquica, eliminando a necessidade
+    /// de paginação e de chamadas individuais por unidade.
+    pub async fn get_estrutura_completa(
         &self,
-        org_siorg_code: i32,
-        page: i32,
-        page_size: i32,
-    ) -> Result<SiorgApiResponse<SiorgUnit>> {
+        codigo_unidade: i32,
+    ) -> Result<Vec<SiorgUnidadeCompleta>> {
         let url = format!(
-            "{}/api/v1/organizacoes/{}/unidades?page={}&page_size={}",
-            self.base_url, org_siorg_code, page, page_size
+            "{}/estrutura-organizacional/completa?codigoUnidade={}",
+            self.base_url, codigo_unidade
         );
 
-        let request = self.client.get(&url);
-        let request = self.add_auth_header(request);
-
-        let response = request
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
-            .context("Failed to list units from SIORG")?;
+            .context("Failed to fetch organizational structure from SIORG")?;
 
-        if response.status().is_success() {
-            response
-                .json::<SiorgApiResponse<SiorgUnit>>()
-                .await
-                .context("Failed to parse SIORG units list")
-        } else {
-            anyhow::bail!("SIORG API error: {}", response.status())
+        if response.status() == 404 {
+            return Ok(vec![]);
         }
-    }
 
-    /// Fetch unit hierarchy (parent and children)
-    pub async fn get_unit_hierarchy(&self, siorg_code: i32) -> Result<Vec<SiorgUnit>> {
-        let url = format!("{}/api/v1/unidades/{}/hierarquia", self.base_url, siorg_code);
+        if !response.status().is_success() {
+            anyhow::bail!("SIORG API error: {}", response.status());
+        }
 
-        let request = self.client.get(&url);
-        let request = self.add_auth_header(request);
-
-        let response = request
-            .send()
+        let parsed = response
+            .json::<SiorgEstruturaCompletaResponse>()
             .await
-            .context("Failed to fetch unit hierarchy from SIORG")?;
+            .context("Failed to parse SIORG organizational structure response")?;
 
-        if response.status().is_success() {
-            response
-                .json::<Vec<SiorgUnit>>()
-                .await
-                .context("Failed to parse SIORG unit hierarchy")
-        } else {
-            anyhow::bail!("SIORG API error: {}", response.status())
-        }
+        Ok(parsed.unidade)
     }
 
     // ========================================================================
-    // Unit Types
+    // Alterações (Sync Incremental)
     // ========================================================================
 
-    /// List all unit types
-    pub async fn list_unit_types(&self) -> Result<Vec<SiorgUnitType>> {
-        let url = format!("{}/api/v1/tipos-unidade", self.base_url);
-
-        let request = self.client.get(&url);
-        let request = self.add_auth_header(request);
-
-        let response = request
-            .send()
-            .await
-            .context("Failed to list unit types from SIORG")?;
-
-        if response.status().is_success() {
-            response
-                .json::<Vec<SiorgUnitType>>()
-                .await
-                .context("Failed to parse SIORG unit types")
-        } else {
-            anyhow::bail!("SIORG API error: {}", response.status())
-        }
-    }
-
-    // ========================================================================
-    // Categories
-    // ========================================================================
-
-    /// List all unit categories
-    pub async fn list_categories(&self) -> Result<Vec<SiorgCategory>> {
-        let url = format!("{}/api/v1/categorias", self.base_url);
-
-        let request = self.client.get(&url);
-        let request = self.add_auth_header(request);
-
-        let response = request
-            .send()
-            .await
-            .context("Failed to list categories from SIORG")?;
-
-        if response.status().is_success() {
-            response
-                .json::<Vec<SiorgCategory>>()
-                .await
-                .context("Failed to parse SIORG categories")
-        } else {
-            anyhow::bail!("SIORG API error: {}", response.status())
-        }
-    }
-
-    // ========================================================================
-    // Changes / Sync
-    // ========================================================================
-
-    /// Fetch recent changes since a specific timestamp
-    pub async fn get_changes_since(
-        &self,
-        since_timestamp: chrono::DateTime<chrono::Utc>,
-    ) -> Result<Vec<SiorgChangeEvent>> {
+    /// Retorna unidades incluídas, alteradas e excluídas a partir de uma versão de referência.
+    ///
+    /// Endpoint: `GET /estrutura-organizacional/alteracoes?versaoReferencia={versao}`
+    ///
+    /// O campo `operacao` em cada unidade indica o tipo de mudança
+    /// ("INCLUSAO", "ALTERACAO", "EXCLUSAO", etc.).
+    pub async fn get_alteracoes(&self, versao_referencia: &str) -> Result<Vec<SiorgUnidade>> {
         let url = format!(
-            "{}/api/v1/mudancas?desde={}",
-            self.base_url,
-            since_timestamp.to_rfc3339()
+            "{}/estrutura-organizacional/alteracoes?versaoReferencia={}",
+            self.base_url, versao_referencia
         );
 
-        let request = self.client.get(&url);
-        let request = self.add_auth_header(request);
-
-        let response = request
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
-            .context("Failed to fetch changes from SIORG")?;
+            .context("Failed to fetch SIORG changes")?;
 
-        if response.status().is_success() {
-            response
-                .json::<Vec<SiorgChangeEvent>>()
-                .await
-                .context("Failed to parse SIORG changes")
-        } else {
-            anyhow::bail!("SIORG API error: {}", response.status())
+        if !response.status().is_success() {
+            anyhow::bail!("SIORG API error: {}", response.status());
         }
+
+        let parsed = response
+            .json::<SiorgAlteracoesResponse>()
+            .await
+            .context("Failed to parse SIORG changes response")?;
+
+        Ok(parsed.unidades)
     }
 
-    /// Health check
+    // ========================================================================
+    // Health Check
+    // ========================================================================
+
+    /// Verifica disponibilidade da API SIORG.
     pub async fn health_check(&self) -> Result<bool> {
-        let url = format!("{}/health", self.base_url);
+        let url = format!("{}/tipo-unidade", self.base_url);
 
         let response = self
             .client
@@ -323,19 +280,6 @@ impl SiorgClient {
 
         Ok(response.status().is_success())
     }
-}
-
-// ============================================================================
-// Change Events
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SiorgChangeEvent {
-    pub tipo_entidade: String, // "ORGANIZATION", "UNIT", "CATEGORY", "TYPE"
-    pub codigo_siorg: i32,
-    pub tipo_mudanca: String, // "CREATION", "UPDATE", "EXTINCTION", etc.
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub dados: serde_json::Value,
 }
 
 // ============================================================================
@@ -351,27 +295,58 @@ impl MockSiorgClient {
         Self
     }
 
-    pub async fn get_organization(&self, _siorg_code: i32) -> Result<Option<SiorgOrganization>> {
-        Ok(Some(SiorgOrganization {
-            codigo_siorg: 123456,
-            sigla: "UFMT".to_string(),
-            nome: "Universidade Federal de Mato Grosso".to_string(),
-            cnpj: Some("03000000000191".to_string()),
-            codigo_ug: Some(154048),
-            ativo: true,
+    pub async fn get_unit_complete(
+        &self,
+        codigo: i32,
+    ) -> Result<Option<SiorgUnidadeCompleta>> {
+        Ok(Some(SiorgUnidadeCompleta {
+            base: SiorgUnidade {
+                codigo_unidade: codigo.to_string(),
+                codigo_unidade_pai: None,
+                codigo_orgao_entidade: Some(codigo.to_string()),
+                codigo_tipo_unidade: Some("1".to_string()),
+                nome: "Universidade Federal de Mato Grosso".to_string(),
+                sigla: Some("UFMT".to_string()),
+                codigo_esfera: Some("1".to_string()),
+                codigo_poder: Some("1".to_string()),
+                nivel_normatizacao: None,
+                versao_consulta: None,
+                operacao: None,
+            },
+            codigo_categoria_unidade: None,
+            area_atuacao: Some("FIM".to_string()),
+            competencia: None,
+            missao: None,
+            contato: None,
+            endereco: None,
         }))
     }
 
-    pub async fn get_unit(&self, _siorg_code: i32) -> Result<Option<SiorgUnit>> {
-        Ok(Some(SiorgUnit {
-            codigo_siorg: 789012,
-            codigo_unidade_pai: None,
-            nome: "Reitoria".to_string(),
-            tipo_unidade: "ADMINISTRATION".to_string(),
-            area_atuacao: "SUPPORT".to_string(),
-            ativo: true,
-            nivel_hierarquico: Some(1),
-        }))
+    pub async fn get_estrutura_completa(
+        &self,
+        codigo_unidade: i32,
+    ) -> Result<Vec<SiorgUnidadeCompleta>> {
+        Ok(vec![SiorgUnidadeCompleta {
+            base: SiorgUnidade {
+                codigo_unidade: "789012".to_string(),
+                codigo_unidade_pai: Some(codigo_unidade.to_string()),
+                codigo_orgao_entidade: Some(codigo_unidade.to_string()),
+                codigo_tipo_unidade: Some("2".to_string()),
+                nome: "Reitoria".to_string(),
+                sigla: Some("REITORIA".to_string()),
+                codigo_esfera: Some("1".to_string()),
+                codigo_poder: Some("1".to_string()),
+                nivel_normatizacao: None,
+                versao_consulta: None,
+                operacao: None,
+            },
+            codigo_categoria_unidade: None,
+            area_atuacao: Some("MEIO".to_string()),
+            competencia: None,
+            missao: None,
+            contato: None,
+            endereco: None,
+        }])
     }
 
     pub async fn health_check(&self) -> Result<bool> {

@@ -1,4 +1,4 @@
-use crate::external::siorg_client::{SiorgOrganization, SiorgUnit};
+use crate::external::siorg_client::SiorgUnidadeCompleta;
 use domain::errors::RepositoryError;
 use domain::models::organizational::*;
 use domain::ports::{
@@ -8,7 +8,7 @@ use domain::ports::{
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::info;
 use uuid::Uuid;
 
 // ============================================================================
@@ -82,7 +82,7 @@ impl ConflictResolutionService {
         queue_item: SiorgSyncQueueItem,
     ) -> Result<ConflictDetail, ServiceError> {
         // Parse SIORG data
-        let siorg_org: SiorgOrganization = serde_json::from_value(queue_item.payload.clone())
+        let siorg_org: SiorgUnidadeCompleta = serde_json::from_value(queue_item.payload.clone())
             .map_err(|e| ServiceError::InvalidData(format!("Failed to parse SIORG data: {}", e)))?;
 
         // Get local organization
@@ -107,7 +107,7 @@ impl ConflictResolutionService {
             entity_type: SiorgEntityType::Organization,
             fields,
             local_entity_name: Some(local_org.name.clone()),
-            siorg_entity_name: Some(siorg_org.nome.clone()),
+            siorg_entity_name: Some(siorg_org.base.nome.clone()),
         })
     }
 
@@ -117,7 +117,7 @@ impl ConflictResolutionService {
         queue_item: SiorgSyncQueueItem,
     ) -> Result<ConflictDetail, ServiceError> {
         // Parse SIORG data
-        let siorg_unit: SiorgUnit = serde_json::from_value(queue_item.payload.clone())
+        let siorg_unit: SiorgUnidadeCompleta = serde_json::from_value(queue_item.payload.clone())
             .map_err(|e| ServiceError::InvalidData(format!("Failed to parse SIORG data: {}", e)))?;
 
         // Get local unit
@@ -142,7 +142,7 @@ impl ConflictResolutionService {
             entity_type: SiorgEntityType::Unit,
             fields,
             local_entity_name: Some(local_unit.name.clone()),
-            siorg_entity_name: Some(siorg_unit.nome.clone()),
+            siorg_entity_name: Some(siorg_unit.base.nome.clone()),
         })
     }
 
@@ -154,68 +154,34 @@ impl ConflictResolutionService {
     fn compare_organization_fields(
         &self,
         local: &OrganizationDto,
-        siorg: &SiorgOrganization,
+        siorg: &SiorgUnidadeCompleta,
     ) -> Vec<ConflictDiff> {
         let mut fields = Vec::new();
 
         // Name
-        let name_conflict = local.name != siorg.nome;
+        let name_conflict = local.name != siorg.base.nome;
         fields.push(ConflictDiff {
             field: "name".to_string(),
             local_value: Some(json!(local.name)),
-            siorg_value: Some(json!(siorg.nome)),
+            siorg_value: Some(json!(siorg.base.nome)),
             field_type: "string".to_string(),
             has_conflict: name_conflict,
             metadata: None,
         });
 
         // Acronym
-        let acronym_conflict = local.acronym != siorg.sigla;
+        let siorg_sigla = siorg.base.sigla.as_deref().unwrap_or("");
+        let acronym_conflict = local.acronym != siorg_sigla;
         fields.push(ConflictDiff {
             field: "acronym".to_string(),
             local_value: Some(json!(local.acronym)),
-            siorg_value: Some(json!(siorg.sigla)),
+            siorg_value: Some(json!(siorg_sigla)),
             field_type: "string".to_string(),
             has_conflict: acronym_conflict,
             metadata: None,
         });
 
-        // CNPJ
-        if let Some(siorg_cnpj) = &siorg.cnpj {
-            let cnpj_conflict = local.cnpj != *siorg_cnpj;
-            fields.push(ConflictDiff {
-                field: "cnpj".to_string(),
-                local_value: Some(json!(local.cnpj)),
-                siorg_value: Some(json!(siorg_cnpj)),
-                field_type: "string".to_string(),
-                has_conflict: cnpj_conflict,
-                metadata: Some(json!({ "format": "##.###.###/####-##" })),
-            });
-        }
-
-        // UG Code
-        if let Some(siorg_ug) = siorg.codigo_ug {
-            let ug_conflict = local.ug_code != siorg_ug;
-            fields.push(ConflictDiff {
-                field: "ug_code".to_string(),
-                local_value: Some(json!(local.ug_code)),
-                siorg_value: Some(json!(siorg_ug)),
-                field_type: "integer".to_string(),
-                has_conflict: ug_conflict,
-                metadata: Some(json!({ "label": "Código UG SIAFI" })),
-            });
-        }
-
-        // Active status
-        let active_conflict = local.is_active != siorg.ativo;
-        fields.push(ConflictDiff {
-            field: "is_active".to_string(),
-            local_value: Some(json!(local.is_active)),
-            siorg_value: Some(json!(siorg.ativo)),
-            field_type: "boolean".to_string(),
-            has_conflict: active_conflict,
-            metadata: None,
-        });
+        // CNPJ e UG Code não são fornecidos pela API SIORG pública — omitidos da comparação.
 
         fields
     }
@@ -224,43 +190,29 @@ impl ConflictResolutionService {
     fn compare_unit_fields(
         &self,
         local: &OrganizationalUnitDto,
-        siorg: &SiorgUnit,
+        siorg: &SiorgUnidadeCompleta,
     ) -> Vec<ConflictDiff> {
         let mut fields = Vec::new();
 
         // Name
-        let name_conflict = local.name != siorg.nome;
+        let name_conflict = local.name != siorg.base.nome;
         fields.push(ConflictDiff {
             field: "name".to_string(),
             local_value: Some(json!(local.name)),
-            siorg_value: Some(json!(siorg.nome)),
+            siorg_value: Some(json!(siorg.base.nome)),
             field_type: "string".to_string(),
             has_conflict: name_conflict,
             metadata: None,
         });
 
-        // Note: formal_name and acronym not available in SIORG API data
-
-        // Active status
-        let active_conflict = local.is_active != siorg.ativo;
-        fields.push(ConflictDiff {
-            field: "is_active".to_string(),
-            local_value: Some(json!(local.is_active)),
-            siorg_value: Some(json!(siorg.ativo)),
-            field_type: "boolean".to_string(),
-            has_conflict: active_conflict,
-            metadata: None,
-        });
-
         // Parent (hierarchy) - this is complex and requires metadata
-        if let Some(siorg_parent) = siorg.codigo_unidade_pai {
-            let parent_conflict = true; // Always show as potential conflict
+        if let Some(siorg_parent) = siorg.base.parent_siorg_code() {
             fields.push(ConflictDiff {
                 field: "parent".to_string(),
                 local_value: local.parent_id.map(|id| json!(id)),
                 siorg_value: Some(json!(siorg_parent)),
                 field_type: "reference".to_string(),
-                has_conflict: parent_conflict,
+                has_conflict: true,
                 metadata: Some(json!({
                     "type": "organizational_unit",
                     "siorg_parent_code": siorg_parent,

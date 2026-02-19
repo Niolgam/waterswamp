@@ -1,4 +1,4 @@
-use super::siorg_client::{SiorgClient, SiorgOrganization, SiorgUnit};
+use super::siorg_client::{SiorgClient, SiorgUnidadeCompleta};
 use domain::models::organizational::*;
 use domain::ports::*;
 use std::sync::Arc;
@@ -45,50 +45,48 @@ impl SiorgSyncService {
     ) -> Result<OrganizationDto, SyncError> {
         info!("Syncing organization with SIORG code {}", siorg_code);
 
-        // Fetch from SIORG
-        let siorg_org = self
+        let siorg_unit = self
             .siorg_client
-            .get_organization(siorg_code)
+            .get_unit_complete(siorg_code)
             .await
             .map_err(|e| SyncError::ApiError(e.to_string()))?
             .ok_or_else(|| SyncError::NotFoundInSiorg(siorg_code))?;
 
-        // Check if organization exists locally
         if let Some(local_org) = self
             .organization_repo
             .find_by_siorg_code(siorg_code)
             .await
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?
         {
-            // Update existing
-            self.update_organization_from_siorg(local_org.id, &siorg_org)
+            self.update_organization_from_siorg(local_org.id, &siorg_unit)
                 .await
         } else {
-            // Create new
-            self.create_organization_from_siorg(&siorg_org).await
+            self.create_organization_from_siorg(&siorg_unit).await
         }
     }
 
     async fn create_organization_from_siorg(
         &self,
-        siorg_org: &SiorgOrganization,
+        siorg_unit: &SiorgUnidadeCompleta,
     ) -> Result<OrganizationDto, SyncError> {
-        let cnpj = siorg_org
-            .cnpj
-            .as_ref()
-            .ok_or_else(|| SyncError::MissingRequiredField("CNPJ".to_string()))?
-            .clone();
+        let siorg_code = siorg_unit
+            .siorg_code()
+            .ok_or_else(|| SyncError::MissingRequiredField("codigo_unidade".to_string()))?;
 
-        let ug_code = siorg_org
-            .codigo_ug
-            .ok_or_else(|| SyncError::MissingRequiredField("UG Code".to_string()))?;
+        // CNPJ e código UG não são fornecidos pela API SIORG pública.
+        // Criamos o registro com valores vazios; o operador deve preenchê-los manualmente.
+        warn!(
+            "Criando organização siorg={} sem CNPJ/UG (não disponíveis na API SIORG). \
+             Preencha manualmente após a sincronização.",
+            siorg_code
+        );
 
         let payload = CreateOrganizationPayload {
-            acronym: siorg_org.sigla.clone(),
-            name: siorg_org.nome.clone(),
-            cnpj,
-            ug_code,
-            siorg_code: siorg_org.codigo_siorg,
+            acronym: siorg_unit.base.sigla.clone().unwrap_or_default(),
+            name: siorg_unit.base.nome.clone(),
+            cnpj: String::new(),
+            ug_code: 0,
+            siorg_code,
             address: None,
             city: None,
             state: None,
@@ -97,7 +95,7 @@ impl SiorgSyncService {
             email: None,
             website: None,
             logo_url: None,
-            is_active: siorg_org.ativo,
+            is_active: true,
         };
 
         self.organization_repo
@@ -109,11 +107,11 @@ impl SiorgSyncService {
     async fn update_organization_from_siorg(
         &self,
         org_id: Uuid,
-        siorg_org: &SiorgOrganization,
+        siorg_unit: &SiorgUnidadeCompleta,
     ) -> Result<OrganizationDto, SyncError> {
         let payload = UpdateOrganizationPayload {
-            acronym: Some(siorg_org.sigla.clone()),
-            name: Some(siorg_org.nome.clone()),
+            acronym: siorg_unit.base.sigla.clone(),
+            name: Some(siorg_unit.base.nome.clone()),
             address: None,
             city: None,
             state: None,
@@ -122,7 +120,7 @@ impl SiorgSyncService {
             email: None,
             website: None,
             logo_url: None,
-            is_active: Some(siorg_org.ativo),
+            is_active: Some(true),
         };
 
         self.organization_repo
@@ -179,39 +177,51 @@ impl SiorgSyncService {
     // Unit Sync
     // ========================================================================
 
-    /// Synchronize a single organizational unit from SIORG
+    /// Synchronize a single organizational unit from SIORG by SIORG code.
+    ///
+    /// Faz uma chamada HTTP e persiste apenas a unidade solicitada.
+    /// Para sincronizar todas as unidades de um órgão de forma eficiente,
+    /// use `sync_organization_units` que faz uma única chamada para toda a estrutura.
     pub async fn sync_unit(&self, siorg_code: i32) -> Result<OrganizationalUnitDto, SyncError> {
         info!("Syncing unit with SIORG code {}", siorg_code);
 
-        // Fetch from SIORG
         let siorg_unit = self
             .siorg_client
-            .get_unit(siorg_code)
+            .get_unit_complete(siorg_code)
             .await
             .map_err(|e| SyncError::ApiError(e.to_string()))?
             .ok_or_else(|| SyncError::NotFoundInSiorg(siorg_code))?;
 
-        // Check if unit exists locally
+        self.upsert_unit(&siorg_unit).await
+    }
+
+    /// Persiste uma unidade organizacional (create ou update) sem realizar chamada HTTP.
+    /// Usado internamente por `sync_organization_units` para processar o resultado
+    /// em lote de `get_estrutura_completa`.
+    async fn upsert_unit(
+        &self,
+        siorg_unit: &SiorgUnidadeCompleta,
+    ) -> Result<OrganizationalUnitDto, SyncError> {
+        let siorg_code = siorg_unit
+            .siorg_code()
+            .ok_or_else(|| SyncError::MissingRequiredField("codigo_unidade".to_string()))?;
+
         if let Some(local_unit) = self
             .unit_repo
             .find_by_siorg_code(siorg_code)
             .await
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?
         {
-            // Update existing
-            self.update_unit_from_siorg(local_unit.id, &siorg_unit)
-                .await
+            self.update_unit_from_siorg(local_unit.id, siorg_unit).await
         } else {
-            // Create new
-            self.create_unit_from_siorg(&siorg_unit).await
+            self.create_unit_from_siorg(siorg_unit).await
         }
     }
 
     async fn create_unit_from_siorg(
         &self,
-        siorg_unit: &SiorgUnit,
+        siorg_unit: &SiorgUnidadeCompleta,
     ) -> Result<OrganizationalUnitDto, SyncError> {
-        // Find organization (required)
         let organization = self
             .organization_repo
             .find_main()
@@ -219,20 +229,21 @@ impl SiorgSyncService {
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?
             .ok_or_else(|| SyncError::MissingRequiredField("Main Organization".to_string()))?;
 
-        // Find or create category
+        let tipo_unidade = siorg_unit
+            .base
+            .codigo_tipo_unidade
+            .as_deref()
+            .unwrap_or("SECTOR");
+
         let category = self
             .find_or_create_category("Default SIORG Category")
             .await?;
 
-        // Find or create type based on tipo_unidade
-        let unit_type = self
-            .find_or_create_type(&siorg_unit.tipo_unidade)
-            .await?;
+        let unit_type = self.find_or_create_type(tipo_unidade).await?;
 
-        // Find parent if exists
-        let parent_id = if let Some(parent_siorg_code) = siorg_unit.codigo_unidade_pai {
+        let parent_id = if let Some(parent_code) = siorg_unit.parent_siorg_code() {
             self.unit_repo
-                .find_by_siorg_code(parent_siorg_code)
+                .find_by_siorg_code(parent_code)
                 .await
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?
                 .map(|u| u.id)
@@ -240,15 +251,13 @@ impl SiorgSyncService {
             None
         };
 
-        // Parse activity area
-        let activity_area = match siorg_unit.area_atuacao.to_uppercase().as_str() {
-            "SUPPORT" | "MEIO" => ActivityArea::Support,
+        let area_atuacao = siorg_unit.area_atuacao.as_deref().unwrap_or("MEIO");
+        let activity_area = match area_atuacao.to_uppercase().as_str() {
             "CORE" | "FIM" => ActivityArea::Core,
-            _ => ActivityArea::Support, // Default
+            _ => ActivityArea::Support,
         };
 
-        // Parse internal type
-        let internal_type = match siorg_unit.tipo_unidade.to_uppercase().as_str() {
+        let internal_type = match tipo_unidade.to_uppercase().as_str() {
             "ADMINISTRATION" => InternalUnitType::Administration,
             "DEPARTMENT" => InternalUnitType::Department,
             "LABORATORY" => InternalUnitType::Laboratory,
@@ -256,8 +265,10 @@ impl SiorgSyncService {
             "COORDINATION" => InternalUnitType::Coordination,
             "CENTER" => InternalUnitType::Center,
             "DIVISION" => InternalUnitType::Division,
-            _ => InternalUnitType::Sector, // Default
+            _ => InternalUnitType::Sector,
         };
+
+        let siorg_code = siorg_unit.siorg_code();
 
         let payload = CreateOrganizationalUnitPayload {
             organization_id: organization.id,
@@ -265,13 +276,13 @@ impl SiorgSyncService {
             category_id: category.id,
             unit_type_id: unit_type.id,
             internal_type,
-            name: siorg_unit.nome.clone(),
+            name: siorg_unit.base.nome.clone(),
             formal_name: None,
-            acronym: None,
-            siorg_code: Some(siorg_unit.codigo_siorg),
+            acronym: siorg_unit.base.sigla.clone(),
+            siorg_code,
             activity_area,
             contact_info: ContactInfo::default(),
-            is_active: siorg_unit.ativo,
+            is_active: true,
         };
 
         self.unit_repo
@@ -283,12 +294,11 @@ impl SiorgSyncService {
     async fn update_unit_from_siorg(
         &self,
         unit_id: Uuid,
-        siorg_unit: &SiorgUnit,
+        siorg_unit: &SiorgUnidadeCompleta,
     ) -> Result<OrganizationalUnitDto, SyncError> {
-        // Find parent if exists and changed
-        let parent_id = if let Some(parent_siorg_code) = siorg_unit.codigo_unidade_pai {
+        let parent_id = if let Some(parent_code) = siorg_unit.parent_siorg_code() {
             self.unit_repo
-                .find_by_siorg_code(parent_siorg_code)
+                .find_by_siorg_code(parent_code)
                 .await
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?
                 .map(|u| u.id)
@@ -301,12 +311,12 @@ impl SiorgSyncService {
             category_id: None,
             unit_type_id: None,
             internal_type: None,
-            name: Some(siorg_unit.nome.clone()),
+            name: Some(siorg_unit.base.nome.clone()),
             formal_name: None,
-            acronym: None,
+            acronym: siorg_unit.base.sigla.clone(),
             activity_area: None,
             contact_info: None,
-            is_active: Some(siorg_unit.ativo),
+            is_active: Some(true),
             deactivation_reason: None,
         };
 
@@ -349,7 +359,6 @@ impl SiorgSyncService {
         for org in siorg_orgs {
             summary.total_processed += 1;
 
-            // Sync organization metadata
             if let Err(e) = self.sync_organization(org.siorg_code).await {
                 summary.failed += 1;
                 summary
@@ -363,7 +372,6 @@ impl SiorgSyncService {
             }
             summary.updated += 1;
 
-            // Sync all units of this organization
             match self.sync_organization_units(org.siorg_code).await {
                 Ok(units_summary) => {
                     summary.total_processed += units_summary.total_processed;
@@ -390,15 +398,25 @@ impl SiorgSyncService {
         Ok(summary)
     }
 
-    /// Synchronize all units for an organization
+    /// Synchronize all units for an organization.
+    ///
+    /// Faz uma única chamada HTTP (`GET /estrutura-organizacional/completa?codigoUnidade=X`)
+    /// que retorna todas as unidades da estrutura de uma vez, eliminando o padrão N+1
+    /// de chamadas individuais por unidade.
     pub async fn sync_organization_units(
         &self,
         org_siorg_code: i32,
     ) -> Result<SyncSummary, SyncError> {
         info!(
-            "Starting bulk sync for organization SIORG code {}",
+            "Starting bulk sync for organization SIORG code {} (single API call)",
             org_siorg_code
         );
+
+        let units = self
+            .siorg_client
+            .get_estrutura_completa(org_siorg_code)
+            .await
+            .map_err(|e| SyncError::ApiError(e.to_string()))?;
 
         let mut summary = SyncSummary {
             total_processed: 0,
@@ -408,48 +426,35 @@ impl SiorgSyncService {
             errors: Vec::new(),
         };
 
-        let mut page = 1;
-        let page_size = 100;
+        info!(
+            "Received {} unit(s) from SIORG for org {}",
+            units.len(),
+            org_siorg_code
+        );
 
-        loop {
-            let response = self
-                .siorg_client
-                .list_units_by_organization(org_siorg_code, page, page_size)
-                .await
-                .map_err(|e| SyncError::ApiError(e.to_string()))?;
+        for siorg_unit in &units {
+            summary.total_processed += 1;
 
-            let data_len = response.data.len();
-
-            for siorg_unit in response.data {
-                summary.total_processed += 1;
-
-                match self.sync_unit(siorg_unit.codigo_siorg).await {
-                    Ok(unit) => {
-                        // Check if was created or updated
-                        if unit.created_at == unit.updated_at {
-                            summary.created += 1;
-                        } else {
-                            summary.updated += 1;
-                        }
-                    }
-                    Err(e) => {
-                        summary.failed += 1;
-                        summary.errors.push(format!(
-                            "Unit {}: {}",
-                            siorg_unit.codigo_siorg,
-                            e.to_string()
-                        ));
-                        error!("Failed to sync unit {}: {}", siorg_unit.codigo_siorg, e);
+            match self.upsert_unit(siorg_unit).await {
+                Ok(unit) => {
+                    if unit.created_at == unit.updated_at {
+                        summary.created += 1;
+                    } else {
+                        summary.updated += 1;
                     }
                 }
+                Err(e) => {
+                    let code = siorg_unit
+                        .siorg_code()
+                        .map(|c| c.to_string())
+                        .unwrap_or_else(|| siorg_unit.base.codigo_unidade.clone());
+                    summary.failed += 1;
+                    summary
+                        .errors
+                        .push(format!("Unit {}: {}", code, e));
+                    error!("Failed to sync unit {}: {}", code, e);
+                }
             }
-
-            // Check if there are more pages
-            if data_len < page_size as usize {
-                break;
-            }
-
-            page += 1;
         }
 
         info!("Bulk sync completed: {:?}", summary);
@@ -464,7 +469,6 @@ impl SiorgSyncService {
         &self,
         name: &str,
     ) -> Result<OrganizationalUnitCategoryDto, SyncError> {
-        // Try to find by name
         let (categories, _) = self
             .category_repo
             .list(None, Some(true), 10, 0)
@@ -475,7 +479,6 @@ impl SiorgSyncService {
             return Ok(category);
         }
 
-        // Create new
         let payload = CreateOrganizationalUnitCategoryPayload {
             name: name.to_string(),
             description: Some("Auto-created from SIORG sync".to_string()),
@@ -494,7 +497,6 @@ impl SiorgSyncService {
         &self,
         code: &str,
     ) -> Result<OrganizationalUnitTypeDto, SyncError> {
-        // Try to find by code
         if let Some(unit_type) = self
             .type_repo
             .find_by_code(code)
@@ -504,7 +506,6 @@ impl SiorgSyncService {
             return Ok(unit_type);
         }
 
-        // Create new
         let payload = CreateOrganizationalUnitTypePayload {
             code: code.to_string(),
             name: code.to_string(),
