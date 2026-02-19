@@ -4130,6 +4130,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "siorg-worker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "application",
+ "chrono",
+ "domain",
+ "dotenvy",
+ "persistence",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "siphasher"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
