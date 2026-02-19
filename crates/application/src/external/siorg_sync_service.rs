@@ -475,15 +475,32 @@ impl SiorgSyncService {
                 );
             }
             Some(from) => {
-                // Há uma versão anterior: sync incremental
+                // Há uma versão anterior: tenta sync incremental
                 info!(
                     "Sync incremental org {}: {} → {}",
                     org_siorg_code, from, versao_api.versao_consulta
                 );
-                self.run_incremental_unit_sync(org_siorg_code, &from, summary)
-                    .await?;
-                self.save_versao(org_siorg_code, &versao_api.versao_consulta)
-                    .await;
+                match self
+                    .run_incremental_unit_sync(org_siorg_code, &from, summary)
+                    .await
+                {
+                    Ok(()) => {
+                        self.save_versao(org_siorg_code, &versao_api.versao_consulta)
+                            .await;
+                    }
+                    Err(e) => {
+                        // Versão muito antiga ou histórico indisponível na API:
+                        // descarta versão armazenada e executa sync completo.
+                        warn!(
+                            "Sync incremental falhou para org {} (versão {}): {}. \
+                             Executando sync completo como fallback.",
+                            org_siorg_code, from, e
+                        );
+                        self.run_full_unit_sync(org_siorg_code, summary).await?;
+                        self.save_versao(org_siorg_code, &versao_api.versao_consulta)
+                            .await;
+                    }
+                }
             }
             None => {
                 // Nenhuma versão armazenada: sync completo inicial
