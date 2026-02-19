@@ -292,18 +292,26 @@ async fn test_create_supplier_duplicate_document() {
 #[tokio::test]
 async fn test_create_supplier_formatted_cpf() {
     let app = common::spawn_app().await;
-    // Use a known valid CPF with formatting
+    // Generate a valid CPF and format it with dots and dash
+    let cpf_digits = generate_cpf();
+    let formatted_cpf = format!(
+        "{}.{}.{}-{}",
+        &cpf_digits[0..3],
+        &cpf_digits[3..6],
+        &cpf_digits[6..9],
+        &cpf_digits[9..11]
+    );
     let response = app
         .api
         .post("/api/admin/suppliers")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "legal_name": random_name("Formatted"),
-            "document_number": "529.982.247-25",
+            "document_number": formatted_cpf,
         }))
         .await;
     assert_eq!(response.status_code(), StatusCode::CREATED);
     let supplier: Value = response.json();
     // Document should be stored normalized (digits only)
-    assert_eq!(supplier["document_number"], "52998224725");
+    assert_eq!(supplier["document_number"], cpf_digits);
 }
