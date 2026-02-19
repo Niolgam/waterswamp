@@ -131,6 +131,50 @@ impl SiorgSyncService {
             .map_err(|e| SyncError::DatabaseError(e.to_string()))
     }
 
+    /// Synchronize an organization using its local database UUID (auto-discovers siorg_code)
+    pub async fn sync_organization_by_id(
+        &self,
+        org_id: Uuid,
+    ) -> Result<OrganizationDto, SyncError> {
+        let org = self
+            .organization_repo
+            .find_by_id(org_id)
+            .await
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?
+            .ok_or_else(|| {
+                SyncError::DatabaseError(format!("Organization {} not found locally", org_id))
+            })?;
+
+        info!(
+            "Syncing organization {} (siorg_code={}) from local DB lookup",
+            org_id, org.siorg_code
+        );
+
+        self.sync_organization(org.siorg_code).await
+    }
+
+    /// Synchronize all units of an organization using its local database UUID (auto-discovers siorg_code)
+    pub async fn sync_organization_units_by_id(
+        &self,
+        org_id: Uuid,
+    ) -> Result<SyncSummary, SyncError> {
+        let org = self
+            .organization_repo
+            .find_by_id(org_id)
+            .await
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?
+            .ok_or_else(|| {
+                SyncError::DatabaseError(format!("Organization {} not found locally", org_id))
+            })?;
+
+        info!(
+            "Bulk syncing units for organization {} (siorg_code={}) from local DB lookup",
+            org_id, org.siorg_code
+        );
+
+        self.sync_organization_units(org.siorg_code).await
+    }
+
     // ========================================================================
     // Unit Sync
     // ========================================================================
