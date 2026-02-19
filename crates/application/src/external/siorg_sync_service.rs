@@ -320,6 +320,76 @@ impl SiorgSyncService {
     // Bulk Sync
     // ========================================================================
 
+    /// Synchronize all registered organizations (and their units) directly from the database.
+    /// No parameters needed — fetches every active organization with a siorg_code and syncs each one.
+    pub async fn sync_all_from_db(&self) -> Result<SyncSummary, SyncError> {
+        info!("Starting full sync from DB: fetching all active organizations with siorg_code");
+
+        let (orgs, _) = self
+            .organization_repo
+            .list(Some(true), 1000, 0)
+            .await
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+
+        let mut summary = SyncSummary {
+            total_processed: 0,
+            created: 0,
+            updated: 0,
+            failed: 0,
+            errors: Vec::new(),
+        };
+
+        let siorg_orgs: Vec<_> = orgs.into_iter().filter(|o| o.siorg_code > 0).collect();
+
+        info!(
+            "Found {} organization(s) with siorg_code to sync",
+            siorg_orgs.len()
+        );
+
+        for org in siorg_orgs {
+            summary.total_processed += 1;
+
+            // Sync organization metadata
+            if let Err(e) = self.sync_organization(org.siorg_code).await {
+                summary.failed += 1;
+                summary
+                    .errors
+                    .push(format!("Org {} (siorg={}): {}", org.id, org.siorg_code, e));
+                error!(
+                    "Failed to sync organization {} (siorg_code={}): {}",
+                    org.id, org.siorg_code, e
+                );
+                continue;
+            }
+            summary.updated += 1;
+
+            // Sync all units of this organization
+            match self.sync_organization_units(org.siorg_code).await {
+                Ok(units_summary) => {
+                    summary.total_processed += units_summary.total_processed;
+                    summary.created += units_summary.created;
+                    summary.updated += units_summary.updated;
+                    summary.failed += units_summary.failed;
+                    summary.errors.extend(units_summary.errors);
+                }
+                Err(e) => {
+                    summary.failed += 1;
+                    summary.errors.push(format!(
+                        "Org {} (siorg={}) units: {}",
+                        org.id, org.siorg_code, e
+                    ));
+                    error!(
+                        "Failed to sync units for organization {} (siorg_code={}): {}",
+                        org.id, org.siorg_code, e
+                    );
+                }
+            }
+        }
+
+        info!("Full DB sync completed: {:?}", summary);
+        Ok(summary)
+    }
+
     /// Synchronize all units for an organization
     pub async fn sync_organization_units(
         &self,
