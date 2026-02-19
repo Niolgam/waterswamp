@@ -65,16 +65,20 @@ fn generate_cnpj() -> String {
 
 fn random_plate() -> String {
     let hex = Uuid::new_v4().simple().to_string();
-    let chars: Vec<char> = hex.chars().collect();
+    let bytes = hex.as_bytes();
+    // Generate Mercosul format: ABC1D23
+    // Map hex nibbles to letters (A-F range) or digits (0-9 range) as needed
+    let letter = |b: u8| (b'A' + (b % 26)) as char;
+    let digit = |b: u8| (b'0' + (b % 10)) as char;
     format!(
         "{}{}{}{}{}{}{}",
-        chars[0].to_uppercase().next().unwrap_or('A'),
-        chars[1].to_uppercase().next().unwrap_or('B'),
-        chars[2].to_uppercase().next().unwrap_or('C'),
-        chars[3].to_digit(16).unwrap_or(1),
-        chars[4].to_uppercase().next().unwrap_or('D'),
-        chars[5].to_digit(16).unwrap_or(2),
-        chars[6].to_digit(16).unwrap_or(3),
+        letter(bytes[0]),
+        letter(bytes[1]),
+        letter(bytes[2]),
+        digit(bytes[3]),
+        letter(bytes[4]),
+        digit(bytes[5]),
+        digit(bytes[6]),
     )
 }
 
@@ -84,7 +88,21 @@ fn random_chassis() -> String {
 
 fn random_renavam() -> String {
     let uuid = Uuid::new_v4().simple().to_string();
-    uuid.chars().filter(|c| c.is_ascii_digit()).take(11).collect::<String>()
+    let mut digits: Vec<u32> = uuid
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .take(10)
+        .map(|c| c.to_digit(10).unwrap())
+        .collect();
+    while digits.len() < 10 {
+        digits.push(0);
+    }
+    let weights = [3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    let sum: u32 = digits.iter().zip(weights.iter()).map(|(d, w)| d * w).sum();
+    let check = (sum * 10) % 11;
+    let check_digit = if check >= 10 { 0 } else { check };
+    digits.push(check_digit);
+    digits.iter().map(|d| d.to_string()).collect()
 }
 
 /// Setup all prerequisite data and return (vehicle_id, driver_id, supplier_id, fuel_type_id)
