@@ -4,12 +4,12 @@ use application::workers::siorg_sync_worker::{SiorgSyncWorkerCore, WorkerConfig}
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
-    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort,
+    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort, SystemSettingsRepositoryPort,
 };
 use persistence::repositories::{
     organizational_repository::{
         OrganizationRepository, OrganizationalUnitCategoryRepository,
-        OrganizationalUnitRepository, OrganizationalUnitTypeRepository,
+        OrganizationalUnitRepository, OrganizationalUnitTypeRepository, SystemSettingsRepository,
     },
     siorg_sync_repository::{SiorgHistoryRepository, SiorgSyncQueueRepository},
 };
@@ -61,6 +61,8 @@ async fn main() -> Result<()> {
         Arc::new(OrganizationalUnitCategoryRepository::new(arc_pool.clone()));
     let type_repo: Arc<dyn OrganizationalUnitTypeRepositoryPort> =
         Arc::new(OrganizationalUnitTypeRepository::new(arc_pool.clone()));
+    let settings_repo: Arc<dyn SystemSettingsRepositoryPort> =
+        Arc::new(SystemSettingsRepository::new(arc_pool.clone()));
 
     // Setup SIORG client and sync service
     info!("🌐 Inicializando cliente SIORG...");
@@ -79,6 +81,7 @@ async fn main() -> Result<()> {
         unit_repo,
         category_repo,
         type_repo,
+        settings_repo,
     ));
 
     // Create worker

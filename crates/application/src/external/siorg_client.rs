@@ -34,14 +34,21 @@ pub struct SiorgUnidade {
 }
 
 impl SiorgUnidade {
-    /// Converte `codigo_unidade` (String na API) para i32.
-    pub fn siorg_code(&self) -> Option<i32> {
-        self.codigo_unidade.parse().ok()
+    /// Extrai o código numérico de um campo que pode ser:
+    /// - Um inteiro simples: `"471"`
+    /// - Uma URI: `"https://estruturaorganizacional.dados.gov.br/id/unidade-organizacional/471"`
+    fn extract_id(s: &str) -> Option<i32> {
+        s.rsplit('/').next().and_then(|p| p.parse().ok())
     }
 
-    /// Converte `codigo_unidade_pai` (String na API) para i32.
+    /// Converte `codigo_unidade` para i32, suportando tanto inteiros quanto URIs.
+    pub fn siorg_code(&self) -> Option<i32> {
+        Self::extract_id(&self.codigo_unidade)
+    }
+
+    /// Converte `codigo_unidade_pai` para i32, suportando tanto inteiros quanto URIs.
     pub fn parent_siorg_code(&self) -> Option<i32> {
-        self.codigo_unidade_pai.as_ref().and_then(|s| s.parse().ok())
+        self.codigo_unidade_pai.as_ref().and_then(|s| Self::extract_id(s))
     }
 
     /// Retorna true se a operação indicar extinção/remoção da unidade.
@@ -114,6 +121,73 @@ pub struct SiorgAlteracoesResponse {
     pub servico: SiorgServico,
     /// A API usa a chave "unidades" (plural) no endpoint de alterações.
     pub unidades: Vec<SiorgUnidade>,
+}
+
+// ============================================================================
+// Versioning Types (Histórico de Estrutura Organizacional)
+// ============================================================================
+
+/// Informações de versão retornadas por /unidade-organizacional/{code}/versao
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgTipoVersao {
+    pub versao_anterior: Option<String>,
+    pub versao_posterior: Option<String>,
+    /// Versão atual da unidade organizacional.
+    pub versao_consulta: String,
+    pub data_versao_anterior: Option<String>,
+    pub data_versao_posterior: Option<String>,
+    pub data_versao_consulta: Option<String>,
+}
+
+/// Resposta de /unidade-organizacional/{code}/versao
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgVersaoResponse {
+    pub servico: SiorgServico,
+    pub tipo_versao: SiorgTipoVersao,
+}
+
+/// Unidade alterada retornada por /unidade-organizacional/{code}/alteradas.
+/// Estende `SiorgUnidade` com campos de rastreamento de hierarquia anterior.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgUnidadeAlterada {
+    #[serde(flatten)]
+    pub base: SiorgUnidade,
+    /// URI da unidade-pai anterior (preenchida quando a hierarquia mudou).
+    pub codigo_unidade_pai_anterior: Option<String>,
+    pub codigo_orgao_entidade_anterior: Option<String>,
+}
+
+impl SiorgUnidadeAlterada {
+    pub fn siorg_code(&self) -> Option<i32> {
+        self.base.siorg_code()
+    }
+}
+
+impl From<SiorgUnidadeAlterada> for SiorgUnidadeCompleta {
+    /// Converte dados resumidos de alteração em `SiorgUnidadeCompleta` com campos extras como None.
+    /// Suficiente para upserts incrementais; campos como `area_atuacao` serão atualizados
+    /// no próximo sync completo.
+    fn from(a: SiorgUnidadeAlterada) -> Self {
+        SiorgUnidadeCompleta {
+            base: a.base,
+            codigo_categoria_unidade: None,
+            area_atuacao: None,
+            competencia: None,
+            missao: None,
+            contato: None,
+            endereco: None,
+        }
+    }
+}
+
+/// Resposta de /unidade-organizacional/{code}/alteradas
+#[derive(Debug, Deserialize)]
+pub struct SiorgAlteradasResponse {
+    pub servico: SiorgServico,
+    pub unidades: Vec<SiorgUnidadeAlterada>,
 }
 
 // ============================================================================
@@ -258,6 +332,74 @@ impl SiorgClient {
             .json::<SiorgAlteracoesResponse>()
             .await
             .context("Failed to parse SIORG changes response")?;
+
+        Ok(parsed.unidades)
+    }
+
+    // ========================================================================
+    // Histórico de Versões
+    // ========================================================================
+
+    /// Consulta a versão atual de uma unidade organizacional (órgão/entidade).
+    ///
+    /// Endpoint: `GET /unidade-organizacional/{codigo}/versao`
+    ///
+    /// Usado para verificar se há mudanças desde o último sync sem precisar
+    /// baixar toda a estrutura. Se `versao_consulta` local == API, não há nada a fazer.
+    pub async fn get_versao(&self, org_code: i32) -> Result<SiorgTipoVersao> {
+        let url = format!("{}/unidade-organizacional/{}/versao", self.base_url, org_code);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch SIORG version")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("SIORG API error: {}", response.status());
+        }
+
+        let parsed = response
+            .json::<SiorgVersaoResponse>()
+            .await
+            .context("Failed to parse SIORG version response")?;
+
+        Ok(parsed.tipo_versao)
+    }
+
+    /// Retorna unidades alteradas de um órgão desde uma versão específica.
+    ///
+    /// Endpoint: `GET /unidade-organizacional/{codigo}/alteradas?versaoConsulta={versao}`
+    ///
+    /// Mais eficiente que `get_estrutura_completa` para syncs recorrentes:
+    /// retorna apenas unidades criadas, alteradas ou extintas desde `from_versao`.
+    /// O campo `operacao` indica o tipo de mudança ("INCLUSAO", "ALTERACAO", "EXCLUSAO").
+    pub async fn get_alteradas(
+        &self,
+        org_code: i32,
+        from_versao: &str,
+    ) -> Result<Vec<SiorgUnidadeAlterada>> {
+        let url = format!(
+            "{}/unidade-organizacional/{}/alteradas?versaoConsulta={}",
+            self.base_url, org_code, from_versao
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch SIORG changed units")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("SIORG API error: {}", response.status());
+        }
+
+        let parsed = response
+            .json::<SiorgAlteradasResponse>()
+            .await
+            .context("Failed to parse SIORG changed units response")?;
 
         Ok(parsed.unidades)
     }

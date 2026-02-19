@@ -239,6 +239,7 @@ pub fn build_application_state(
         organizational_unit_repo_port,
         unit_category_repo_port,
         unit_type_repo_port,
+        system_settings_repo_port.clone(),
     ));
 
     // Requisition repositories and service
