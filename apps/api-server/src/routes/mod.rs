@@ -11,7 +11,7 @@ use crate::{
     infra::{cors, telemetry},
     middleware::audit,
     middleware::rate_limit::api_rate_limiter,
-    middleware::{mw_authenticate, mw_authorize},
+    middleware::{mw_authorize, mw_session_authenticate},
     openapi::ApiDoc,
     state::AppState,
 };
@@ -28,17 +28,17 @@ pub fn build(app_state: AppState) -> Router {
         .merge(mfa::router());
     // .nest("/api/locations/public", locations::public_router());
 
-    // 2. ROTAS DE UTILIZADOR (Apenas Autenticação JWT)
+    // 2. ROTAS DE UTILIZADOR (Autenticação por sessão cookie ou JWT Bearer)
     let user_routes = users::router()
         .merge(auth::protected_router())
         .merge(email_verification::protected_router())
         .merge(mfa::protected_router())
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
-            mw_authenticate,
+            mw_session_authenticate,
         ));
 
-    // 3. ROTAS ADMINISTRATIVAS E PROTEGIDAS (JWT + Casbin RBAC)
+    // 3. ROTAS ADMINISTRATIVAS E PROTEGIDAS (Sessão/JWT + Casbin RBAC)
     // Aqui incluímos geo_regions explicitamente como parte do admin ou rotas protegidas
     let admin_protected_routes = Router::new()
         .nest("/api/admin", admin::router()) // O admin::router já deve conter geo_regions internamente
@@ -49,7 +49,7 @@ pub fn build(app_state: AppState) -> Router {
         ))
         .layer(middleware::from_fn_with_state(
             app_state.clone(),
-            mw_authenticate,
+            mw_session_authenticate,
         ));
 
     // 4. MONTAGEM DO ROUTER PRINCIPAL
