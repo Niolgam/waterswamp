@@ -1060,6 +1060,93 @@ pub async fn sync_organization_units(
 }
 
 #[utoipa::path(
+    post,
+    path = "/api/admin/organizational/sync/from-db",
+    tag = "Organization - SIORG Sync",
+    responses(
+        (status = 200, description = "Full sync from DB completed", body = String),
+        (status = 500, description = "Sync failed"),
+    )
+)]
+pub async fn sync_all_from_db(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let summary = state
+        .siorg_sync_service
+        .sync_all_from_db()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(json!({
+        "total_processed": summary.total_processed,
+        "created": summary.created,
+        "updated": summary.updated,
+        "failed": summary.failed,
+        "errors": summary.errors
+    })))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/admin/organizational/sync/organization/{id}",
+    tag = "Organization - SIORG Sync",
+    params(
+        ("id" = Uuid, Path, description = "UUID local da organização cadastrada")
+    ),
+    responses(
+        (status = 200, description = "Organization synced successfully", body = OrganizationDto),
+        (status = 404, description = "Organization not found locally or in SIORG"),
+        (status = 500, description = "Sync failed"),
+    )
+)]
+pub async fn sync_organization_by_id(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(org_id): Path<Uuid>,
+) -> Result<Json<OrganizationDto>, (StatusCode, String)> {
+    state
+        .siorg_sync_service
+        .sync_organization_by_id(org_id)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/admin/organizational/sync/organization/{id}/units",
+    tag = "Organization - SIORG Sync",
+    params(
+        ("id" = Uuid, Path, description = "UUID local da organização cadastrada")
+    ),
+    responses(
+        (status = 200, description = "Bulk sync completed", body = String),
+        (status = 404, description = "Organization not found locally"),
+        (status = 500, description = "Sync failed"),
+    )
+)]
+pub async fn sync_organization_units_by_id(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(org_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let summary = state
+        .siorg_sync_service
+        .sync_organization_units_by_id(org_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(json!({
+        "total_processed": summary.total_processed,
+        "created": summary.created,
+        "updated": summary.updated,
+        "failed": summary.failed,
+        "errors": summary.errors
+    })))
+}
+
+#[utoipa::path(
     get,
     path = "/api/admin/organizational/sync/health",
     tag = "Organization - SIORG Sync",

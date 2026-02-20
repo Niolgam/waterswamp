@@ -10,6 +10,9 @@ use zxcvbn::{zxcvbn, Score};
 /// Custom header names
 const X_CSRF_TOKEN: HeaderName = HeaderName::from_static("x-csrf-token");
 const X_REQUESTED_WITH: HeaderName = HeaderName::from_static("x-requested-with");
+const X_REQUEST_NONCE: HeaderName = HeaderName::from_static("x-request-nonce");
+const X_REQUEST_TIMESTAMP: HeaderName = HeaderName::from_static("x-request-timestamp");
+const X_REQUEST_SIGNATURE: HeaderName = HeaderName::from_static("x-request-signature");
 /// Configuração de CORS para produção
 pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
     let origins: Vec<HeaderValue> = allowed_origins
@@ -34,6 +37,9 @@ pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
             header::X_CONTENT_TYPE_OPTIONS,
             X_CSRF_TOKEN,
             X_REQUESTED_WITH,
+            X_REQUEST_NONCE,
+            X_REQUEST_TIMESTAMP,
+            X_REQUEST_SIGNATURE,
         ])
         .allow_credentials(true)
         .max_age(Duration::from_secs(3600))
@@ -76,6 +82,9 @@ pub fn cors_development() -> CorsLayer {
             header::X_CONTENT_TYPE_OPTIONS,
             X_CSRF_TOKEN,
             X_REQUESTED_WITH,
+            X_REQUEST_NONCE,
+            X_REQUEST_TIMESTAMP,
+            X_REQUEST_SIGNATURE,
         ])
         .allow_credentials(true)
 }

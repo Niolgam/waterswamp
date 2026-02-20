@@ -4,12 +4,12 @@ use application::workers::siorg_sync_worker::{SiorgSyncWorkerCore, WorkerConfig}
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
-    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort,
+    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort, SystemSettingsRepositoryPort,
 };
 use persistence::repositories::{
     organizational_repository::{
         OrganizationRepository, OrganizationalUnitCategoryRepository,
-        OrganizationalUnitRepository, OrganizationalUnitTypeRepository,
+        OrganizationalUnitRepository, OrganizationalUnitTypeRepository, SystemSettingsRepository,
     },
     siorg_sync_repository::{SiorgHistoryRepository, SiorgSyncQueueRepository},
 };
@@ -23,7 +23,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 async fn main() -> Result<()> {
     // Load environment variables
     dotenvy::from_path("apps/siorg-worker/.env")
-        .or_else(|_| dotenvy::dotenv())
+        .or_else(|_| dotenvy::dotenv().map(|_| ()))
         .ok();
 
     // Initialize logging
@@ -46,24 +46,28 @@ async fn main() -> Result<()> {
 
     // Setup repositories
     info!("📦 Inicializando repositórios...");
+    let arc_pool = Arc::new(pool.clone());
+
     let sync_queue_repo: Arc<dyn SiorgSyncQueueRepositoryPort> =
         Arc::new(SiorgSyncQueueRepository::new(pool.clone()));
     let history_repo: Arc<dyn SiorgHistoryRepositoryPort> =
         Arc::new(SiorgHistoryRepository::new(pool.clone()));
 
     let organization_repo: Arc<dyn OrganizationRepositoryPort> =
-        Arc::new(OrganizationRepository::new(pool.clone()));
+        Arc::new(OrganizationRepository::new(arc_pool.clone()));
     let unit_repo: Arc<dyn OrganizationalUnitRepositoryPort> =
-        Arc::new(OrganizationalUnitRepository::new(pool.clone()));
+        Arc::new(OrganizationalUnitRepository::new(arc_pool.clone()));
     let category_repo: Arc<dyn OrganizationalUnitCategoryRepositoryPort> =
-        Arc::new(OrganizationalUnitCategoryRepository::new(pool.clone()));
+        Arc::new(OrganizationalUnitCategoryRepository::new(arc_pool.clone()));
     let type_repo: Arc<dyn OrganizationalUnitTypeRepositoryPort> =
-        Arc::new(OrganizationalUnitTypeRepository::new(pool.clone()));
+        Arc::new(OrganizationalUnitTypeRepository::new(arc_pool.clone()));
+    let settings_repo: Arc<dyn SystemSettingsRepositoryPort> =
+        Arc::new(SystemSettingsRepository::new(arc_pool.clone()));
 
     // Setup SIORG client and sync service
     info!("🌐 Inicializando cliente SIORG...");
     let siorg_base_url = env::var("SIORG_API_URL")
-        .unwrap_or_else(|_| "https://api.siorg.gov.br".to_string());
+        .unwrap_or_else(|_| "https://estruturaorganizacional.dados.gov.br/doc".to_string());
     let siorg_token = env::var("SIORG_API_TOKEN").ok();
 
     let siorg_client = Arc::new(
@@ -77,6 +81,7 @@ async fn main() -> Result<()> {
         unit_repo,
         category_repo,
         type_repo,
+        settings_repo,
     ));
 
     // Create worker

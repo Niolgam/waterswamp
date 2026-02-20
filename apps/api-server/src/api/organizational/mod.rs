@@ -77,7 +77,10 @@ pub fn router() -> Router<AppState> {
 
     // SIORG Sync routes (immediate operations)
     let sync_router = Router::new()
+        .route("/from-db", post(handlers::sync_all_from_db))
         .route("/organization", post(handlers::sync_organization))
+        .route("/organization/{id}", post(handlers::sync_organization_by_id))
+        .route("/organization/{id}/units", post(handlers::sync_organization_units_by_id))
         .route("/unit", post(handlers::sync_unit))
         .route("/org-units", post(handlers::sync_organization_units))
         .route("/health", get(handlers::check_siorg_health));

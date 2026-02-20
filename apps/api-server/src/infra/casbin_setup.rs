@@ -613,6 +613,15 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
     enforcer
         .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/health", ACTION_GET])
         .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/from-db", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/organization/*", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/organizational/sync/organization/*/units", ACTION_POST])
+        .await?;
 
     // Sync Queue Management
     enforcer

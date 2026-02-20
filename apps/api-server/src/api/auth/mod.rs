@@ -76,6 +76,7 @@ pub use contracts::{
 /// | POST   | /session/logout       | session_logout    | Logout (limpa cookies)       |
 /// | POST   | /session/logout-all   | session_logout_all| Logout de todas as sessões   |
 /// | GET    | /session/me           | session_info      | Info da sessão atual         |
+/// | GET    | /auth/me              | session_info      | Alias de /session/me         |
 /// | GET    | /session/list         | list_sessions     | Lista sessões do usuário     |
 /// | DELETE | /session/{id}         | revoke_session    | Revoga sessão específica     |
 ///
@@ -104,6 +105,7 @@ pub fn router() -> Router<AppState> {
         .route("/session/logout", post(session_handlers::session_logout))
         .route("/session/logout-all", post(session_handlers::session_logout_all))
         .route("/session/me", get(session_handlers::session_info))
+        .route("/auth/me", get(session_handlers::session_info))
         .route("/session/list", get(session_handlers::list_sessions))
         .route("/session/{session_id}", delete(session_handlers::revoke_session));
 

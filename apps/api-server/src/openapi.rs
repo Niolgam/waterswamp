@@ -168,7 +168,10 @@ use utoipa::OpenApi;
         crate::api::organizational::handlers::activate_organizational_unit,
 
         // Organization - SIORG Sync
+        crate::api::organizational::handlers::sync_all_from_db,
         crate::api::organizational::handlers::sync_organization,
+        crate::api::organizational::handlers::sync_organization_by_id,
+        crate::api::organizational::handlers::sync_organization_units_by_id,
         crate::api::organizational::handlers::sync_unit,
         crate::api::organizational::handlers::sync_organization_units,
         crate::api::organizational::handlers::check_siorg_health,
