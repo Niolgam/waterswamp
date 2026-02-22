@@ -68,8 +68,8 @@ INSERT INTO organizations (
     'UFMT',
     'Fundação Universidade Federal de Mato Grosso',
     '33004540000100',
-    154034,
-    423,  -- Real UFMT SIORG code
+    154045,
+    471,  -- Real UFMT SIORG code
     'https://www.ufmt.br',
     TRUE
 ) ON CONFLICT (cnpj) DO NOTHING;

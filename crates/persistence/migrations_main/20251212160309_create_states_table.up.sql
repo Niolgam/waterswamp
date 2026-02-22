@@ -2,8 +2,9 @@ CREATE TABLE states (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     country_id UUID NOT NULL REFERENCES countries(id) ON DELETE RESTRICT,
     name VARCHAR(100) NOT NULL,
-    abbreviation CHAR(2) NOT NULL, -- A sigla (MT, SP, RJ)
+    abbreviation CHAR(2) UNIQUE NOT NULL, -- A sigla (MT, SP, RJ)
     ibge_code INT UNIQUE NOT NULL, -- O cUF da NF-e (MT é 51, SP é 35)
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
@@ -18,6 +19,8 @@ CREATE INDEX idx_states_ibge_code ON states(ibge_code);
 CREATE INDEX idx_states_abbreviation ON states(abbreviation);
 CREATE INDEX idx_states_name ON states(name);
 CREATE INDEX idx_states_country_id ON states(country_id);
+CREATE INDEX idx_states_active ON states(is_active) WHERE is_active = TRUE;
+
 
 -- Trigger para updated_at
 CREATE TRIGGER set_timestamp_states

@@ -3,6 +3,7 @@ CREATE TABLE countries (
     name VARCHAR(100) NOT NULL UNIQUE,
     iso2 CHAR(2) NOT NULL, -- ISO 3166-1 alpha-2 (BR, US, etc)
     bacen_code INT UNIQUE NOT NULL, -- O cPais da NF-e (Brasil é 1058)
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -11,6 +12,7 @@ CREATE TABLE countries (
 CREATE INDEX idx_countries_iso2 ON countries(iso2);
 CREATE INDEX idx_countries_name ON countries(name);
 CREATE INDEX idx_countries_bacen ON countries(bacen_code);
+CREATE INDEX idx_countries_active ON countries(is_active) WHERE is_active = TRUE;
 
 -- Trigger para updated_at
 CREATE TRIGGER set_timestamp_countries
