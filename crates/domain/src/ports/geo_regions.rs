@@ -15,7 +15,10 @@ pub trait CountryRepositoryPort: Send + Sync {
     // Read operations
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CountryDto>, RepositoryError>;
     async fn find_by_iso2(&self, iso2: &str) -> Result<Option<CountryDto>, RepositoryError>;
-    async fn find_by_bacen_code(&self, bacen_code: i32) -> Result<Option<CountryDto>, RepositoryError>;
+    async fn find_by_bacen_code(
+        &self,
+        bacen_code: i32,
+    ) -> Result<Option<CountryDto>, RepositoryError>;
 
     // Validation checks
     async fn exists_by_iso2(&self, iso2: &str) -> Result<bool, RepositoryError>;
@@ -37,6 +40,7 @@ pub trait CountryRepositoryPort: Send + Sync {
         name: &LocationName,
         iso2: &str,
         bacen_code: i32,
+        is_active: bool,
     ) -> Result<CountryDto, RepositoryError>;
 
     async fn update(
@@ -45,6 +49,7 @@ pub trait CountryRepositoryPort: Send + Sync {
         name: Option<&LocationName>,
         iso2: Option<&str>,
         bacen_code: Option<i32>,
+        is_active: bool,
     ) -> Result<CountryDto, RepositoryError>;
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
@@ -70,11 +75,17 @@ pub trait StateRepositoryPort: Send + Sync {
         &self,
         id: Uuid,
     ) -> Result<Option<StateWithCountryDto>, RepositoryError>;
-    async fn find_by_abbreviation(&self, abbreviation: &StateCode) -> Result<Option<StateDto>, RepositoryError>;
+    async fn find_by_abbreviation(
+        &self,
+        abbreviation: &StateCode,
+    ) -> Result<Option<StateDto>, RepositoryError>;
     async fn find_by_ibge_code(&self, ibge_code: i32) -> Result<Option<StateDto>, RepositoryError>;
 
     // Validation checks
-    async fn exists_by_abbreviation(&self, abbreviation: &StateCode) -> Result<bool, RepositoryError>;
+    async fn exists_by_abbreviation(
+        &self,
+        abbreviation: &StateCode,
+    ) -> Result<bool, RepositoryError>;
     async fn exists_by_abbreviation_in_country(
         &self,
         abbreviation: &StateCode,
@@ -99,6 +110,7 @@ pub trait StateRepositoryPort: Send + Sync {
         abbreviation: &StateCode,
         ibge_code: i32,
         country_id: Uuid,
+        is_active: bool,
     ) -> Result<StateDto, RepositoryError>;
 
     async fn update(
@@ -108,6 +120,7 @@ pub trait StateRepositoryPort: Send + Sync {
         abbreviation: Option<&StateCode>,
         ibge_code: Option<i32>,
         country_id: Option<Uuid>,
+        is_active: bool,
     ) -> Result<StateDto, RepositoryError>;
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
@@ -150,9 +163,8 @@ pub trait CityRepositoryPort: Send + Sync {
         name: &LocationName,
         ibge_code: i32,
         siafi_code: Option<i32>,
-        latitude: Option<f64>,
-        longitude: Option<f64>,
         state_id: Uuid,
+        is_active: bool,
     ) -> Result<CityDto, RepositoryError>;
 
     async fn update(
@@ -161,9 +173,8 @@ pub trait CityRepositoryPort: Send + Sync {
         name: Option<&LocationName>,
         ibge_code: Option<i32>,
         siafi_code: Option<i32>,
-        latitude: Option<f64>,
-        longitude: Option<f64>,
         state_id: Option<Uuid>,
+        is_active: bool,
     ) -> Result<CityDto, RepositoryError>;
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;

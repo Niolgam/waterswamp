@@ -40,7 +40,7 @@ fn random_ibge_code_state() -> i32 {
     let uuid = Uuid::new_v4();
     let bytes = uuid.as_bytes();
     let num = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-    (num % 946 + 54) as i32  // Range 54-999 to avoid real IBGE state codes
+    (num % 946 + 54) as i32 // Range 54-999 to avoid real IBGE state codes
 }
 
 fn random_ibge_code_city() -> i32 {
@@ -65,7 +65,8 @@ async fn create_unique_country(app: &TestApp) -> Value {
             .json(&json!({
                 "name": name,
                 "iso2": iso2,
-                "bacen_code": bacen_code
+                "bacen_code": bacen_code,
+                "is_active": true,
             }))
             .await;
 
@@ -100,7 +101,8 @@ async fn create_unique_state(app: &TestApp, country_id: &str) -> Value {
                 "name": name,
                 "abbreviation": abbreviation,
                 "ibge_code": ibge_code,
-                "country_id": country_id
+                "country_id": country_id,
+                "is_active": true,
             }))
             .await;
 
@@ -133,7 +135,8 @@ async fn create_unique_city(app: &TestApp, state_id: &str) -> Value {
             .json(&json!({
                 "name": name,
                 "ibge_code": ibge_code,
-                "state_id": state_id
+                "state_id": state_id,
+                "is_active": true,
             }))
             .await;
 
@@ -170,7 +173,8 @@ async fn test_create_country_success() {
         .json(&json!({
             "name": name,
             "iso2": iso2,
-            "bacen_code": bacen_code
+            "bacen_code": bacen_code,
+            "is_active": true,
         }))
         .await;
 
@@ -183,6 +187,7 @@ async fn test_create_country_success() {
     assert_eq!(body["name"], name);
     assert_eq!(body["iso2"], iso2);
     assert_eq!(body["bacen_code"], bacen_code);
+    assert_eq!(body["is_active"], true);
     assert!(body["id"].is_string());
 }
 
@@ -199,7 +204,8 @@ async fn test_create_country_duplicate_iso2_returns_conflict() {
         .json(&json!({
             "name": random_name("Country1"),
             "iso2": iso2,
-            "bacen_code": bacen_code
+            "bacen_code": bacen_code,
+            "is_active": true,
         }))
         .await;
 
@@ -211,7 +217,8 @@ async fn test_create_country_duplicate_iso2_returns_conflict() {
         .json(&json!({
             "name": random_name("Country2"),
             "iso2": iso2,
-            "bacen_code": random_bacen_code()
+            "bacen_code": random_bacen_code(),
+            "is_active": true,
         }))
         .await;
 
@@ -235,6 +242,7 @@ async fn test_get_country_success() {
     assert_eq!(body["name"], country["name"]);
     assert_eq!(body["iso2"], country["iso2"]);
     assert_eq!(body["bacen_code"], country["bacen_code"]);
+    assert_eq!(body["is_active"], country["is_active"]);
 }
 
 #[tokio::test]
@@ -277,7 +285,8 @@ async fn test_create_state_success() {
             "name": name,
             "abbreviation": abbreviation,
             "ibge_code": ibge_code,
-            "country_id": country["id"]
+            "country_id": country["id"],
+            "is_active": true,
         }))
         .await;
 
@@ -291,6 +300,7 @@ async fn test_create_state_success() {
     assert_eq!(body["abbreviation"], abbreviation);
     assert_eq!(body["ibge_code"], ibge_code);
     assert_eq!(body["country_id"], country["id"]);
+    assert_eq!(body["is_active"], true);
     assert!(body["id"].is_string());
 }
 

@@ -45,7 +45,11 @@ impl GeoRegionsService {
         }
 
         // Check if bacen_code already exists
-        if self.country_repo.exists_by_bacen_code(payload.bacen_code).await? {
+        if self
+            .country_repo
+            .exists_by_bacen_code(payload.bacen_code)
+            .await?
+        {
             return Err(ServiceError::Conflict(format!(
                 "País com código Bacen '{}' já existe",
                 payload.bacen_code
@@ -54,7 +58,12 @@ impl GeoRegionsService {
 
         let country = self
             .country_repo
-            .create(&payload.name, &payload.iso2, payload.bacen_code)
+            .create(
+                &payload.name,
+                &payload.iso2,
+                payload.bacen_code,
+                payload.is_active,
+            )
             .await?;
 
         Ok(country)
@@ -105,7 +114,13 @@ impl GeoRegionsService {
 
         let country = self
             .country_repo
-            .update(id, payload.name.as_ref(), payload.iso2.as_deref(), payload.bacen_code)
+            .update(
+                id,
+                payload.name.as_ref(),
+                payload.iso2.as_deref(),
+                payload.bacen_code,
+                payload.is_active,
+            )
             .await?;
 
         Ok(country)
@@ -141,7 +156,11 @@ impl GeoRegionsService {
         payload: CreateStatePayload,
     ) -> Result<StateWithCountryDto, ServiceError> {
         // Check if state abbreviation already exists in this country
-        if self.state_repo.exists_by_abbreviation_in_country(&payload.abbreviation, payload.country_id).await? {
+        if self
+            .state_repo
+            .exists_by_abbreviation_in_country(&payload.abbreviation, payload.country_id)
+            .await?
+        {
             return Err(ServiceError::Conflict(format!(
                 "Estado com sigla '{}' já existe neste país",
                 payload.abbreviation
@@ -149,7 +168,11 @@ impl GeoRegionsService {
         }
 
         // Check if ibge_code already exists
-        if self.state_repo.exists_by_ibge_code(payload.ibge_code).await? {
+        if self
+            .state_repo
+            .exists_by_ibge_code(payload.ibge_code)
+            .await?
+        {
             return Err(ServiceError::Conflict(format!(
                 "Estado com código IBGE '{}' já existe",
                 payload.ibge_code
@@ -168,7 +191,13 @@ impl GeoRegionsService {
 
         let state = self
             .state_repo
-            .create(&payload.name, &payload.abbreviation, payload.ibge_code, payload.country_id)
+            .create(
+                &payload.name,
+                &payload.abbreviation,
+                payload.ibge_code,
+                payload.country_id,
+                payload.is_active,
+            )
             .await?;
 
         // Return state with country information
@@ -249,6 +278,7 @@ impl GeoRegionsService {
                 payload.abbreviation.as_ref(),
                 payload.ibge_code,
                 payload.country_id,
+                payload.is_active,
             )
             .await?;
 
@@ -296,7 +326,11 @@ impl GeoRegionsService {
 
     pub async fn create_city(&self, payload: CreateCityPayload) -> Result<CityDto, ServiceError> {
         // Check if ibge_code already exists
-        if self.city_repo.exists_by_ibge_code(payload.ibge_code).await? {
+        if self
+            .city_repo
+            .exists_by_ibge_code(payload.ibge_code)
+            .await?
+        {
             return Err(ServiceError::Conflict(format!(
                 "Cidade com código IBGE '{}' já existe",
                 payload.ibge_code
@@ -312,9 +346,8 @@ impl GeoRegionsService {
                 &payload.name,
                 payload.ibge_code,
                 payload.siafi_code,
-                payload.latitude,
-                payload.longitude,
                 payload.state_id,
+                payload.is_active,
             )
             .await?;
 
@@ -362,9 +395,8 @@ impl GeoRegionsService {
                 payload.name.as_ref(),
                 payload.ibge_code,
                 payload.siafi_code,
-                payload.latitude,
-                payload.longitude,
                 payload.state_id,
+                payload.is_active,
             )
             .await?;
 

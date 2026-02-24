@@ -1,6 +1,6 @@
 CREATE TABLE cities (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    state_abbreviation CHAR(2) NOT NULL REFERENCES states(abbreviation) ON DELETE RESTRICT,
+    state_id UUID NOT NULL REFERENCES states(id) ON DELETE RESTRICT,
     name VARCHAR(100) NOT NULL,
     ibge_code INT NOT NULL UNIQUE, -- Código IBGE do município
     siafi_code INT NOT NULL UNIQUE,
@@ -9,14 +9,14 @@ CREATE TABLE cities (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     
     -- Constraints
-    CONSTRAINT uq_cities_name_state UNIQUE (state_abbreviation, name),
+    CONSTRAINT uq_cities_name_state UNIQUE (state_id, name),
     CONSTRAINT uq_cities_ibge_code UNIQUE (ibge_code),
     CONSTRAINT uq_cities_siafi_code UNIQUE (siafi_code)
 );
 
 -- Índices
 CREATE INDEX idx_cities_name ON cities(name);
-CREATE INDEX idx_cities_state_abbreviation ON cities(state_abbreviation);
+CREATE INDEX idx_cities_state_id ON cities(state_id);
 CREATE UNIQUE INDEX idx_cities_ibge_code ON cities(ibge_code) WHERE ibge_code IS NOT NULL;
 CREATE INDEX idx_cities_siafi_code ON cities(siafi_code) WHERE siafi_code IS NOT NULL;
 CREATE INDEX idx_cities_name_tgrm ON cities USING gin (name gin_trgm_ops);
@@ -28,8 +28,13 @@ BEFORE UPDATE ON cities
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
-
-INSERT INTO cities(name,state_abbreviation,ibge_code,siafi_code) VALUES
+INSERT INTO cities (name, state_id, ibge_code, siafi_code)
+SELECT 
+    dados.name, 
+    s.id AS state_id, -- Busca o UUID gerado na tabela states
+    dados.ibge_code, 
+    dados.siafi_code
+FROM (VALUES
  ('CAMPO GRANDE','MS',5002704,9051)
 ,('PORTO VELHO','RO',1100205,3)
 ,('NOVA MAMORE','RO',1100338,47)
@@ -5596,4 +5601,8 @@ INSERT INTO cities(name,state_abbreviation,ibge_code,siafi_code) VALUES
 ,('NAZARIA','PI',2206720,1180)
 ,('PESCARIA BRAVA','SC',4212650,1194)
 ,('BALNEARIO RINCAO','SC',4220000,1192)
-,('PARAISO DAS AGUAS','MS',5006275,1196);
+,('PARAISO DAS AGUAS','MS',5006275,1196)
+) AS dados(name, state_abbreviation, ibge_code, siafi_code)
+JOIN states s ON s.abbreviation = dados.state_abbreviation
+JOIN countries c ON c.id = s.country_id
+WHERE c.bacen_code = 1058; -- Garante que vai buscar os estados do Brasil

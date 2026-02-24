@@ -17,6 +17,7 @@ pub struct CountryResponse {
     pub iso2: String,
     /// Código Bacen
     pub bacen_code: i32,
+    pub is_active: bool,
     /// Data de criação
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// Data de atualização
@@ -39,6 +40,7 @@ pub struct StateResponse {
     pub ibge_code: i32,
     /// ID do país
     pub country_id: Uuid,
+    pub is_active: bool,
     /// Data de criação
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// Data de atualização
@@ -63,6 +65,7 @@ pub struct StateWithCountryResponse {
     pub country_iso2: String,
     /// Código Bacen do país
     pub country_bacen_code: i32,
+    pub is_active: bool,
     /// Data de criação
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// Data de atualização
@@ -83,12 +86,9 @@ pub struct CityResponse {
     pub ibge_code: i32,
     /// Código SIAFI
     pub siafi_code: Option<i32>,
-    /// Latitude
-    pub latitude: Option<f64>,
-    /// Longitude
-    pub longitude: Option<f64>,
     /// ID do estado
     pub state_id: Uuid,
+    pub is_active: bool,
     /// Data de criação
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// Data de atualização
@@ -105,10 +105,7 @@ pub struct CityWithStateResponse {
     pub ibge_code: i32,
     /// Código SIAFI
     pub siafi_code: Option<i32>,
-    /// Latitude
-    pub latitude: Option<f64>,
-    /// Longitude
-    pub longitude: Option<f64>,
+    pub is_active: bool,
     /// ID do estado
     pub state_id: Uuid,
     /// Nome do estado

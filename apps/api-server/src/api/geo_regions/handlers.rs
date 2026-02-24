@@ -83,6 +83,7 @@ pub async fn get_country(
         id: country_dto.id,
         name: country_dto.name,
         iso2: country_dto.iso2,
+        is_active: country_dto.is_active,
         bacen_code: country_dto.bacen_code,
         created_at: country_dto.created_at,
         updated_at: country_dto.updated_at,
@@ -122,6 +123,7 @@ pub async fn create_country(
             name: country_dto.name,
             iso2: country_dto.iso2,
             bacen_code: country_dto.bacen_code,
+            is_active: country_dto.is_active,
             created_at: country_dto.created_at,
             updated_at: country_dto.updated_at,
         }),
@@ -164,6 +166,7 @@ pub async fn update_country(
         name: country_dto.name,
         iso2: country_dto.iso2,
         bacen_code: country_dto.bacen_code,
+        is_active: country_dto.is_active,
         created_at: country_dto.created_at,
         updated_at: country_dto.updated_at,
     }))
@@ -225,7 +228,12 @@ pub async fn list_states(
 ) -> Result<Json<Paginated<StateWithCountryDto>>, AppError> {
     let result = state
         .location_service
-        .list_states(params.limit, params.offset, params.search, params.country_id)
+        .list_states(
+            params.limit,
+            params.offset,
+            params.search,
+            params.country_id,
+        )
         .await?;
 
     Ok(Json(result))
@@ -261,6 +269,7 @@ pub async fn get_state(
         abbreviation: state_dto.abbreviation,
         ibge_code: state_dto.ibge_code,
         country_id: state_dto.country_id,
+        is_active: state_dto.is_active,
         created_at: state_dto.created_at,
         updated_at: state_dto.updated_at,
     }))
@@ -300,6 +309,7 @@ pub async fn create_state(
             abbreviation: state_dto.abbreviation,
             ibge_code: state_dto.ibge_code,
             country_id: state_dto.country_id,
+            is_active: state_dto.is_active,
             created_at: state_dto.created_at,
             updated_at: state_dto.updated_at,
         }),
@@ -343,6 +353,7 @@ pub async fn update_state(
         abbreviation: state_dto.abbreviation,
         ibge_code: state_dto.ibge_code,
         country_id: state_dto.country_id,
+        is_active: state_dto.is_active,
         created_at: state_dto.created_at,
         updated_at: state_dto.updated_at,
     }))
@@ -439,8 +450,7 @@ pub async fn get_city(
         name: city_dto.name,
         ibge_code: city_dto.ibge_code,
         siafi_code: city_dto.siafi_code,
-        latitude: city_dto.latitude,
-        longitude: city_dto.longitude,
+        is_active: city_dto.is_active,
         state_id: city_dto.state_id,
         state_name: city_dto.state_name,
         state_abbreviation: city_dto.state_abbreviation,
@@ -487,9 +497,8 @@ pub async fn create_city(
             name: city_dto.name,
             ibge_code: city_dto.ibge_code,
             siafi_code: city_dto.siafi_code,
-            latitude: city_dto.latitude,
-            longitude: city_dto.longitude,
             state_id: city_dto.state_id,
+            is_active: city_dto.is_active,
             created_at: city_dto.created_at,
             updated_at: city_dto.updated_at,
         }),
@@ -532,8 +541,7 @@ pub async fn update_city(
         name: city_dto.name,
         ibge_code: city_dto.ibge_code,
         siafi_code: city_dto.siafi_code,
-        latitude: city_dto.latitude,
-        longitude: city_dto.longitude,
+        is_active: city_dto.is_active,
         state_id: city_dto.state_id,
         created_at: city_dto.created_at,
         updated_at: city_dto.updated_at,
@@ -565,4 +573,3 @@ pub async fn delete_city(
     state.location_service.delete_city(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
-

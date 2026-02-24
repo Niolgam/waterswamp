@@ -27,7 +27,7 @@ impl CountryRepository {
 impl CountryRepositoryPort for CountryRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CountryDto>, RepositoryError> {
         sqlx::query_as::<_, CountryDto>(
-            "SELECT id, name, iso2, bacen_code, created_at, updated_at FROM countries WHERE id = $1",
+            "SELECT id, name, iso2, bacen_code, created_at, is_active, updated_at FROM countries WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -37,7 +37,7 @@ impl CountryRepositoryPort for CountryRepository {
 
     async fn find_by_iso2(&self, iso2: &str) -> Result<Option<CountryDto>, RepositoryError> {
         sqlx::query_as::<_, CountryDto>(
-            "SELECT id, name, iso2, bacen_code, created_at, updated_at FROM countries WHERE iso2 = $1",
+            "SELECT id, name, iso2, bacen_code, created_at, is_active, updated_at FROM countries WHERE iso2 = $1",
         )
         .bind(iso2)
         .fetch_optional(&self.pool)
@@ -45,9 +45,12 @@ impl CountryRepositoryPort for CountryRepository {
         .map_err(map_db_error)
     }
 
-    async fn find_by_bacen_code(&self, bacen_code: i32) -> Result<Option<CountryDto>, RepositoryError> {
+    async fn find_by_bacen_code(
+        &self,
+        bacen_code: i32,
+    ) -> Result<Option<CountryDto>, RepositoryError> {
         sqlx::query_as::<_, CountryDto>(
-            "SELECT id, name, iso2, bacen_code, created_at, updated_at FROM countries WHERE bacen_code = $1",
+            "SELECT id, name, iso2, bacen_code, created_at, is_active, updated_at FROM countries WHERE bacen_code = $1",
         )
         .bind(bacen_code)
         .fetch_optional(&self.pool)
@@ -103,13 +106,20 @@ impl CountryRepositoryPort for CountryRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, name: &LocationName, iso2: &str, bacen_code: i32) -> Result<CountryDto, RepositoryError> {
+    async fn create(
+        &self,
+        name: &LocationName,
+        iso2: &str,
+        bacen_code: i32,
+        is_active: bool,
+    ) -> Result<CountryDto, RepositoryError> {
         sqlx::query_as::<_, CountryDto>(
-            "INSERT INTO countries (name, iso2, bacen_code) VALUES ($1, $2, $3) RETURNING id, name, iso2, bacen_code, created_at, updated_at",
+            "INSERT INTO countries (name, iso2, bacen_code,  is_active) VALUES ($1, $2, $3, $4) RETURNING id, name, iso2, bacen_code, is_active, created_at, updated_at",
         )
         .bind(name.as_str())
         .bind(iso2)
         .bind(bacen_code)
+        .bind(is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -121,6 +131,7 @@ impl CountryRepositoryPort for CountryRepository {
         name: Option<&LocationName>,
         iso2: Option<&str>,
         bacen_code: Option<i32>,
+        is_active: bool,
     ) -> Result<CountryDto, RepositoryError> {
         let current = self
             .find_by_id(id)
@@ -132,11 +143,12 @@ impl CountryRepositoryPort for CountryRepository {
         let new_bacen_code = bacen_code.unwrap_or(current.bacen_code);
 
         sqlx::query_as::<_, CountryDto>(
-            "UPDATE countries SET name = $1, iso2 = $2, bacen_code = $3, updated_at = NOW() WHERE id = $4 RETURNING id, name, iso2, bacen_code, created_at, updated_at",
+            "UPDATE countries SET name = $1, iso2 = $2, bacen_code = $3,  is_active = $4 updated_at = NOW() WHERE id = $5 RETURNING id, name, is_active, iso2, bacen_code, created_at, updated_at",
         )
         .bind(new_name.as_str())
         .bind(new_iso2)
         .bind(new_bacen_code)
+            .bind(is_active)
         .bind(id)
         .fetch_one(&self.pool)
         .await
@@ -162,7 +174,7 @@ impl CountryRepositoryPort for CountryRepository {
 
         let countries = if let Some(ref pattern) = search_pattern {
             sqlx::query_as::<_, CountryDto>(
-                "SELECT id, name, iso2, bacen_code, created_at, updated_at FROM countries WHERE name ILIKE $1 ORDER BY name LIMIT $2 OFFSET $3",
+                "SELECT id, name, iso2, bacen_code, created_at, is_active, updated_at FROM countries WHERE name ILIKE $1 ORDER BY name LIMIT $2 OFFSET $3",
             )
             .bind(pattern)
             .bind(limit)
@@ -172,7 +184,7 @@ impl CountryRepositoryPort for CountryRepository {
             .map_err(map_db_error)?
         } else {
             sqlx::query_as::<_, CountryDto>(
-                "SELECT id, name, iso2, bacen_code, created_at, updated_at FROM countries ORDER BY name LIMIT $1 OFFSET $2",
+                "SELECT id, name, iso2, bacen_code, is_active, created_at, updated_at FROM countries ORDER BY name LIMIT $1 OFFSET $2",
             )
             .bind(limit)
             .bind(offset)
@@ -217,7 +229,7 @@ impl StateRepository {
 impl StateRepositoryPort for StateRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<StateDto>, RepositoryError> {
         sqlx::query_as::<_, StateDto>(
-            "SELECT id, name, abbreviation, ibge_code, country_id, created_at, updated_at FROM states WHERE id = $1",
+            "SELECT id, name, abbreviation, ibge_code, country_id, is_active, created_at, updated_at FROM states WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -232,7 +244,7 @@ impl StateRepositoryPort for StateRepository {
         sqlx::query_as::<_, StateWithCountryDto>(
             r#"
             SELECT
-                s.id, s.name, s.abbreviation, s.ibge_code, s.country_id,
+                s.id, s.name, s.abbreviation, s.ibge_code, s.country_id, s.is_active,
                 c.name as country_name, c.iso2 as country_iso2, c.bacen_code as country_bacen_code,
                 s.created_at, s.updated_at
             FROM states s
@@ -246,9 +258,12 @@ impl StateRepositoryPort for StateRepository {
         .map_err(map_db_error)
     }
 
-    async fn find_by_abbreviation(&self, abbreviation: &StateCode) -> Result<Option<StateDto>, RepositoryError> {
+    async fn find_by_abbreviation(
+        &self,
+        abbreviation: &StateCode,
+    ) -> Result<Option<StateDto>, RepositoryError> {
         sqlx::query_as::<_, StateDto>(
-            "SELECT id, name, abbreviation, ibge_code, country_id, created_at, updated_at FROM states WHERE abbreviation = $1",
+            "SELECT id, name, abbreviation, ibge_code, country_id, created_at, is_active, updated_at FROM states WHERE abbreviation = $1",
         )
         .bind(abbreviation.as_str())
         .fetch_optional(&self.pool)
@@ -258,7 +273,7 @@ impl StateRepositoryPort for StateRepository {
 
     async fn find_by_ibge_code(&self, ibge_code: i32) -> Result<Option<StateDto>, RepositoryError> {
         sqlx::query_as::<_, StateDto>(
-            "SELECT id, name, abbreviation, ibge_code, country_id, created_at, updated_at FROM states WHERE ibge_code = $1",
+            "SELECT id, name, abbreviation, ibge_code, country_id, created_at, is_active, updated_at FROM states WHERE ibge_code = $1",
         )
         .bind(ibge_code)
         .fetch_optional(&self.pool)
@@ -266,7 +281,10 @@ impl StateRepositoryPort for StateRepository {
         .map_err(map_db_error)
     }
 
-    async fn exists_by_abbreviation(&self, abbreviation: &StateCode) -> Result<bool, RepositoryError> {
+    async fn exists_by_abbreviation(
+        &self,
+        abbreviation: &StateCode,
+    ) -> Result<bool, RepositoryError> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM states WHERE abbreviation = $1")
             .bind(abbreviation.as_str())
             .fetch_one(&self.pool)
@@ -281,13 +299,13 @@ impl StateRepositoryPort for StateRepository {
         country_id: Uuid,
     ) -> Result<bool, RepositoryError> {
         let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM states WHERE abbreviation = $1 AND country_id = $2"
+            "SELECT COUNT(*) FROM states WHERE abbreviation = $1 AND country_id = $2",
         )
-            .bind(abbreviation.as_str())
-            .bind(country_id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(map_db_error)?;
+        .bind(abbreviation.as_str())
+        .bind(country_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_error)?;
         Ok(count > 0)
     }
 
@@ -336,14 +354,16 @@ impl StateRepositoryPort for StateRepository {
         abbreviation: &StateCode,
         ibge_code: i32,
         country_id: Uuid,
+        is_active: bool,
     ) -> Result<StateDto, RepositoryError> {
         sqlx::query_as::<_, StateDto>(
-            "INSERT INTO states (name, abbreviation, ibge_code, country_id) VALUES ($1, $2, $3, $4) RETURNING id, name, abbreviation, ibge_code, country_id, created_at, updated_at",
+            "INSERT INTO states (name, abbreviation, ibge_code, country_id, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, abbreviation, ibge_code, country_id, is_active, created_at, updated_at",
         )
         .bind(name.as_str())
         .bind(abbreviation.as_str())
         .bind(ibge_code)
         .bind(country_id)
+         .bind(is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -356,6 +376,7 @@ impl StateRepositoryPort for StateRepository {
         abbreviation: Option<&StateCode>,
         ibge_code: Option<i32>,
         country_id: Option<Uuid>,
+        is_active: bool,
     ) -> Result<StateDto, RepositoryError> {
         let mut query_parts = vec![];
         let mut bind_index = 1;
@@ -376,6 +397,10 @@ impl StateRepositoryPort for StateRepository {
             query_parts.push(format!("country_id = ${}", bind_index));
             bind_index += 1;
         }
+        {
+            query_parts.push(format!("is_active = ${}", bind_index));
+            bind_index += 1;
+        }
 
         if query_parts.is_empty() {
             // If no fields to update, just return the existing state
@@ -383,7 +408,7 @@ impl StateRepositoryPort for StateRepository {
         }
 
         let query_str = format!(
-            "UPDATE states SET {} WHERE id = ${} RETURNING id, name, abbreviation, ibge_code, country_id, created_at, updated_at",
+            "UPDATE states SET {} WHERE id = ${} RETURNING id, name, abbreviation, ibge_code, is_active, country_id, created_at, updated_at",
             query_parts.join(", "),
             bind_index
         );
@@ -402,6 +427,7 @@ impl StateRepositoryPort for StateRepository {
         if let Some(country_id_val) = country_id {
             query = query.bind(country_id_val);
         }
+        query = query.bind(is_active);
         query = query.bind(id);
 
         query.fetch_one(&self.pool).await.map_err(map_db_error)
@@ -449,7 +475,7 @@ impl StateRepositoryPort for StateRepository {
         let query_str = format!(
             r#"
             SELECT
-                s.id, s.name, s.abbreviation, s.ibge_code, s.country_id,
+                s.id, s.name, s.abbreviation, s.ibge_code, s.country_id, s.is_active,
                 c.name as country_name, c.iso2 as country_iso2, c.bacen_code as country_bacen_code,
                 s.created_at, s.updated_at
             FROM states s
@@ -517,8 +543,7 @@ impl CityRepository {
 impl CityRepositoryPort for CityRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CityDto>, RepositoryError> {
         sqlx::query_as::<_, CityDto>(
-            r#"SELECT id, name, ibge_code, siafi_code,
-                ST_Y(location::geometry) as latitude, ST_X(location::geometry) as longitude,
+            r#"SELECT id, name, ibge_code, siafi_code, is_active,
                 state_id, created_at, updated_at FROM cities WHERE id = $1"#,
         )
         .bind(id)
@@ -534,8 +559,7 @@ impl CityRepositoryPort for CityRepository {
         let result = sqlx::query_as::<_, CityWithStateDto>(
             r#"
             SELECT
-                c.id, c.name, c.ibge_code, c.siafi_code,
-                ST_Y(c.location::geometry) as latitude, ST_X(c.location::geometry) as longitude,
+                c.id, c.name, c.ibge_code, c.siafi_code, c.is_active,
                 c.state_id,
                 s.name as state_name, s.abbreviation as state_abbreviation, s.ibge_code as state_ibge_code,
                 co.id as country_id, co.name as country_name, co.iso2 as country_iso2, co.bacen_code as country_bacen_code,
@@ -556,8 +580,7 @@ impl CityRepositoryPort for CityRepository {
 
     async fn find_by_ibge_code(&self, ibge_code: i32) -> Result<Option<CityDto>, RepositoryError> {
         sqlx::query_as::<_, CityDto>(
-            r#"SELECT id, name, ibge_code, siafi_code,
-                ST_Y(location::geometry) as latitude, ST_X(location::geometry) as longitude,
+            r#"SELECT id, name, ibge_code, siafi_code, is_active,
                 state_id, created_at, updated_at FROM cities WHERE ibge_code = $1"#,
         )
         .bind(ibge_code)
@@ -595,27 +618,20 @@ impl CityRepositoryPort for CityRepository {
         name: &LocationName,
         ibge_code: i32,
         siafi_code: Option<i32>,
-        latitude: Option<f64>,
-        longitude: Option<f64>,
         state_id: Uuid,
+        is_active: bool,
     ) -> Result<CityDto, RepositoryError> {
         sqlx::query_as::<_, CityDto>(
-            r#"INSERT INTO cities (name, ibge_code, siafi_code, location, state_id)
-             VALUES ($1, $2, $3,
-                CASE WHEN $4::float8 IS NOT NULL AND $5::float8 IS NOT NULL
-                    THEN ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography
-                    ELSE NULL END,
-                $6)
-             RETURNING id, name, ibge_code, siafi_code,
-                ST_Y(location::geometry) as latitude, ST_X(location::geometry) as longitude,
+            r#"INSERT INTO cities (name, ibge_code, siafi_code,  state_id, is_active)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id, name, ibge_code, siafi_code, is_active,
                 state_id, created_at, updated_at"#,
         )
         .bind(name.as_str())
         .bind(ibge_code)
         .bind(siafi_code)
-        .bind(latitude)
-        .bind(longitude)
         .bind(state_id)
+        .bind(is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -627,9 +643,8 @@ impl CityRepositoryPort for CityRepository {
         name: Option<&LocationName>,
         ibge_code: Option<i32>,
         siafi_code: Option<i32>,
-        latitude: Option<f64>,
-        longitude: Option<f64>,
         state_id: Option<Uuid>,
+        is_active: bool,
     ) -> Result<CityDto, RepositoryError> {
         let mut query_parts = vec![];
         let mut bind_index = 1;
@@ -646,15 +661,12 @@ impl CityRepositoryPort for CityRepository {
             query_parts.push(format!("siafi_code = ${}", bind_index));
             bind_index += 1;
         }
-        if latitude.is_some() && longitude.is_some() {
-            query_parts.push(format!(
-                "location = ST_SetSRID(ST_MakePoint(${}, ${}), 4326)::geography",
-                bind_index + 1, bind_index
-            ));
-            bind_index += 2;
-        }
         if state_id.is_some() {
             query_parts.push(format!("state_id = ${}", bind_index));
+            bind_index += 1;
+        }
+        {
+            query_parts.push(format!("is_active = ${}", bind_index));
             bind_index += 1;
         }
 
@@ -665,8 +677,7 @@ impl CityRepositoryPort for CityRepository {
         let query_str = format!(
             r#"UPDATE cities SET {} WHERE id = ${}
             RETURNING id, name, ibge_code, siafi_code,
-                ST_Y(location::geometry) as latitude, ST_X(location::geometry) as longitude,
-                state_id, created_at, updated_at"#,
+                state_id, is_active, created_at, updated_at"#,
             query_parts.join(", "),
             bind_index
         );
@@ -682,15 +693,11 @@ impl CityRepositoryPort for CityRepository {
         if let Some(siafi_code_val) = siafi_code {
             query = query.bind(siafi_code_val);
         }
-        if let Some(lat) = latitude {
-            if longitude.is_some() {
-                query = query.bind(lat);
-                query = query.bind(longitude.unwrap());
-            }
-        }
         if let Some(state_id_val) = state_id {
             query = query.bind(state_id_val);
         }
+
+        query = query.bind(is_active);
         query = query.bind(id);
 
         query.fetch_one(&self.pool).await.map_err(map_db_error)
@@ -718,8 +725,7 @@ impl CityRepositoryPort for CityRepository {
         // Base query with joins
         let base_query = r#"
             SELECT
-                c.id, c.name, c.ibge_code, c.siafi_code,
-                ST_Y(c.location::geometry) as latitude, ST_X(c.location::geometry) as longitude,
+                c.id, c.name, c.ibge_code, c.siafi_code, is_active,
                 c.state_id,
                 s.name as state_name, s.abbreviation as state_abbreviation, s.ibge_code as state_ibge_code,
                 co.id as country_id, co.name as country_name, co.iso2 as country_iso2, co.bacen_code as country_bacen_code,
