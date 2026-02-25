@@ -91,7 +91,7 @@ pub struct CreateStatePayload {
     pub abbreviation: StateCode,
     pub ibge_code: i32,
     pub country_id: Uuid,
-    pub is_active: bool,
+    pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Validate, Deserialize, ToSchema)]
@@ -100,7 +100,7 @@ pub struct UpdateStatePayload {
     pub abbreviation: Option<StateCode>,
     pub ibge_code: Option<i32>,
     pub country_id: Option<Uuid>,
-    pub is_active: bool,
+    pub is_active: Option<bool>,
 }
 
 // ============================
@@ -152,7 +152,7 @@ pub struct CreateCityPayload {
     pub ibge_code: i32,
     pub siafi_code: Option<i32>,
     pub state_id: Uuid,
-    pub is_active: bool,
+    pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Validate, Deserialize, ToSchema)]
@@ -161,5 +161,5 @@ pub struct UpdateCityPayload {
     pub ibge_code: Option<i32>,
     pub siafi_code: Option<i32>,
     pub state_id: Option<Uuid>,
-    pub is_active: bool,
+    pub is_active: Option<bool>,
 }
