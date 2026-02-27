@@ -196,7 +196,7 @@ impl GeoRegionsService {
                 &payload.abbreviation,
                 payload.ibge_code,
                 payload.country_id,
-                payload.is_active,
+                payload.is_active.unwrap_or(true),
             )
             .await?;
 
@@ -278,7 +278,7 @@ impl GeoRegionsService {
                 payload.abbreviation.as_ref(),
                 payload.ibge_code,
                 payload.country_id,
-                payload.is_active,
+                payload.is_active.unwrap_or(true),
             )
             .await?;
 
@@ -347,7 +347,7 @@ impl GeoRegionsService {
                 payload.ibge_code,
                 payload.siafi_code,
                 payload.state_id,
-                payload.is_active,
+                payload.is_active.unwrap_or(true),
             )
             .await?;
 
@@ -396,7 +396,7 @@ impl GeoRegionsService {
                 payload.ibge_code,
                 payload.siafi_code,
                 payload.state_id,
-                payload.is_active,
+                payload.is_active.unwrap_or(true),
             )
             .await?;
 

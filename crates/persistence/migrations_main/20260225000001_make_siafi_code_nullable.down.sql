@@ -1,0 +1,1 @@
+ALTER TABLE cities ALTER COLUMN siafi_code SET NOT NULL;

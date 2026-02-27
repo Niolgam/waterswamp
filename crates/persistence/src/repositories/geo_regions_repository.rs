@@ -725,7 +725,7 @@ impl CityRepositoryPort for CityRepository {
         // Base query with joins
         let base_query = r#"
             SELECT
-                c.id, c.name, c.ibge_code, c.siafi_code, is_active,
+                c.id, c.name, c.ibge_code, c.siafi_code, c.is_active,
                 c.state_id,
                 s.name as state_name, s.abbreviation as state_abbreviation, s.ibge_code as state_ibge_code,
                 co.id as country_id, co.name as country_name, co.iso2 as country_iso2, co.bacen_code as country_bacen_code,
