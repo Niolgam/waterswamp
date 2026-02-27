@@ -31,9 +31,8 @@ use uuid::Uuid;
 /// # Nota
 ///
 /// Se o usuário não estiver autenticado (extensão não encontrada),
-/// retorna `StatusCode::INTERNAL_SERVER_ERROR`. Isso indica um
-/// erro de configuração (middleware não aplicado), não um usuário
-/// não autenticado (que seria 401).
+/// retorna `StatusCode::UNAUTHORIZED` (401), indicando que a rota
+/// requer autenticação.
 #[derive(Debug, Clone)]
 pub struct CurrentUser {
     /// UUID do usuário
@@ -70,11 +69,14 @@ where
             .get::<CurrentUser>()
             .cloned()
             .ok_or_else(|| {
-                tracing::error!(
-                    "CurrentUser não encontrado nas extensões. \
-                     Verifique se o middleware de autenticação foi aplicado."
+                let method = parts.method.as_str();
+                let uri = parts.uri.path();
+                tracing::warn!(
+                    method = method,
+                    uri = uri,
+                    "CurrentUser não encontrado nas extensões — rota requer autenticação."
                 );
-                StatusCode::INTERNAL_SERVER_ERROR
+                StatusCode::UNAUTHORIZED
             })
     }
 }
