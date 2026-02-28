@@ -31,9 +31,13 @@ use utoipa::OpenApi;
         (name = "Geo Regions - Cities", description = "Gerenciamento de cidades"),
         (name = "Budget Classifications", description = "Classificações orçamentárias hierárquicas (c.g.mm.ee.dd)"),
         (name = "Catalog - Units", description = "Unidades de medida para catálogo"),
-        (name = "Catalog - Groups", description = "Grupos hierárquicos de catálogo (MATERIAL/SERVICE)"),
-        (name = "Catalog - Items", description = "Itens de catálogo com especificações"),
         (name = "Catalog - Conversions", description = "Conversões entre unidades de medida"),
+        (name = "CATMAT - Groups", description = "Grupos do Catálogo de Materiais (CATMAT)"),
+        (name = "CATMAT - Classes", description = "Classes do Catálogo de Materiais (CATMAT)"),
+        (name = "CATMAT - Items", description = "Itens PDM do Catálogo de Materiais (CATMAT)"),
+        (name = "CATSER - Groups", description = "Grupos do Catálogo de Serviços (CATSER)"),
+        (name = "CATSER - Classes", description = "Classes do Catálogo de Serviços (CATSER)"),
+        (name = "CATSER - Items", description = "Itens do Catálogo de Serviços (CATSER)"),
         (name = "Organization - System Settings", description = "Configurações globais do sistema"),
         (name = "Organization - Organizations", description = "Gerenciamento de organizações (CNPJ, SIORG)"),
         (name = "Organization - Unit Categories", description = "Categorias de unidades organizacionais"),
@@ -105,27 +109,56 @@ use utoipa::OpenApi;
         crate::api::catalog::handlers::update_unit_of_measure,
         crate::api::catalog::handlers::delete_unit_of_measure,
 
-        // Catalog - Groups
-        crate::api::catalog::handlers::create_catalog_group,
-        crate::api::catalog::handlers::get_catalog_group,
-        crate::api::catalog::handlers::list_catalog_groups,
-        crate::api::catalog::handlers::get_catalog_group_tree,
-        crate::api::catalog::handlers::update_catalog_group,
-        crate::api::catalog::handlers::delete_catalog_group,
-
-        // Catalog - Items
-        crate::api::catalog::handlers::create_catalog_item,
-        crate::api::catalog::handlers::get_catalog_item,
-        crate::api::catalog::handlers::list_catalog_items,
-        crate::api::catalog::handlers::update_catalog_item,
-        crate::api::catalog::handlers::delete_catalog_item,
-
         // Catalog - Unit Conversions
         crate::api::catalog::handlers::create_unit_conversion,
         crate::api::catalog::handlers::get_unit_conversion,
         crate::api::catalog::handlers::list_unit_conversions,
         crate::api::catalog::handlers::update_unit_conversion,
         crate::api::catalog::handlers::delete_unit_conversion,
+
+        // CATMAT - Groups
+        crate::api::catalog::handlers::create_catmat_group,
+        crate::api::catalog::handlers::get_catmat_group,
+        crate::api::catalog::handlers::list_catmat_groups,
+        crate::api::catalog::handlers::get_catmat_tree,
+        crate::api::catalog::handlers::update_catmat_group,
+        crate::api::catalog::handlers::delete_catmat_group,
+
+        // CATMAT - Classes
+        crate::api::catalog::handlers::create_catmat_class,
+        crate::api::catalog::handlers::get_catmat_class,
+        crate::api::catalog::handlers::list_catmat_classes,
+        crate::api::catalog::handlers::update_catmat_class,
+        crate::api::catalog::handlers::delete_catmat_class,
+
+        // CATMAT - Items (PDM)
+        crate::api::catalog::handlers::create_catmat_item,
+        crate::api::catalog::handlers::get_catmat_item,
+        crate::api::catalog::handlers::list_catmat_items,
+        crate::api::catalog::handlers::update_catmat_item,
+        crate::api::catalog::handlers::delete_catmat_item,
+
+        // CATSER - Groups
+        crate::api::catalog::handlers::create_catser_group,
+        crate::api::catalog::handlers::get_catser_group,
+        crate::api::catalog::handlers::list_catser_groups,
+        crate::api::catalog::handlers::get_catser_tree,
+        crate::api::catalog::handlers::update_catser_group,
+        crate::api::catalog::handlers::delete_catser_group,
+
+        // CATSER - Classes
+        crate::api::catalog::handlers::create_catser_class,
+        crate::api::catalog::handlers::get_catser_class,
+        crate::api::catalog::handlers::list_catser_classes,
+        crate::api::catalog::handlers::update_catser_class,
+        crate::api::catalog::handlers::delete_catser_class,
+
+        // CATSER - Items (Serviço)
+        crate::api::catalog::handlers::create_catser_item,
+        crate::api::catalog::handlers::get_catser_item,
+        crate::api::catalog::handlers::list_catser_items,
+        crate::api::catalog::handlers::update_catser_item,
+        crate::api::catalog::handlers::delete_catser_item,
 
         // Organization - System Settings
         crate::api::organizational::handlers::create_system_setting,
@@ -224,30 +257,54 @@ use utoipa::OpenApi;
             domain::models::budget_classifications::UpdateBudgetClassificationPayload,
             domain::models::budget_classifications::BudgetClassificationTreeNode,
 
-            // Catalog - Domain Models
-            domain::models::catalog::ItemType,
+            // Catalog - Domain Models (Units & Conversions)
             domain::models::catalog::UnitOfMeasureDto,
             domain::models::catalog::CreateUnitOfMeasurePayload,
             domain::models::catalog::UpdateUnitOfMeasurePayload,
-            domain::models::catalog::CatalogGroupDto,
-            domain::models::catalog::CatalogGroupWithDetailsDto,
-            domain::models::catalog::CatalogGroupTreeNode,
-            domain::models::catalog::CreateCatalogGroupPayload,
-            domain::models::catalog::UpdateCatalogGroupPayload,
-            domain::models::catalog::CatalogItemDto,
-            domain::models::catalog::CatalogItemWithDetailsDto,
-            domain::models::catalog::CreateCatalogItemPayload,
-            domain::models::catalog::UpdateCatalogItemPayload,
             domain::models::catalog::UnitConversionDto,
             domain::models::catalog::UnitConversionWithDetailsDto,
             domain::models::catalog::CreateUnitConversionPayload,
             domain::models::catalog::UpdateUnitConversionPayload,
 
+            // CATMAT - Domain Models
+            domain::models::catalog::CatmatGroupDto,
+            domain::models::catalog::CreateCatmatGroupPayload,
+            domain::models::catalog::UpdateCatmatGroupPayload,
+            domain::models::catalog::CatmatGroupTreeNode,
+            domain::models::catalog::CatmatClassTreeNode,
+            domain::models::catalog::CatmatClassDto,
+            domain::models::catalog::CatmatClassWithDetailsDto,
+            domain::models::catalog::CreateCatmatClassPayload,
+            domain::models::catalog::UpdateCatmatClassPayload,
+            domain::models::catalog::CatmatItemDto,
+            domain::models::catalog::CatmatItemWithDetailsDto,
+            domain::models::catalog::CreateCatmatItemPayload,
+            domain::models::catalog::UpdateCatmatItemPayload,
+
+            // CATSER - Domain Models
+            domain::models::catalog::CatserGroupDto,
+            domain::models::catalog::CreateCatserGroupPayload,
+            domain::models::catalog::UpdateCatserGroupPayload,
+            domain::models::catalog::CatserGroupTreeNode,
+            domain::models::catalog::CatserClassTreeNode,
+            domain::models::catalog::CatserClassDto,
+            domain::models::catalog::CatserClassWithDetailsDto,
+            domain::models::catalog::CreateCatserClassPayload,
+            domain::models::catalog::UpdateCatserClassPayload,
+            domain::models::catalog::CatserItemDto,
+            domain::models::catalog::CatserItemWithDetailsDto,
+            domain::models::catalog::CreateCatserItemPayload,
+            domain::models::catalog::UpdateCatserItemPayload,
+
             // Catalog - API Contracts
             crate::api::catalog::contracts::UnitsOfMeasureListResponse,
-            crate::api::catalog::contracts::CatalogGroupsListResponse,
-            crate::api::catalog::contracts::CatalogItemsListResponse,
             crate::api::catalog::contracts::UnitConversionsListResponse,
+            crate::api::catalog::contracts::CatmatGroupsListResponse,
+            crate::api::catalog::contracts::CatmatClassesListResponse,
+            crate::api::catalog::contracts::CatmatItemsListResponse,
+            crate::api::catalog::contracts::CatserGroupsListResponse,
+            crate::api::catalog::contracts::CatserClassesListResponse,
+            crate::api::catalog::contracts::CatserItemsListResponse,
 
             // Organization - Domain Models
             domain::models::organizational::ActivityArea,

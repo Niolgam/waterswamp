@@ -369,7 +369,8 @@ mod tests {
         RequisitionItemDto {
             id: Uuid::new_v4(),
             requisition_id: Uuid::new_v4(),
-            catalog_item_id: Uuid::new_v4(),
+            catmat_item_id: Some(Uuid::new_v4()),
+            catser_item_id: None,
             requested_quantity: Decimal::new(10, 0),
             approved_quantity: None,
             fulfilled_quantity: None,

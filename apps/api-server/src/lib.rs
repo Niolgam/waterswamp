@@ -27,7 +27,9 @@ use application::services::{
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
-    BuildingTypeRepositoryPort, CatalogGroupRepositoryPort, CatalogItemRepositoryPort,
+    BuildingTypeRepositoryPort,
+    CatmatGroupRepositoryPort, CatmatClassRepositoryPort, CatmatItemRepositoryPort,
+    CatserGroupRepositoryPort, CatserClassRepositoryPort, CatserItemRepositoryPort,
     CityRepositoryPort, CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
     MfaRepositoryPort, OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
@@ -48,8 +50,9 @@ use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
     catalog_repository::{
-        CatalogGroupRepository, CatalogItemRepository, UnitConversionRepository,
-        UnitOfMeasureRepository,
+        CatmatGroupRepository, CatmatClassRepository, CatmatItemRepository,
+        CatserGroupRepository, CatserClassRepository, CatserItemRepository,
+        UnitConversionRepository, UnitOfMeasureRepository,
     },
     facilities_repository::{
         BuildingRepository, BuildingTypeRepository, FloorRepository, SiteRepository,
@@ -169,18 +172,30 @@ pub fn build_application_state(
 
     let unit_repo_port: Arc<dyn UnitOfMeasureRepositoryPort> =
         Arc::new(UnitOfMeasureRepository::new(pool_auth.clone()));
-    let group_repo_port: Arc<dyn CatalogGroupRepositoryPort> =
-        Arc::new(CatalogGroupRepository::new(pool_auth.clone()));
-    let item_repo_port: Arc<dyn CatalogItemRepositoryPort> =
-        Arc::new(CatalogItemRepository::new(pool_auth.clone()));
     let conversion_repo_port: Arc<dyn UnitConversionRepositoryPort> =
         Arc::new(UnitConversionRepository::new(pool_auth.clone()));
+    let catmat_group_repo_port: Arc<dyn CatmatGroupRepositoryPort> =
+        Arc::new(CatmatGroupRepository::new(pool_auth.clone()));
+    let catmat_class_repo_port: Arc<dyn CatmatClassRepositoryPort> =
+        Arc::new(CatmatClassRepository::new(pool_auth.clone()));
+    let catmat_item_repo_port: Arc<dyn CatmatItemRepositoryPort> =
+        Arc::new(CatmatItemRepository::new(pool_auth.clone()));
+    let catser_group_repo_port: Arc<dyn CatserGroupRepositoryPort> =
+        Arc::new(CatserGroupRepository::new(pool_auth.clone()));
+    let catser_class_repo_port: Arc<dyn CatserClassRepositoryPort> =
+        Arc::new(CatserClassRepository::new(pool_auth.clone()));
+    let catser_item_repo_port: Arc<dyn CatserItemRepositoryPort> =
+        Arc::new(CatserItemRepository::new(pool_auth.clone()));
 
     let catalog_service = Arc::new(CatalogService::new(
         unit_repo_port,
-        group_repo_port,
-        item_repo_port,
         conversion_repo_port,
+        catmat_group_repo_port,
+        catmat_class_repo_port,
+        catmat_item_repo_port,
+        catser_group_repo_port,
+        catser_class_repo_port,
+        catser_item_repo_port,
     ));
 
     // Organizational repositories

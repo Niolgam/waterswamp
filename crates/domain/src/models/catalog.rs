@@ -4,18 +4,6 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 // ============================
-// Enums
-// ============================
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::Type, PartialEq)]
-#[sqlx(type_name = "item_type_enum", rename_all = "SCREAMING_SNAKE_CASE")]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ItemType {
-    Material,
-    Service,
-}
-
-// ============================
 // Unit of Measure DTOs
 // ============================
 
@@ -44,159 +32,6 @@ pub struct UpdateUnitOfMeasurePayload {
     pub symbol: Option<String>,
     pub description: Option<String>,
     pub is_base_unit: Option<bool>,
-}
-
-// ============================
-// Catalog Group DTOs
-// ============================
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
-pub struct CatalogGroupDto {
-    pub id: Uuid,
-    pub parent_id: Option<Uuid>,
-    pub name: String,
-    pub code: String,
-    pub item_type: ItemType,
-    pub budget_classification_id: Uuid,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CatalogGroupWithDetailsDto {
-    pub id: Uuid,
-    pub parent_id: Option<Uuid>,
-    pub name: String,
-    pub code: String,
-    pub item_type: ItemType,
-    pub budget_classification_id: Uuid,
-    pub budget_classification_name: String,
-    pub budget_classification_code: String,
-    pub parent_name: Option<String>,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CatalogGroupTreeNode {
-    pub id: Uuid,
-    pub parent_id: Option<Uuid>,
-    pub name: String,
-    pub code: String,
-    pub item_type: ItemType,
-    pub budget_classification_id: Uuid,
-    pub budget_classification_name: String,
-    pub budget_classification_code: String,
-    pub is_active: bool,
-    #[schema(no_recursion)]
-    pub children: Vec<CatalogGroupTreeNode>,
-    pub item_count: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CreateCatalogGroupPayload {
-    pub parent_id: Option<Uuid>,
-    pub name: String,
-    pub code: String,
-    pub item_type: ItemType,
-    pub budget_classification_id: Uuid,
-    pub is_active: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct UpdateCatalogGroupPayload {
-    pub parent_id: Option<Option<Uuid>>,
-    pub name: Option<String>,
-    pub code: Option<String>,
-    pub item_type: Option<ItemType>,
-    pub budget_classification_id: Option<Uuid>,
-    pub is_active: Option<bool>,
-}
-
-// ============================
-// Catalog Item DTOs
-// ============================
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
-pub struct CatalogItemDto {
-    pub id: Uuid,
-    pub group_id: Uuid,
-    pub unit_of_measure_id: Uuid,
-    pub name: String,
-    pub catmat_code: Option<String>,
-    pub specification: String,
-    pub estimated_value: rust_decimal::Decimal,
-    pub search_links: Option<String>,
-    pub photo_url: Option<String>,
-    pub is_stockable: bool,
-    pub is_permanent: bool,
-    pub shelf_life_days: Option<i32>,
-    pub requires_batch_control: bool,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CatalogItemWithDetailsDto {
-    pub id: Uuid,
-    pub group_id: Uuid,
-    pub group_name: String,
-    pub group_code: String,
-    pub unit_of_measure_id: Uuid,
-    pub unit_name: String,
-    pub unit_symbol: String,
-    pub name: String,
-    pub catmat_code: Option<String>,
-    pub specification: String,
-    pub estimated_value: rust_decimal::Decimal,
-    pub search_links: Option<String>,
-    pub photo_url: Option<String>,
-    pub is_stockable: bool,
-    pub is_permanent: bool,
-    pub shelf_life_days: Option<i32>,
-    pub requires_batch_control: bool,
-    pub is_active: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CreateCatalogItemPayload {
-    pub group_id: Uuid,
-    pub unit_of_measure_id: Uuid,
-    pub name: String,
-    pub catmat_code: Option<String>,
-    pub specification: String,
-    pub estimated_value: rust_decimal::Decimal,
-    pub search_links: Option<String>,
-    pub photo_url: Option<String>,
-    pub is_stockable: bool,
-    pub is_permanent: bool,
-    pub shelf_life_days: Option<i32>,
-    pub requires_batch_control: bool,
-    pub is_active: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct UpdateCatalogItemPayload {
-    pub group_id: Option<Uuid>,
-    pub unit_of_measure_id: Option<Uuid>,
-    pub name: Option<String>,
-    pub catmat_code: Option<String>,
-    pub specification: Option<String>,
-    pub estimated_value: Option<rust_decimal::Decimal>,
-    pub search_links: Option<String>,
-    pub photo_url: Option<String>,
-    pub is_stockable: Option<bool>,
-    pub is_permanent: Option<bool>,
-    pub shelf_life_days: Option<i32>,
-    pub requires_batch_control: Option<bool>,
-    pub is_active: Option<bool>,
 }
 
 // ============================
@@ -240,11 +75,367 @@ pub struct UpdateUnitConversionPayload {
 }
 
 // ============================
-// Catalog-specific Operations
+// CATMAT DTOs (Catálogo de Materiais)
 // ============================
 
+// --- Groups ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatmatGroupDto {
+    pub id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct MergeCatalogGroupsPayload {
-    pub source_group_id: Uuid,
-    pub target_group_id: Uuid,
+pub struct CreateCatmatGroupPayload {
+    pub code: String,
+    pub name: String,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatmatGroupPayload {
+    pub code: Option<String>,
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+// --- Classes ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatmatClassDto {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatClassWithDetailsDto {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub group_name: String,
+    pub group_code: String,
+    pub code: String,
+    pub name: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub budget_classification_name: Option<String>,
+    pub budget_classification_code: Option<String>,
+    pub is_active: bool,
+    pub item_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatmatClassPayload {
+    pub group_id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatmatClassPayload {
+    pub group_id: Option<Uuid>,
+    pub code: Option<String>,
+    pub name: Option<String>,
+    pub budget_classification_id: Option<Uuid>,
+    pub is_active: Option<bool>,
+}
+
+// --- Items (PDM) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatmatItemDto {
+    pub id: Uuid,
+    pub class_id: Uuid,
+    pub unit_of_measure_id: Uuid,
+    pub code: String,
+    pub description: String,
+    pub supplementary_description: Option<String>,
+    pub is_sustainable: bool,
+    pub specification: Option<String>,
+    pub estimated_value: rust_decimal::Decimal,
+    pub search_links: Option<String>,
+    pub photo_url: Option<String>,
+    pub is_permanent: bool,
+    pub shelf_life_days: Option<i32>,
+    pub requires_batch_control: bool,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatItemWithDetailsDto {
+    pub id: Uuid,
+    pub class_id: Uuid,
+    pub class_name: String,
+    pub class_code: String,
+    pub group_id: Uuid,
+    pub group_name: String,
+    pub group_code: String,
+    pub unit_of_measure_id: Uuid,
+    pub unit_name: String,
+    pub unit_symbol: String,
+    pub code: String,
+    pub description: String,
+    pub supplementary_description: Option<String>,
+    pub is_sustainable: bool,
+    pub specification: Option<String>,
+    pub estimated_value: rust_decimal::Decimal,
+    pub search_links: Option<String>,
+    pub photo_url: Option<String>,
+    pub is_permanent: bool,
+    pub shelf_life_days: Option<i32>,
+    pub requires_batch_control: bool,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatmatItemPayload {
+    pub class_id: Uuid,
+    pub unit_of_measure_id: Uuid,
+    pub code: String,
+    pub description: String,
+    pub supplementary_description: Option<String>,
+    pub is_sustainable: bool,
+    pub specification: Option<String>,
+    pub estimated_value: rust_decimal::Decimal,
+    pub search_links: Option<String>,
+    pub photo_url: Option<String>,
+    pub is_permanent: bool,
+    pub shelf_life_days: Option<i32>,
+    pub requires_batch_control: bool,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatmatItemPayload {
+    pub class_id: Option<Uuid>,
+    pub unit_of_measure_id: Option<Uuid>,
+    pub code: Option<String>,
+    pub description: Option<String>,
+    pub supplementary_description: Option<String>,
+    pub is_sustainable: Option<bool>,
+    pub specification: Option<String>,
+    pub estimated_value: Option<rust_decimal::Decimal>,
+    pub search_links: Option<String>,
+    pub photo_url: Option<String>,
+    pub is_permanent: Option<bool>,
+    pub shelf_life_days: Option<i32>,
+    pub requires_batch_control: Option<bool>,
+    pub is_active: Option<bool>,
+}
+
+// --- Tree ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatGroupTreeNode {
+    pub id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub is_active: bool,
+    pub classes: Vec<CatmatClassTreeNode>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatClassTreeNode {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub budget_classification_name: Option<String>,
+    pub is_active: bool,
+    pub item_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+// ============================
+// CATSER DTOs (Catálogo de Serviços)
+// ============================
+
+// --- Groups ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatserGroupDto {
+    pub id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatserGroupPayload {
+    pub code: String,
+    pub name: String,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatserGroupPayload {
+    pub code: Option<String>,
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+// --- Classes ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatserClassDto {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserClassWithDetailsDto {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub group_name: String,
+    pub group_code: String,
+    pub code: String,
+    pub name: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub budget_classification_name: Option<String>,
+    pub budget_classification_code: Option<String>,
+    pub is_active: bool,
+    pub item_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatserClassPayload {
+    pub group_id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatserClassPayload {
+    pub group_id: Option<Uuid>,
+    pub code: Option<String>,
+    pub name: Option<String>,
+    pub budget_classification_id: Option<Uuid>,
+    pub is_active: Option<bool>,
+}
+
+// --- Items (Serviços) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatserItemDto {
+    pub id: Uuid,
+    pub class_id: Uuid,
+    pub unit_of_measure_id: Uuid,
+    pub code: String,
+    pub description: String,
+    pub supplementary_description: Option<String>,
+    pub specification: Option<String>,
+    pub estimated_value: rust_decimal::Decimal,
+    pub search_links: Option<String>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserItemWithDetailsDto {
+    pub id: Uuid,
+    pub class_id: Uuid,
+    pub class_name: String,
+    pub class_code: String,
+    pub group_id: Uuid,
+    pub group_name: String,
+    pub group_code: String,
+    pub unit_of_measure_id: Uuid,
+    pub unit_name: String,
+    pub unit_symbol: String,
+    pub code: String,
+    pub description: String,
+    pub supplementary_description: Option<String>,
+    pub specification: Option<String>,
+    pub estimated_value: rust_decimal::Decimal,
+    pub search_links: Option<String>,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatserItemPayload {
+    pub class_id: Uuid,
+    pub unit_of_measure_id: Uuid,
+    pub code: String,
+    pub description: String,
+    pub supplementary_description: Option<String>,
+    pub specification: Option<String>,
+    pub estimated_value: rust_decimal::Decimal,
+    pub search_links: Option<String>,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatserItemPayload {
+    pub class_id: Option<Uuid>,
+    pub unit_of_measure_id: Option<Uuid>,
+    pub code: Option<String>,
+    pub description: Option<String>,
+    pub supplementary_description: Option<String>,
+    pub specification: Option<String>,
+    pub estimated_value: Option<rust_decimal::Decimal>,
+    pub search_links: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+// --- Tree ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserGroupTreeNode {
+    pub id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub is_active: bool,
+    pub classes: Vec<CatserClassTreeNode>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserClassTreeNode {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub code: String,
+    pub name: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub budget_classification_name: Option<String>,
+    pub is_active: bool,
+    pub item_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
