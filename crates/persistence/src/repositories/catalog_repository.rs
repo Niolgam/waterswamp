@@ -238,13 +238,11 @@ impl CatmatGroupRepositoryPort for CatmatGroupRepository {
         let records = sqlx::query(
             r#"SELECT g.id, g.code, g.name, g.is_active, g.created_at, g.updated_at,
                 c.id AS class_id, c.code AS class_code, c.name AS class_name,
-                c.budget_classification_id, c.is_active AS class_is_active,
+                c.is_active AS class_is_active,
                 c.created_at AS class_created_at, c.updated_at AS class_updated_at,
-                bc.name AS budget_classification_name,
                 (SELECT COUNT(*) FROM catmat_pdms WHERE class_id = c.id) AS pdm_count
             FROM catmat_groups g
             LEFT JOIN catmat_classes c ON c.group_id = g.id
-            LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
             ORDER BY g.code, c.code"#,
         )
         .fetch_all(&self.pool)
@@ -271,8 +269,6 @@ impl CatmatGroupRepositoryPort for CatmatGroupRepository {
                     group_id,
                     code: r.get("class_code"),
                     name: r.get("class_name"),
-                    budget_classification_id: r.get("budget_classification_id"),
-                    budget_classification_name: r.get("budget_classification_name"),
                     is_active: r.get("class_is_active"),
                     pdm_count: r.get("pdm_count"),
                     created_at: r.get("class_created_at"),
@@ -312,11 +308,9 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatmatClassWithDetailsDto>, RepositoryError> {
         let result = sqlx::query(
             r#"SELECT c.*, g.name AS group_name, g.code AS group_code,
-                bc.name AS budget_classification_name, bc.full_code AS budget_classification_code,
                 (SELECT COUNT(*) FROM catmat_pdms WHERE class_id = c.id) AS pdm_count
             FROM catmat_classes c
             JOIN catmat_groups g ON c.group_id = g.id
-            LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
             WHERE c.id = $1"#,
         )
         .bind(id)
@@ -331,9 +325,6 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
             group_code: r.get("group_code"),
             code: r.get("code"),
             name: r.get("name"),
-            budget_classification_id: r.get("budget_classification_id"),
-            budget_classification_name: r.get("budget_classification_name"),
-            budget_classification_code: r.get("budget_classification_code"),
             is_active: r.get("is_active"),
             pdm_count: r.get("pdm_count"),
             created_at: r.get("created_at"),
@@ -360,31 +351,28 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, group_id: Uuid, code: &str, name: &str, budget_classification_id: Option<Uuid>, is_active: bool) -> Result<CatmatClassDto, RepositoryError> {
+    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool) -> Result<CatmatClassDto, RepositoryError> {
         sqlx::query_as::<_, CatmatClassDto>(
-            "INSERT INTO catmat_classes (group_id, code, name, budget_classification_id, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+            "INSERT INTO catmat_classes (group_id, code, name, is_active) VALUES ($1, $2, $3, $4) RETURNING *",
         )
         .bind(group_id)
         .bind(code)
         .bind(name)
-        .bind(budget_classification_id)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
     }
 
-    async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, budget_classification_id: Option<Uuid>, is_active: Option<bool>) -> Result<CatmatClassDto, RepositoryError> {
+    async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatmatClassDto, RepositoryError> {
         sqlx::query_as::<_, CatmatClassDto>(
             r#"UPDATE catmat_classes SET group_id = COALESCE($2, group_id), code = COALESCE($3, code),
-            name = COALESCE($4, name), budget_classification_id = COALESCE($5, budget_classification_id),
-            is_active = COALESCE($6, is_active), updated_at = NOW() WHERE id = $1 RETURNING *"#,
+            name = COALESCE($4, name), is_active = COALESCE($5, is_active), updated_at = NOW() WHERE id = $1 RETURNING *"#,
         )
         .bind(id)
         .bind(group_id)
         .bind(code)
         .bind(name)
-        .bind(budget_classification_id)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
@@ -413,11 +401,9 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         let search_pattern = search.map(|s| format!("%{}%", s));
         let records = sqlx::query(
             r#"SELECT c.*, g.name AS group_name, g.code AS group_code,
-                bc.name AS budget_classification_name, bc.full_code AS budget_classification_code,
                 (SELECT COUNT(*) FROM catmat_pdms WHERE class_id = c.id) AS pdm_count
             FROM catmat_classes c
             JOIN catmat_groups g ON c.group_id = g.id
-            LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
             WHERE ($1::TEXT IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1)
               AND ($2::UUID IS NULL OR c.group_id = $2)
               AND ($3::BOOLEAN IS NULL OR c.is_active = $3)
@@ -439,9 +425,6 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
             group_code: r.get("group_code"),
             code: r.get("code"),
             name: r.get("name"),
-            budget_classification_id: r.get("budget_classification_id"),
-            budget_classification_name: r.get("budget_classification_name"),
-            budget_classification_code: r.get("budget_classification_code"),
             is_active: r.get("is_active"),
             pdm_count: r.get("pdm_count"),
             created_at: r.get("created_at"),
@@ -720,7 +703,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             code: r.get("code"),
             description: r.get("description"),
             is_sustainable: r.get("is_sustainable"),
-            ncm_code: r.get("ncm_code"),
+            code_ncm: r.get("code_ncm"),
             is_active: r.get("is_active"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -756,11 +739,11 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
 
     async fn create(
         &self, pdm_id: Uuid, unit_of_measure_id: Uuid, code: &str, description: &str,
-        is_sustainable: bool, ncm_code: Option<&str>, is_active: bool,
+        is_sustainable: bool, code_ncm: Option<&str>, is_active: bool,
     ) -> Result<CatmatItemDto, RepositoryError> {
         sqlx::query_as::<_, CatmatItemDto>(
             r#"INSERT INTO catmat_items (pdm_id, unit_of_measure_id, code, description,
-                is_sustainable, ncm_code, is_active)
+                is_sustainable, code_ncm, is_active)
             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *"#,
         )
         .bind(pdm_id)
@@ -768,7 +751,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
         .bind(code)
         .bind(description)
         .bind(is_sustainable)
-        .bind(ncm_code)
+        .bind(code_ncm)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
@@ -778,7 +761,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
     async fn update(
         &self, id: Uuid, pdm_id: Option<Uuid>, unit_of_measure_id: Option<Uuid>,
         code: Option<&str>, description: Option<&str>, is_sustainable: Option<bool>,
-        ncm_code: Option<&str>, is_active: Option<bool>,
+        code_ncm: Option<&str>, is_active: Option<bool>,
     ) -> Result<CatmatItemDto, RepositoryError> {
         let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new("UPDATE catmat_items SET ");
         let mut separated = builder.separated(", ");
@@ -803,8 +786,8 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             separated.push("is_sustainable = ");
             separated.push_bind_unseparated(v);
         }
-        if let Some(v) = ncm_code {
-            separated.push("ncm_code = ");
+        if let Some(v) = code_ncm {
+            separated.push("code_ncm = ");
             separated.push_bind_unseparated(v.to_string());
         }
         if let Some(v) = is_active {
@@ -882,7 +865,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             code: r.get("code"),
             description: r.get("description"),
             is_sustainable: r.get("is_sustainable"),
-            ncm_code: r.get("ncm_code"),
+            code_ncm: r.get("code_ncm"),
             is_active: r.get("is_active"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -1019,13 +1002,11 @@ impl CatserGroupRepositoryPort for CatserGroupRepository {
         let records = sqlx::query(
             r#"SELECT g.id, g.code, g.name, g.is_active, g.created_at, g.updated_at,
                 c.id AS class_id, c.code AS class_code, c.name AS class_name,
-                c.budget_classification_id, c.is_active AS class_is_active,
+                c.is_active AS class_is_active,
                 c.created_at AS class_created_at, c.updated_at AS class_updated_at,
-                bc.name AS budget_classification_name,
                 (SELECT COUNT(*) FROM catser_items WHERE class_id = c.id) AS item_count
             FROM catser_groups g
             LEFT JOIN catser_classes c ON c.group_id = g.id
-            LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
             ORDER BY g.code, c.code"#,
         )
         .fetch_all(&self.pool)
@@ -1052,8 +1033,6 @@ impl CatserGroupRepositoryPort for CatserGroupRepository {
                     group_id,
                     code: r.get("class_code"),
                     name: r.get("class_name"),
-                    budget_classification_id: r.get("budget_classification_id"),
-                    budget_classification_name: r.get("budget_classification_name"),
                     is_active: r.get("class_is_active"),
                     item_count: r.get("item_count"),
                     created_at: r.get("class_created_at"),
@@ -1093,11 +1072,9 @@ impl CatserClassRepositoryPort for CatserClassRepository {
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserClassWithDetailsDto>, RepositoryError> {
         let result = sqlx::query(
             r#"SELECT c.*, g.name AS group_name, g.code AS group_code,
-                bc.name AS budget_classification_name, bc.full_code AS budget_classification_code,
                 (SELECT COUNT(*) FROM catser_items WHERE class_id = c.id) AS item_count
             FROM catser_classes c
             JOIN catser_groups g ON c.group_id = g.id
-            LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
             WHERE c.id = $1"#,
         )
         .bind(id)
@@ -1112,9 +1089,6 @@ impl CatserClassRepositoryPort for CatserClassRepository {
             group_code: r.get("group_code"),
             code: r.get("code"),
             name: r.get("name"),
-            budget_classification_id: r.get("budget_classification_id"),
-            budget_classification_name: r.get("budget_classification_name"),
-            budget_classification_code: r.get("budget_classification_code"),
             is_active: r.get("is_active"),
             item_count: r.get("item_count"),
             created_at: r.get("created_at"),
@@ -1141,31 +1115,28 @@ impl CatserClassRepositoryPort for CatserClassRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, group_id: Uuid, code: &str, name: &str, budget_classification_id: Option<Uuid>, is_active: bool) -> Result<CatserClassDto, RepositoryError> {
+    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool) -> Result<CatserClassDto, RepositoryError> {
         sqlx::query_as::<_, CatserClassDto>(
-            "INSERT INTO catser_classes (group_id, code, name, budget_classification_id, is_active) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+            "INSERT INTO catser_classes (group_id, code, name, is_active) VALUES ($1, $2, $3, $4) RETURNING *",
         )
         .bind(group_id)
         .bind(code)
         .bind(name)
-        .bind(budget_classification_id)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
     }
 
-    async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, budget_classification_id: Option<Uuid>, is_active: Option<bool>) -> Result<CatserClassDto, RepositoryError> {
+    async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserClassDto, RepositoryError> {
         sqlx::query_as::<_, CatserClassDto>(
             r#"UPDATE catser_classes SET group_id = COALESCE($2, group_id), code = COALESCE($3, code),
-            name = COALESCE($4, name), budget_classification_id = COALESCE($5, budget_classification_id),
-            is_active = COALESCE($6, is_active), updated_at = NOW() WHERE id = $1 RETURNING *"#,
+            name = COALESCE($4, name), is_active = COALESCE($5, is_active), updated_at = NOW() WHERE id = $1 RETURNING *"#,
         )
         .bind(id)
         .bind(group_id)
         .bind(code)
         .bind(name)
-        .bind(budget_classification_id)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
@@ -1194,11 +1165,9 @@ impl CatserClassRepositoryPort for CatserClassRepository {
         let search_pattern = search.map(|s| format!("%{}%", s));
         let records = sqlx::query(
             r#"SELECT c.*, g.name AS group_name, g.code AS group_code,
-                bc.name AS budget_classification_name, bc.full_code AS budget_classification_code,
                 (SELECT COUNT(*) FROM catser_items WHERE class_id = c.id) AS item_count
             FROM catser_classes c
             JOIN catser_groups g ON c.group_id = g.id
-            LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
             WHERE ($1::TEXT IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1)
               AND ($2::UUID IS NULL OR c.group_id = $2)
               AND ($3::BOOLEAN IS NULL OR c.is_active = $3)
@@ -1220,9 +1189,6 @@ impl CatserClassRepositoryPort for CatserClassRepository {
             group_code: r.get("group_code"),
             code: r.get("code"),
             name: r.get("name"),
-            budget_classification_id: r.get("budget_classification_id"),
-            budget_classification_name: r.get("budget_classification_name"),
-            budget_classification_code: r.get("budget_classification_code"),
             is_active: r.get("is_active"),
             item_count: r.get("item_count"),
             created_at: r.get("created_at"),
@@ -1301,7 +1267,6 @@ impl CatserItemRepositoryPort for CatserItemRepository {
             description: r.get("description"),
             supplementary_description: r.get("supplementary_description"),
             specification: r.get("specification"),
-            estimated_value: r.get("estimated_value"),
             search_links: r.get("search_links"),
             is_active: r.get("is_active"),
             created_at: r.get("created_at"),
@@ -1339,12 +1304,12 @@ impl CatserItemRepositoryPort for CatserItemRepository {
     async fn create(
         &self, class_id: Uuid, unit_of_measure_id: Uuid, code: &str, description: &str,
         supplementary_description: Option<&str>, specification: Option<&str>,
-        estimated_value: rust_decimal::Decimal, search_links: Option<&str>, is_active: bool,
+        search_links: Option<&str>, is_active: bool,
     ) -> Result<CatserItemDto, RepositoryError> {
         sqlx::query_as::<_, CatserItemDto>(
             r#"INSERT INTO catser_items (class_id, unit_of_measure_id, code, description,
-                supplementary_description, specification, estimated_value, search_links, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *"#,
+                supplementary_description, specification, search_links, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *"#,
         )
         .bind(class_id)
         .bind(unit_of_measure_id)
@@ -1352,7 +1317,6 @@ impl CatserItemRepositoryPort for CatserItemRepository {
         .bind(description)
         .bind(supplementary_description)
         .bind(specification)
-        .bind(estimated_value)
         .bind(search_links)
         .bind(is_active)
         .fetch_one(&self.pool)
@@ -1363,8 +1327,7 @@ impl CatserItemRepositoryPort for CatserItemRepository {
     async fn update(
         &self, id: Uuid, class_id: Option<Uuid>, unit_of_measure_id: Option<Uuid>,
         code: Option<&str>, description: Option<&str>, supplementary_description: Option<&str>,
-        specification: Option<&str>, estimated_value: Option<rust_decimal::Decimal>,
-        search_links: Option<&str>, is_active: Option<bool>,
+        specification: Option<&str>, search_links: Option<&str>, is_active: Option<bool>,
     ) -> Result<CatserItemDto, RepositoryError> {
         sqlx::query_as::<_, CatserItemDto>(
             r#"UPDATE catser_items SET
@@ -1372,9 +1335,8 @@ impl CatserItemRepositoryPort for CatserItemRepository {
                 code = COALESCE($4, code), description = COALESCE($5, description),
                 supplementary_description = CASE WHEN $6::TEXT IS NOT NULL THEN $6 ELSE supplementary_description END,
                 specification = CASE WHEN $7::TEXT IS NOT NULL THEN $7 ELSE specification END,
-                estimated_value = COALESCE($8, estimated_value),
-                search_links = CASE WHEN $9::TEXT IS NOT NULL THEN $9 ELSE search_links END,
-                is_active = COALESCE($10, is_active), updated_at = NOW()
+                search_links = CASE WHEN $8::TEXT IS NOT NULL THEN $8 ELSE search_links END,
+                is_active = COALESCE($9, is_active), updated_at = NOW()
             WHERE id = $1 RETURNING *"#,
         )
         .bind(id)
@@ -1384,7 +1346,6 @@ impl CatserItemRepositoryPort for CatserItemRepository {
         .bind(description)
         .bind(supplementary_description)
         .bind(specification)
-        .bind(estimated_value)
         .bind(search_links)
         .bind(is_active)
         .fetch_one(&self.pool)
@@ -1442,7 +1403,6 @@ impl CatserItemRepositoryPort for CatserItemRepository {
             description: r.get("description"),
             supplementary_description: r.get("supplementary_description"),
             specification: r.get("specification"),
-            estimated_value: r.get("estimated_value"),
             search_links: r.get("search_links"),
             is_active: r.get("is_active"),
             created_at: r.get("created_at"),

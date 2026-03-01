@@ -174,7 +174,6 @@ async fn create_catser_item(app: &TestApp, class_id: &str, unit_id: &str) -> Val
             "unit_of_measure_id": unit_id,
             "code": random_code(),
             "description": random_name("Service Item"),
-            "estimated_value": 200.00,
             "is_active": true
         }))
         .await;

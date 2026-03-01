@@ -102,8 +102,8 @@ pub trait CatmatClassRepositoryPort: Send + Sync {
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatmatClassWithDetailsDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, group_id: Uuid, code: &str, name: &str, budget_classification_id: Option<Uuid>, is_active: bool) -> Result<CatmatClassDto, RepositoryError>;
-    async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, budget_classification_id: Option<Uuid>, is_active: Option<bool>) -> Result<CatmatClassDto, RepositoryError>;
+    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool) -> Result<CatmatClassDto, RepositoryError>;
+    async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatmatClassDto, RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn has_pdms(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, group_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatmatClassWithDetailsDto>, i64), RepositoryError>;
@@ -144,7 +144,7 @@ pub trait CatmatItemRepositoryPort: Send + Sync {
         code: &str,
         description: &str,
         is_sustainable: bool,
-        ncm_code: Option<&str>,
+        code_ncm: Option<&str>,
         is_active: bool,
     ) -> Result<CatmatItemDto, RepositoryError>;
     async fn update(
@@ -155,7 +155,7 @@ pub trait CatmatItemRepositoryPort: Send + Sync {
         code: Option<&str>,
         description: Option<&str>,
         is_sustainable: Option<bool>,
-        ncm_code: Option<&str>,
+        code_ncm: Option<&str>,
         is_active: Option<bool>,
     ) -> Result<CatmatItemDto, RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
@@ -196,8 +196,8 @@ pub trait CatserClassRepositoryPort: Send + Sync {
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserClassWithDetailsDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, group_id: Uuid, code: &str, name: &str, budget_classification_id: Option<Uuid>, is_active: bool) -> Result<CatserClassDto, RepositoryError>;
-    async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, budget_classification_id: Option<Uuid>, is_active: Option<bool>) -> Result<CatserClassDto, RepositoryError>;
+    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool) -> Result<CatserClassDto, RepositoryError>;
+    async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserClassDto, RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn has_items(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, group_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserClassWithDetailsDto>, i64), RepositoryError>;
@@ -222,7 +222,6 @@ pub trait CatserItemRepositoryPort: Send + Sync {
         description: &str,
         supplementary_description: Option<&str>,
         specification: Option<&str>,
-        estimated_value: rust_decimal::Decimal,
         search_links: Option<&str>,
         is_active: bool,
     ) -> Result<CatserItemDto, RepositoryError>;
@@ -235,7 +234,6 @@ pub trait CatserItemRepositoryPort: Send + Sync {
         description: Option<&str>,
         supplementary_description: Option<&str>,
         specification: Option<&str>,
-        estimated_value: Option<rust_decimal::Decimal>,
         search_links: Option<&str>,
         is_active: Option<bool>,
     ) -> Result<CatserItemDto, RepositoryError>;

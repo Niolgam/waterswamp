@@ -155,7 +155,7 @@ impl CatalogService {
         if self.catmat_class_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!("Classe CATMAT com código '{}' já existe", payload.code)));
         }
-        self.catmat_class_repo.create(payload.group_id, &payload.code, &payload.name, payload.budget_classification_id, payload.is_active).await.map_err(ServiceError::from)
+        self.catmat_class_repo.create(payload.group_id, &payload.code, &payload.name, payload.is_active).await.map_err(ServiceError::from)
     }
 
     pub async fn get_catmat_class(&self, id: Uuid) -> Result<CatmatClassWithDetailsDto, ServiceError> {
@@ -172,7 +172,7 @@ impl CatalogService {
         if let Some(group_id) = payload.group_id {
             let _ = self.get_catmat_group(group_id).await?;
         }
-        self.catmat_class_repo.update(id, payload.group_id, payload.code.as_deref(), payload.name.as_deref(), payload.budget_classification_id, payload.is_active).await.map_err(ServiceError::from)
+        self.catmat_class_repo.update(id, payload.group_id, payload.code.as_deref(), payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
     }
 
     pub async fn delete_catmat_class(&self, id: Uuid) -> Result<bool, ServiceError> {
@@ -240,7 +240,7 @@ impl CatalogService {
         }
         self.catmat_item_repo.create(
             payload.pdm_id, payload.unit_of_measure_id, &payload.code, &payload.description,
-            payload.is_sustainable, payload.ncm_code.as_deref(), payload.is_active,
+            payload.is_sustainable, payload.code_ncm.as_deref(), payload.is_active,
         ).await.map_err(ServiceError::from)
     }
 
@@ -263,7 +263,7 @@ impl CatalogService {
         }
         self.catmat_item_repo.update(
             id, payload.pdm_id, payload.unit_of_measure_id, payload.code.as_deref(),
-            payload.description.as_deref(), payload.is_sustainable, payload.ncm_code.as_deref(), payload.is_active,
+            payload.description.as_deref(), payload.is_sustainable, payload.code_ncm.as_deref(), payload.is_active,
         ).await.map_err(ServiceError::from)
     }
 
@@ -321,7 +321,7 @@ impl CatalogService {
         if self.catser_class_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!("Classe CATSER com código '{}' já existe", payload.code)));
         }
-        self.catser_class_repo.create(payload.group_id, &payload.code, &payload.name, payload.budget_classification_id, payload.is_active).await.map_err(ServiceError::from)
+        self.catser_class_repo.create(payload.group_id, &payload.code, &payload.name, payload.is_active).await.map_err(ServiceError::from)
     }
 
     pub async fn get_catser_class(&self, id: Uuid) -> Result<CatserClassWithDetailsDto, ServiceError> {
@@ -338,7 +338,7 @@ impl CatalogService {
         if let Some(group_id) = payload.group_id {
             let _ = self.get_catser_group(group_id).await?;
         }
-        self.catser_class_repo.update(id, payload.group_id, payload.code.as_deref(), payload.name.as_deref(), payload.budget_classification_id, payload.is_active).await.map_err(ServiceError::from)
+        self.catser_class_repo.update(id, payload.group_id, payload.code.as_deref(), payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
     }
 
     pub async fn delete_catser_class(&self, id: Uuid) -> Result<bool, ServiceError> {
@@ -365,7 +365,7 @@ impl CatalogService {
         self.catser_item_repo.create(
             payload.class_id, payload.unit_of_measure_id, &payload.code, &payload.description,
             payload.supplementary_description.as_deref(), payload.specification.as_deref(),
-            payload.estimated_value, payload.search_links.as_deref(), payload.is_active,
+            payload.search_links.as_deref(), payload.is_active,
         ).await.map_err(ServiceError::from)
     }
 
@@ -389,8 +389,7 @@ impl CatalogService {
         self.catser_item_repo.update(
             id, payload.class_id, payload.unit_of_measure_id, payload.code.as_deref(),
             payload.description.as_deref(), payload.supplementary_description.as_deref(),
-            payload.specification.as_deref(), payload.estimated_value,
-            payload.search_links.as_deref(), payload.is_active,
+            payload.specification.as_deref(), payload.search_links.as_deref(), payload.is_active,
         ).await.map_err(ServiceError::from)
     }
 

@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS catmat_classes CASCADE;

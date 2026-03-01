@@ -112,7 +112,6 @@ pub struct CatmatClassDto {
     pub group_id: Uuid,
     pub code: String,
     pub name: String,
-    pub budget_classification_id: Option<Uuid>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -126,9 +125,6 @@ pub struct CatmatClassWithDetailsDto {
     pub group_code: String,
     pub code: String,
     pub name: String,
-    pub budget_classification_id: Option<Uuid>,
-    pub budget_classification_name: Option<String>,
-    pub budget_classification_code: Option<String>,
     pub is_active: bool,
     pub pdm_count: i64,
     pub created_at: DateTime<Utc>,
@@ -140,7 +136,6 @@ pub struct CreateCatmatClassPayload {
     pub group_id: Uuid,
     pub code: String,
     pub name: String,
-    pub budget_classification_id: Option<Uuid>,
     pub is_active: bool,
 }
 
@@ -149,7 +144,6 @@ pub struct UpdateCatmatClassPayload {
     pub group_id: Option<Uuid>,
     pub code: Option<String>,
     pub name: Option<String>,
-    pub budget_classification_id: Option<Uuid>,
     pub is_active: Option<bool>,
 }
 
@@ -209,7 +203,7 @@ pub struct CatmatItemDto {
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
-    pub ncm_code: Option<String>,
+    pub code_ncm: Option<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -233,7 +227,7 @@ pub struct CatmatItemWithDetailsDto {
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
-    pub ncm_code: Option<String>,
+    pub code_ncm: Option<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -246,7 +240,7 @@ pub struct CreateCatmatItemPayload {
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
-    pub ncm_code: Option<String>,
+    pub code_ncm: Option<String>,
     pub is_active: bool,
 }
 
@@ -257,7 +251,7 @@ pub struct UpdateCatmatItemPayload {
     pub code: Option<String>,
     pub description: Option<String>,
     pub is_sustainable: Option<bool>,
-    pub ncm_code: Option<String>,
+    pub code_ncm: Option<String>,
     pub is_active: Option<bool>,
 }
 
@@ -280,8 +274,6 @@ pub struct CatmatClassTreeNode {
     pub group_id: Uuid,
     pub code: String,
     pub name: String,
-    pub budget_classification_id: Option<Uuid>,
-    pub budget_classification_name: Option<String>,
     pub is_active: bool,
     pub pdm_count: i64,
     pub created_at: DateTime<Utc>,
@@ -326,7 +318,6 @@ pub struct CatserClassDto {
     pub group_id: Uuid,
     pub code: String,
     pub name: String,
-    pub budget_classification_id: Option<Uuid>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -340,9 +331,6 @@ pub struct CatserClassWithDetailsDto {
     pub group_code: String,
     pub code: String,
     pub name: String,
-    pub budget_classification_id: Option<Uuid>,
-    pub budget_classification_name: Option<String>,
-    pub budget_classification_code: Option<String>,
     pub is_active: bool,
     pub item_count: i64,
     pub created_at: DateTime<Utc>,
@@ -354,7 +342,6 @@ pub struct CreateCatserClassPayload {
     pub group_id: Uuid,
     pub code: String,
     pub name: String,
-    pub budget_classification_id: Option<Uuid>,
     pub is_active: bool,
 }
 
@@ -363,7 +350,6 @@ pub struct UpdateCatserClassPayload {
     pub group_id: Option<Uuid>,
     pub code: Option<String>,
     pub name: Option<String>,
-    pub budget_classification_id: Option<Uuid>,
     pub is_active: Option<bool>,
 }
 
@@ -378,7 +364,6 @@ pub struct CatserItemDto {
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
-    pub estimated_value: rust_decimal::Decimal,
     pub search_links: Option<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
@@ -401,7 +386,6 @@ pub struct CatserItemWithDetailsDto {
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
-    pub estimated_value: rust_decimal::Decimal,
     pub search_links: Option<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
@@ -416,7 +400,6 @@ pub struct CreateCatserItemPayload {
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
-    pub estimated_value: rust_decimal::Decimal,
     pub search_links: Option<String>,
     pub is_active: bool,
 }
@@ -429,7 +412,6 @@ pub struct UpdateCatserItemPayload {
     pub description: Option<String>,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
-    pub estimated_value: Option<rust_decimal::Decimal>,
     pub search_links: Option<String>,
     pub is_active: Option<bool>,
 }
@@ -453,8 +435,6 @@ pub struct CatserClassTreeNode {
     pub group_id: Uuid,
     pub code: String,
     pub name: String,
-    pub budget_classification_id: Option<Uuid>,
-    pub budget_classification_name: Option<String>,
     pub is_active: bool,
     pub item_count: i64,
     pub created_at: DateTime<Utc>,
