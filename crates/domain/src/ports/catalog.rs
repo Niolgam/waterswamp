@@ -105,8 +105,25 @@ pub trait CatmatClassRepositoryPort: Send + Sync {
     async fn create(&self, group_id: Uuid, code: &str, name: &str, budget_classification_id: Option<Uuid>, is_active: bool) -> Result<CatmatClassDto, RepositoryError>;
     async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, budget_classification_id: Option<Uuid>, is_active: Option<bool>) -> Result<CatmatClassDto, RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
-    async fn has_items(&self, id: Uuid) -> Result<bool, RepositoryError>;
+    async fn has_pdms(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, group_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatmatClassWithDetailsDto>, i64), RepositoryError>;
+}
+
+// ============================
+// CATMAT PDM Repository Port
+// ============================
+
+#[async_trait]
+pub trait CatmatPdmRepositoryPort: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<CatmatPdmDto>, RepositoryError>;
+    async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatmatPdmWithDetailsDto>, RepositoryError>;
+    async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
+    async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
+    async fn create(&self, class_id: Uuid, code: &str, description: &str, is_active: bool) -> Result<CatmatPdmDto, RepositoryError>;
+    async fn update(&self, id: Uuid, class_id: Option<Uuid>, code: Option<&str>, description: Option<&str>, is_active: Option<bool>) -> Result<CatmatPdmDto, RepositoryError>;
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
+    async fn has_items(&self, id: Uuid) -> Result<bool, RepositoryError>;
+    async fn list(&self, limit: i64, offset: i64, search: Option<String>, class_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatmatPdmWithDetailsDto>, i64), RepositoryError>;
 }
 
 // ============================
@@ -122,37 +139,23 @@ pub trait CatmatItemRepositoryPort: Send + Sync {
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
     async fn create(
         &self,
-        class_id: Uuid,
+        pdm_id: Uuid,
         unit_of_measure_id: Uuid,
         code: &str,
         description: &str,
-        supplementary_description: Option<&str>,
         is_sustainable: bool,
-        specification: Option<&str>,
-        estimated_value: rust_decimal::Decimal,
-        search_links: Option<&str>,
-        photo_url: Option<&str>,
-        is_permanent: bool,
-        shelf_life_days: Option<i32>,
-        requires_batch_control: bool,
+        ncm_code: Option<&str>,
         is_active: bool,
     ) -> Result<CatmatItemDto, RepositoryError>;
     async fn update(
         &self,
         id: Uuid,
-        class_id: Option<Uuid>,
+        pdm_id: Option<Uuid>,
         unit_of_measure_id: Option<Uuid>,
         code: Option<&str>,
         description: Option<&str>,
-        supplementary_description: Option<&str>,
         is_sustainable: Option<bool>,
-        specification: Option<&str>,
-        estimated_value: Option<rust_decimal::Decimal>,
-        search_links: Option<&str>,
-        photo_url: Option<&str>,
-        is_permanent: Option<bool>,
-        shelf_life_days: Option<i32>,
-        requires_batch_control: Option<bool>,
+        ncm_code: Option<&str>,
         is_active: Option<bool>,
     ) -> Result<CatmatItemDto, RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
@@ -161,9 +164,8 @@ pub trait CatmatItemRepositoryPort: Send + Sync {
         limit: i64,
         offset: i64,
         search: Option<String>,
-        class_id: Option<Uuid>,
+        pdm_id: Option<Uuid>,
         is_sustainable: Option<bool>,
-        is_permanent: Option<bool>,
         is_active: Option<bool>,
     ) -> Result<(Vec<CatmatItemWithDetailsDto>, i64), RepositoryError>;
 }

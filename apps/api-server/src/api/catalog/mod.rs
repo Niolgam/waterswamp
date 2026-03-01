@@ -59,7 +59,20 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_catmat_class),
         );
 
-    // CATMAT Items (PDM) routes
+    // CATMAT PDMs routes
+    let catmat_pdms_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_catmat_pdms).post(handlers::create_catmat_pdm),
+        )
+        .route(
+            "/{id}",
+            get(handlers::get_catmat_pdm)
+                .put(handlers::update_catmat_pdm)
+                .delete(handlers::delete_catmat_pdm),
+        );
+
+    // CATMAT Items routes
     let catmat_items_router = Router::new()
         .route(
             "/",
@@ -117,6 +130,7 @@ pub fn router() -> Router<AppState> {
         .nest("/conversions", conversions_router)
         .nest("/catmat/groups", catmat_groups_router)
         .nest("/catmat/classes", catmat_classes_router)
+        .nest("/catmat/pdms", catmat_pdms_router)
         .nest("/catmat/items", catmat_items_router)
         .nest("/catser/groups", catser_groups_router)
         .nest("/catser/classes", catser_classes_router)

@@ -28,7 +28,7 @@ use application::services::{
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
     BuildingTypeRepositoryPort,
-    CatmatGroupRepositoryPort, CatmatClassRepositoryPort, CatmatItemRepositoryPort,
+    CatmatGroupRepositoryPort, CatmatClassRepositoryPort, CatmatPdmRepositoryPort, CatmatItemRepositoryPort,
     CatserGroupRepositoryPort, CatserClassRepositoryPort, CatserItemRepositoryPort,
     CityRepositoryPort, CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
     MfaRepositoryPort, OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
@@ -50,7 +50,7 @@ use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
     catalog_repository::{
-        CatmatGroupRepository, CatmatClassRepository, CatmatItemRepository,
+        CatmatGroupRepository, CatmatClassRepository, CatmatPdmRepository, CatmatItemRepository,
         CatserGroupRepository, CatserClassRepository, CatserItemRepository,
         UnitConversionRepository, UnitOfMeasureRepository,
     },
@@ -178,6 +178,8 @@ pub fn build_application_state(
         Arc::new(CatmatGroupRepository::new(pool_auth.clone()));
     let catmat_class_repo_port: Arc<dyn CatmatClassRepositoryPort> =
         Arc::new(CatmatClassRepository::new(pool_auth.clone()));
+    let catmat_pdm_repo_port: Arc<dyn CatmatPdmRepositoryPort> =
+        Arc::new(CatmatPdmRepository::new(pool_auth.clone()));
     let catmat_item_repo_port: Arc<dyn CatmatItemRepositoryPort> =
         Arc::new(CatmatItemRepository::new(pool_auth.clone()));
     let catser_group_repo_port: Arc<dyn CatserGroupRepositoryPort> =
@@ -192,6 +194,7 @@ pub fn build_application_state(
         conversion_repo_port,
         catmat_group_repo_port,
         catmat_class_repo_port,
+        catmat_pdm_repo_port,
         catmat_item_repo_port,
         catser_group_repo_port,
         catser_class_repo_port,

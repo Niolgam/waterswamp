@@ -130,7 +130,7 @@ pub struct CatmatClassWithDetailsDto {
     pub budget_classification_name: Option<String>,
     pub budget_classification_code: Option<String>,
     pub is_active: bool,
-    pub item_count: i64,
+    pub pdm_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -153,24 +153,63 @@ pub struct UpdateCatmatClassPayload {
     pub is_active: Option<bool>,
 }
 
-// --- Items (PDM) ---
+// --- PDMs (Padrão Descritivo de Material) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatmatPdmDto {
+    pub id: Uuid,
+    pub class_id: Uuid,
+    pub code: String,
+    pub description: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatPdmWithDetailsDto {
+    pub id: Uuid,
+    pub class_id: Uuid,
+    pub class_name: String,
+    pub class_code: String,
+    pub group_id: Uuid,
+    pub group_name: String,
+    pub group_code: String,
+    pub code: String,
+    pub description: String,
+    pub is_active: bool,
+    pub item_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatmatPdmPayload {
+    pub class_id: Uuid,
+    pub code: String,
+    pub description: String,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatmatPdmPayload {
+    pub class_id: Option<Uuid>,
+    pub code: Option<String>,
+    pub description: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+// --- Items ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct CatmatItemDto {
     pub id: Uuid,
-    pub class_id: Uuid,
+    pub pdm_id: Uuid,
     pub unit_of_measure_id: Uuid,
     pub code: String,
     pub description: String,
-    pub supplementary_description: Option<String>,
     pub is_sustainable: bool,
-    pub specification: Option<String>,
-    pub estimated_value: rust_decimal::Decimal,
-    pub search_links: Option<String>,
-    pub photo_url: Option<String>,
-    pub is_permanent: bool,
-    pub shelf_life_days: Option<i32>,
-    pub requires_batch_control: bool,
+    pub ncm_code: Option<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -179,6 +218,9 @@ pub struct CatmatItemDto {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CatmatItemWithDetailsDto {
     pub id: Uuid,
+    pub pdm_id: Uuid,
+    pub pdm_description: String,
+    pub pdm_code: String,
     pub class_id: Uuid,
     pub class_name: String,
     pub class_code: String,
@@ -190,15 +232,8 @@ pub struct CatmatItemWithDetailsDto {
     pub unit_symbol: String,
     pub code: String,
     pub description: String,
-    pub supplementary_description: Option<String>,
     pub is_sustainable: bool,
-    pub specification: Option<String>,
-    pub estimated_value: rust_decimal::Decimal,
-    pub search_links: Option<String>,
-    pub photo_url: Option<String>,
-    pub is_permanent: bool,
-    pub shelf_life_days: Option<i32>,
-    pub requires_batch_control: bool,
+    pub ncm_code: Option<String>,
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -206,37 +241,23 @@ pub struct CatmatItemWithDetailsDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateCatmatItemPayload {
-    pub class_id: Uuid,
+    pub pdm_id: Uuid,
     pub unit_of_measure_id: Uuid,
     pub code: String,
     pub description: String,
-    pub supplementary_description: Option<String>,
     pub is_sustainable: bool,
-    pub specification: Option<String>,
-    pub estimated_value: rust_decimal::Decimal,
-    pub search_links: Option<String>,
-    pub photo_url: Option<String>,
-    pub is_permanent: bool,
-    pub shelf_life_days: Option<i32>,
-    pub requires_batch_control: bool,
+    pub ncm_code: Option<String>,
     pub is_active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateCatmatItemPayload {
-    pub class_id: Option<Uuid>,
+    pub pdm_id: Option<Uuid>,
     pub unit_of_measure_id: Option<Uuid>,
     pub code: Option<String>,
     pub description: Option<String>,
-    pub supplementary_description: Option<String>,
     pub is_sustainable: Option<bool>,
-    pub specification: Option<String>,
-    pub estimated_value: Option<rust_decimal::Decimal>,
-    pub search_links: Option<String>,
-    pub photo_url: Option<String>,
-    pub is_permanent: Option<bool>,
-    pub shelf_life_days: Option<i32>,
-    pub requires_batch_control: Option<bool>,
+    pub ncm_code: Option<String>,
     pub is_active: Option<bool>,
 }
 
@@ -262,7 +283,7 @@ pub struct CatmatClassTreeNode {
     pub budget_classification_id: Option<Uuid>,
     pub budget_classification_name: Option<String>,
     pub is_active: bool,
-    pub item_count: i64,
+    pub pdm_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

@@ -74,20 +74,41 @@ async fn create_catmat_class(app: &TestApp, group_id: &str) -> Value {
     response.json()
 }
 
-async fn create_catmat_item(app: &TestApp, class_id: &str, unit_id: &str) -> Value {
+async fn create_catmat_pdm(app: &TestApp, class_id: &str) -> Value {
+    let response = app
+        .api
+        .post("/api/admin/catalog/catmat/pdms")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "class_id": class_id,
+            "code": random_code(),
+            "description": random_name("PDM"),
+            "is_active": true
+        }))
+        .await;
+
+    if response.status_code() != StatusCode::CREATED {
+        panic!(
+            "Failed to create CATMAT PDM. Status: {}, Body: {}",
+            response.status_code(),
+            response.text()
+        );
+    }
+
+    response.json()
+}
+
+async fn create_catmat_item(app: &TestApp, pdm_id: &str, unit_id: &str) -> Value {
     let response = app
         .api
         .post("/api/admin/catalog/catmat/items")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
-            "class_id": class_id,
+            "pdm_id": pdm_id,
             "unit_of_measure_id": unit_id,
             "code": random_code(),
-            "description": random_name("PDM Item"),
+            "description": random_name("CATMAT Item"),
             "is_sustainable": false,
-            "estimated_value": 100.50,
-            "is_permanent": false,
-            "requires_batch_control": false,
             "is_active": true
         }))
         .await;
@@ -459,7 +480,84 @@ async fn test_delete_catmat_class_success() {
 }
 
 // ============================
-// CATMAT ITEM (PDM) TESTS
+// CATMAT PDM TESTS
+// ============================
+
+#[tokio::test]
+async fn test_create_catmat_pdm_success() {
+    let app = common::spawn_app().await;
+    let group = create_catmat_group(&app).await;
+    let class = create_catmat_class(&app, group["id"].as_str().unwrap()).await;
+
+    let pdm = create_catmat_pdm(&app, class["id"].as_str().unwrap()).await;
+
+    assert!(pdm["id"].is_string());
+    assert_eq!(pdm["class_id"], class["id"]);
+}
+
+#[tokio::test]
+async fn test_get_catmat_pdm_success() {
+    let app = common::spawn_app().await;
+    let group = create_catmat_group(&app).await;
+    let class = create_catmat_class(&app, group["id"].as_str().unwrap()).await;
+    let pdm = create_catmat_pdm(&app, class["id"].as_str().unwrap()).await;
+
+    let response = app
+        .api
+        .get(&format!(
+            "/api/admin/catalog/catmat/pdms/{}",
+            pdm["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["id"], pdm["id"]);
+    assert!(body["class_name"].is_string());
+}
+
+#[tokio::test]
+async fn test_list_catmat_pdms_success() {
+    let app = common::spawn_app().await;
+    let group = create_catmat_group(&app).await;
+    let class = create_catmat_class(&app, group["id"].as_str().unwrap()).await;
+
+    create_catmat_pdm(&app, class["id"].as_str().unwrap()).await;
+
+    let response = app
+        .api
+        .get("/api/admin/catalog/catmat/pdms")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert!(body["pdms"].is_array());
+    assert!(body["total"].as_i64().unwrap() >= 1);
+}
+
+#[tokio::test]
+async fn test_delete_catmat_pdm_success() {
+    let app = common::spawn_app().await;
+    let group = create_catmat_group(&app).await;
+    let class = create_catmat_class(&app, group["id"].as_str().unwrap()).await;
+    let pdm = create_catmat_pdm(&app, class["id"].as_str().unwrap()).await;
+
+    let response = app
+        .api
+        .delete(&format!(
+            "/api/admin/catalog/catmat/pdms/{}",
+            pdm["id"].as_str().unwrap()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
+}
+
+// ============================
+// CATMAT ITEM TESTS
 // ============================
 
 #[tokio::test]
@@ -468,16 +566,17 @@ async fn test_create_catmat_item_success() {
     let unit = create_unit_of_measure(&app, "Unit").await;
     let group = create_catmat_group(&app).await;
     let class = create_catmat_class(&app, group["id"].as_str().unwrap()).await;
+    let pdm = create_catmat_pdm(&app, class["id"].as_str().unwrap()).await;
 
     let item = create_catmat_item(
         &app,
-        class["id"].as_str().unwrap(),
+        pdm["id"].as_str().unwrap(),
         unit["id"].as_str().unwrap(),
     )
     .await;
 
     assert!(item["id"].is_string());
-    assert_eq!(item["class_id"], class["id"]);
+    assert_eq!(item["pdm_id"], pdm["id"]);
 }
 
 #[tokio::test]
@@ -486,9 +585,10 @@ async fn test_get_catmat_item_success() {
     let unit = create_unit_of_measure(&app, "Unit").await;
     let group = create_catmat_group(&app).await;
     let class = create_catmat_class(&app, group["id"].as_str().unwrap()).await;
+    let pdm = create_catmat_pdm(&app, class["id"].as_str().unwrap()).await;
     let item = create_catmat_item(
         &app,
-        class["id"].as_str().unwrap(),
+        pdm["id"].as_str().unwrap(),
         unit["id"].as_str().unwrap(),
     )
     .await;
@@ -505,6 +605,7 @@ async fn test_get_catmat_item_success() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert_eq!(body["id"], item["id"]);
+    assert!(body["pdm_description"].is_string());
     assert!(body["class_name"].is_string());
     assert!(body["unit_name"].is_string());
 }
@@ -515,10 +616,11 @@ async fn test_list_catmat_items_success() {
     let unit = create_unit_of_measure(&app, "Unit").await;
     let group = create_catmat_group(&app).await;
     let class = create_catmat_class(&app, group["id"].as_str().unwrap()).await;
+    let pdm = create_catmat_pdm(&app, class["id"].as_str().unwrap()).await;
 
     create_catmat_item(
         &app,
-        class["id"].as_str().unwrap(),
+        pdm["id"].as_str().unwrap(),
         unit["id"].as_str().unwrap(),
     )
     .await;
@@ -541,9 +643,10 @@ async fn test_delete_catmat_item_success() {
     let unit = create_unit_of_measure(&app, "Unit").await;
     let group = create_catmat_group(&app).await;
     let class = create_catmat_class(&app, group["id"].as_str().unwrap()).await;
+    let pdm = create_catmat_pdm(&app, class["id"].as_str().unwrap()).await;
     let item = create_catmat_item(
         &app,
-        class["id"].as_str().unwrap(),
+        pdm["id"].as_str().unwrap(),
         unit["id"].as_str().unwrap(),
     )
     .await;

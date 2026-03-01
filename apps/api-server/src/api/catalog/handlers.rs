@@ -43,15 +43,25 @@ pub struct ClassListQuery {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
-pub struct CatmatItemListQuery {
+pub struct PdmListQuery {
     #[serde(default = "default_limit")]
     pub limit: i64,
     #[serde(default)]
     pub offset: i64,
     pub search: Option<String>,
     pub class_id: Option<Uuid>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct CatmatItemListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    pub search: Option<String>,
+    pub pdm_id: Option<Uuid>,
     pub is_sustainable: Option<bool>,
-    pub is_permanent: Option<bool>,
     pub is_active: Option<bool>,
 }
 
@@ -275,7 +285,55 @@ pub async fn delete_catmat_class(_user: CurrentUser, State(state): State<AppStat
 }
 
 // ============================
-// CATMAT Item (PDM) Handlers
+// CATMAT PDM Handlers
+// ============================
+
+#[utoipa::path(post, path = "/api/admin/catalog/catmat/pdms", tag = "CATMAT - PDMs",
+    request_body = CreateCatmatPdmPayload,
+    responses((status = 201, description = "PDM created", body = CatmatPdmWithDetailsDto), (status = 409, description = "Code already exists"))
+)]
+pub async fn create_catmat_pdm(_user: CurrentUser, State(state): State<AppState>, Json(p): Json<CreateCatmatPdmPayload>) -> Result<(StatusCode, Json<CatmatPdmWithDetailsDto>), (StatusCode, String)> {
+    let c = svc(&state).create_catmat_pdm(p).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    svc(&state).get_catmat_pdm(c.id).await.map(|c| (StatusCode::CREATED, Json(c))).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(get, path = "/api/admin/catalog/catmat/pdms/{id}", tag = "CATMAT - PDMs",
+    params(("id" = Uuid, Path,)),
+    responses((status = 200, description = "PDM found", body = CatmatPdmWithDetailsDto), (status = 404, description = "Not found"))
+)]
+pub async fn get_catmat_pdm(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<Json<CatmatPdmWithDetailsDto>, (StatusCode, String)> {
+    svc(&state).get_catmat_pdm(id).await.map(Json).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(get, path = "/api/admin/catalog/catmat/pdms", tag = "CATMAT - PDMs",
+    params(PdmListQuery),
+    responses((status = 200, description = "List of CATMAT PDMs", body = CatmatPdmsListResponse))
+)]
+pub async fn list_catmat_pdms(_user: CurrentUser, State(state): State<AppState>, Query(q): Query<PdmListQuery>) -> Result<Json<CatmatPdmsListResponse>, (StatusCode, String)> {
+    let (pdms, total) = svc(&state).list_catmat_pdms(q.limit, q.offset, q.search, q.class_id, q.is_active).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(CatmatPdmsListResponse { pdms, total, limit: q.limit, offset: q.offset }))
+}
+
+#[utoipa::path(put, path = "/api/admin/catalog/catmat/pdms/{id}", tag = "CATMAT - PDMs",
+    params(("id" = Uuid, Path,)),
+    request_body = UpdateCatmatPdmPayload,
+    responses((status = 200, description = "PDM updated", body = CatmatPdmWithDetailsDto), (status = 404, description = "Not found"))
+)]
+pub async fn update_catmat_pdm(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>, Json(p): Json<UpdateCatmatPdmPayload>) -> Result<Json<CatmatPdmWithDetailsDto>, (StatusCode, String)> {
+    let _ = svc(&state).update_catmat_pdm(id, p).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    svc(&state).get_catmat_pdm(id).await.map(Json).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(delete, path = "/api/admin/catalog/catmat/pdms/{id}", tag = "CATMAT - PDMs",
+    params(("id" = Uuid, Path,)),
+    responses((status = 204, description = "PDM deleted"), (status = 404, description = "Not found"))
+)]
+pub async fn delete_catmat_pdm(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, String)> {
+    svc(&state).delete_catmat_pdm(id).await.map(|_| StatusCode::NO_CONTENT).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+// ============================
+// CATMAT Item Handlers
 // ============================
 
 #[utoipa::path(post, path = "/api/admin/catalog/catmat/items", tag = "CATMAT - Items",
@@ -300,7 +358,7 @@ pub async fn get_catmat_item(_user: CurrentUser, State(state): State<AppState>, 
     responses((status = 200, description = "List of CATMAT items", body = CatmatItemsListResponse))
 )]
 pub async fn list_catmat_items(_user: CurrentUser, State(state): State<AppState>, Query(q): Query<CatmatItemListQuery>) -> Result<Json<CatmatItemsListResponse>, (StatusCode, String)> {
-    let (items, total) = svc(&state).list_catmat_items(q.limit, q.offset, q.search, q.class_id, q.is_sustainable, q.is_permanent, q.is_active).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    let (items, total) = svc(&state).list_catmat_items(q.limit, q.offset, q.search, q.pdm_id, q.is_sustainable, q.is_active).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
     Ok(Json(CatmatItemsListResponse { items, total, limit: q.limit, offset: q.offset }))
 }
 

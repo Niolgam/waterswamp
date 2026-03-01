@@ -34,7 +34,8 @@ use utoipa::OpenApi;
         (name = "Catalog - Conversions", description = "Conversões entre unidades de medida"),
         (name = "CATMAT - Groups", description = "Grupos do Catálogo de Materiais (CATMAT)"),
         (name = "CATMAT - Classes", description = "Classes do Catálogo de Materiais (CATMAT)"),
-        (name = "CATMAT - Items", description = "Itens PDM do Catálogo de Materiais (CATMAT)"),
+        (name = "CATMAT - PDMs", description = "Padrões Descritivos de Material do Catálogo de Materiais (CATMAT)"),
+        (name = "CATMAT - Items", description = "Itens do Catálogo de Materiais (CATMAT)"),
         (name = "CATSER - Groups", description = "Grupos do Catálogo de Serviços (CATSER)"),
         (name = "CATSER - Classes", description = "Classes do Catálogo de Serviços (CATSER)"),
         (name = "CATSER - Items", description = "Itens do Catálogo de Serviços (CATSER)"),
@@ -131,7 +132,14 @@ use utoipa::OpenApi;
         crate::api::catalog::handlers::update_catmat_class,
         crate::api::catalog::handlers::delete_catmat_class,
 
-        // CATMAT - Items (PDM)
+        // CATMAT - PDMs
+        crate::api::catalog::handlers::create_catmat_pdm,
+        crate::api::catalog::handlers::get_catmat_pdm,
+        crate::api::catalog::handlers::list_catmat_pdms,
+        crate::api::catalog::handlers::update_catmat_pdm,
+        crate::api::catalog::handlers::delete_catmat_pdm,
+
+        // CATMAT - Items
         crate::api::catalog::handlers::create_catmat_item,
         crate::api::catalog::handlers::get_catmat_item,
         crate::api::catalog::handlers::list_catmat_items,
@@ -276,6 +284,10 @@ use utoipa::OpenApi;
             domain::models::catalog::CatmatClassWithDetailsDto,
             domain::models::catalog::CreateCatmatClassPayload,
             domain::models::catalog::UpdateCatmatClassPayload,
+            domain::models::catalog::CatmatPdmDto,
+            domain::models::catalog::CatmatPdmWithDetailsDto,
+            domain::models::catalog::CreateCatmatPdmPayload,
+            domain::models::catalog::UpdateCatmatPdmPayload,
             domain::models::catalog::CatmatItemDto,
             domain::models::catalog::CatmatItemWithDetailsDto,
             domain::models::catalog::CreateCatmatItemPayload,
@@ -301,6 +313,7 @@ use utoipa::OpenApi;
             crate::api::catalog::contracts::UnitConversionsListResponse,
             crate::api::catalog::contracts::CatmatGroupsListResponse,
             crate::api::catalog::contracts::CatmatClassesListResponse,
+            crate::api::catalog::contracts::CatmatPdmsListResponse,
             crate::api::catalog::contracts::CatmatItemsListResponse,
             crate::api::catalog::contracts::CatserGroupsListResponse,
             crate::api::catalog::contracts::CatserClassesListResponse,

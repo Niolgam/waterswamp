@@ -241,7 +241,7 @@ impl CatmatGroupRepositoryPort for CatmatGroupRepository {
                 c.budget_classification_id, c.is_active AS class_is_active,
                 c.created_at AS class_created_at, c.updated_at AS class_updated_at,
                 bc.name AS budget_classification_name,
-                (SELECT COUNT(*) FROM catmat_items WHERE class_id = c.id) AS item_count
+                (SELECT COUNT(*) FROM catmat_pdms WHERE class_id = c.id) AS pdm_count
             FROM catmat_groups g
             LEFT JOIN catmat_classes c ON c.group_id = g.id
             LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
@@ -274,7 +274,7 @@ impl CatmatGroupRepositoryPort for CatmatGroupRepository {
                     budget_classification_id: r.get("budget_classification_id"),
                     budget_classification_name: r.get("budget_classification_name"),
                     is_active: r.get("class_is_active"),
-                    item_count: r.get("item_count"),
+                    pdm_count: r.get("pdm_count"),
                     created_at: r.get("class_created_at"),
                     updated_at: r.get("class_updated_at"),
                 });
@@ -313,7 +313,7 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         let result = sqlx::query(
             r#"SELECT c.*, g.name AS group_name, g.code AS group_code,
                 bc.name AS budget_classification_name, bc.full_code AS budget_classification_code,
-                (SELECT COUNT(*) FROM catmat_items WHERE class_id = c.id) AS item_count
+                (SELECT COUNT(*) FROM catmat_pdms WHERE class_id = c.id) AS pdm_count
             FROM catmat_classes c
             JOIN catmat_groups g ON c.group_id = g.id
             LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
@@ -335,7 +335,7 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
             budget_classification_name: r.get("budget_classification_name"),
             budget_classification_code: r.get("budget_classification_code"),
             is_active: r.get("is_active"),
-            item_count: r.get("item_count"),
+            pdm_count: r.get("pdm_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }))
@@ -400,8 +400,8 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn has_items(&self, id: Uuid) -> Result<bool, RepositoryError> {
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catmat_items WHERE class_id = $1")
+    async fn has_pdms(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catmat_pdms WHERE class_id = $1")
             .bind(id)
             .fetch_one(&self.pool)
             .await
@@ -414,7 +414,7 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         let records = sqlx::query(
             r#"SELECT c.*, g.name AS group_name, g.code AS group_code,
                 bc.name AS budget_classification_name, bc.full_code AS budget_classification_code,
-                (SELECT COUNT(*) FROM catmat_items WHERE class_id = c.id) AS item_count
+                (SELECT COUNT(*) FROM catmat_pdms WHERE class_id = c.id) AS pdm_count
             FROM catmat_classes c
             JOIN catmat_groups g ON c.group_id = g.id
             LEFT JOIN budget_classifications bc ON c.budget_classification_id = bc.id
@@ -443,7 +443,7 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
             budget_classification_name: r.get("budget_classification_name"),
             budget_classification_code: r.get("budget_classification_code"),
             is_active: r.get("is_active"),
-            item_count: r.get("item_count"),
+            pdm_count: r.get("pdm_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }).collect();
@@ -462,6 +462,202 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         .map_err(map_db_error)?;
 
         Ok((classes, total))
+    }
+}
+
+// ============================
+// CATMAT PDM Repository
+// ============================
+
+pub struct CatmatPdmRepository {
+    pool: PgPool,
+}
+
+impl CatmatPdmRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl CatmatPdmRepositoryPort for CatmatPdmRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<CatmatPdmDto>, RepositoryError> {
+        sqlx::query_as::<_, CatmatPdmDto>("SELECT * FROM catmat_pdms WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_db_error)
+    }
+
+    async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatmatPdmWithDetailsDto>, RepositoryError> {
+        let result = sqlx::query(
+            r#"SELECT p.*, cc.name AS class_name, cc.code AS class_code,
+                cg.id AS group_id, cg.name AS group_name, cg.code AS group_code,
+                (SELECT COUNT(*) FROM catmat_items WHERE pdm_id = p.id) AS item_count
+            FROM catmat_pdms p
+            JOIN catmat_classes cc ON p.class_id = cc.id
+            JOIN catmat_groups cg ON cc.group_id = cg.id
+            WHERE p.id = $1"#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+
+        Ok(result.map(|r| CatmatPdmWithDetailsDto {
+            id: r.get("id"),
+            class_id: r.get("class_id"),
+            class_name: r.get("class_name"),
+            class_code: r.get("class_code"),
+            group_id: r.get("group_id"),
+            group_name: r.get("group_name"),
+            group_code: r.get("group_code"),
+            code: r.get("code"),
+            description: r.get("description"),
+            is_active: r.get("is_active"),
+            item_count: r.get("item_count"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
+        }))
+    }
+
+    async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catmat_pdms WHERE code = $1")
+            .bind(code)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(count > 0)
+    }
+
+    async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catmat_pdms WHERE code = $1 AND id != $2")
+            .bind(code)
+            .bind(exclude_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(count > 0)
+    }
+
+    async fn create(&self, class_id: Uuid, code: &str, description: &str, is_active: bool) -> Result<CatmatPdmDto, RepositoryError> {
+        sqlx::query_as::<_, CatmatPdmDto>(
+            "INSERT INTO catmat_pdms (class_id, code, description, is_active) VALUES ($1, $2, $3, $4) RETURNING *",
+        )
+        .bind(class_id)
+        .bind(code)
+        .bind(description)
+        .bind(is_active)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_error)
+    }
+
+    async fn update(&self, id: Uuid, class_id: Option<Uuid>, code: Option<&str>, description: Option<&str>, is_active: Option<bool>) -> Result<CatmatPdmDto, RepositoryError> {
+        let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new("UPDATE catmat_pdms SET ");
+        let mut separated = builder.separated(", ");
+
+        if let Some(v) = class_id {
+            separated.push("class_id = ");
+            separated.push_bind_unseparated(v);
+        }
+        if let Some(v) = code {
+            separated.push("code = ");
+            separated.push_bind_unseparated(v.to_string());
+        }
+        if let Some(v) = description {
+            separated.push("description = ");
+            separated.push_bind_unseparated(v.to_string());
+        }
+        if let Some(v) = is_active {
+            separated.push("is_active = ");
+            separated.push_bind_unseparated(v);
+        }
+
+        separated.push("updated_at = NOW()");
+
+        builder.push(" WHERE id = ");
+        builder.push_bind(id);
+        builder.push(" RETURNING *");
+
+        builder
+            .build_query_as::<CatmatPdmDto>()
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_db_error)
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("DELETE FROM catmat_pdms WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    async fn has_items(&self, id: Uuid) -> Result<bool, RepositoryError> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catmat_items WHERE pdm_id = $1")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(count > 0)
+    }
+
+    async fn list(&self, limit: i64, offset: i64, search: Option<String>, class_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatmatPdmWithDetailsDto>, i64), RepositoryError> {
+        let search_pattern = search.map(|s| format!("%{}%", s));
+        let records = sqlx::query(
+            r#"SELECT p.*, cc.name AS class_name, cc.code AS class_code,
+                cg.id AS group_id, cg.name AS group_name, cg.code AS group_code,
+                (SELECT COUNT(*) FROM catmat_items WHERE pdm_id = p.id) AS item_count
+            FROM catmat_pdms p
+            JOIN catmat_classes cc ON p.class_id = cc.id
+            JOIN catmat_groups cg ON cc.group_id = cg.id
+            WHERE ($1::TEXT IS NULL OR p.description ILIKE $1 OR p.code ILIKE $1)
+              AND ($2::UUID IS NULL OR p.class_id = $2)
+              AND ($3::BOOLEAN IS NULL OR p.is_active = $3)
+            ORDER BY p.code LIMIT $4 OFFSET $5"#,
+        )
+        .bind(&search_pattern)
+        .bind(class_id)
+        .bind(is_active)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+
+        let pdms = records.into_iter().map(|r| CatmatPdmWithDetailsDto {
+            id: r.get("id"),
+            class_id: r.get("class_id"),
+            class_name: r.get("class_name"),
+            class_code: r.get("class_code"),
+            group_id: r.get("group_id"),
+            group_name: r.get("group_name"),
+            group_code: r.get("group_code"),
+            code: r.get("code"),
+            description: r.get("description"),
+            is_active: r.get("is_active"),
+            item_count: r.get("item_count"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
+        }).collect();
+
+        let total: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM catmat_pdms p
+            WHERE ($1::TEXT IS NULL OR p.description ILIKE $1 OR p.code ILIKE $1)
+              AND ($2::UUID IS NULL OR p.class_id = $2)
+              AND ($3::BOOLEAN IS NULL OR p.is_active = $3)"#,
+        )
+        .bind(&search_pattern)
+        .bind(class_id)
+        .bind(is_active)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+
+        Ok((pdms, total))
     }
 }
 
@@ -491,12 +687,14 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
 
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatmatItemWithDetailsDto>, RepositoryError> {
         let result = sqlx::query(
-            r#"SELECT i.*, c.name AS class_name, c.code AS class_code,
-                g.id AS group_id, g.name AS group_name, g.code AS group_code,
+            r#"SELECT i.*, p.description AS pdm_description, p.code AS pdm_code,
+                cc.id AS class_id, cc.name AS class_name, cc.code AS class_code,
+                cg.id AS group_id, cg.name AS group_name, cg.code AS group_code,
                 u.name AS unit_name, u.symbol AS unit_symbol
             FROM catmat_items i
-            JOIN catmat_classes c ON i.class_id = c.id
-            JOIN catmat_groups g ON c.group_id = g.id
+            JOIN catmat_pdms p ON i.pdm_id = p.id
+            JOIN catmat_classes cc ON p.class_id = cc.id
+            JOIN catmat_groups cg ON cc.group_id = cg.id
             JOIN units_of_measure u ON i.unit_of_measure_id = u.id
             WHERE i.id = $1"#,
         )
@@ -507,6 +705,9 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
 
         Ok(result.map(|r| CatmatItemWithDetailsDto {
             id: r.get("id"),
+            pdm_id: r.get("pdm_id"),
+            pdm_description: r.get("pdm_description"),
+            pdm_code: r.get("pdm_code"),
             class_id: r.get("class_id"),
             class_name: r.get("class_name"),
             class_code: r.get("class_code"),
@@ -518,15 +719,8 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             unit_symbol: r.get("unit_symbol"),
             code: r.get("code"),
             description: r.get("description"),
-            supplementary_description: r.get("supplementary_description"),
             is_sustainable: r.get("is_sustainable"),
-            specification: r.get("specification"),
-            estimated_value: r.get("estimated_value"),
-            search_links: r.get("search_links"),
-            photo_url: r.get("photo_url"),
-            is_permanent: r.get("is_permanent"),
-            shelf_life_days: r.get("shelf_life_days"),
-            requires_batch_control: r.get("requires_batch_control"),
+            ncm_code: r.get("ncm_code"),
             is_active: r.get("is_active"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -561,30 +755,20 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
     }
 
     async fn create(
-        &self, class_id: Uuid, unit_of_measure_id: Uuid, code: &str, description: &str,
-        supplementary_description: Option<&str>, is_sustainable: bool, specification: Option<&str>,
-        estimated_value: rust_decimal::Decimal, search_links: Option<&str>, photo_url: Option<&str>,
-        is_permanent: bool, shelf_life_days: Option<i32>, requires_batch_control: bool, is_active: bool,
+        &self, pdm_id: Uuid, unit_of_measure_id: Uuid, code: &str, description: &str,
+        is_sustainable: bool, ncm_code: Option<&str>, is_active: bool,
     ) -> Result<CatmatItemDto, RepositoryError> {
         sqlx::query_as::<_, CatmatItemDto>(
-            r#"INSERT INTO catmat_items (class_id, unit_of_measure_id, code, description,
-                supplementary_description, is_sustainable, specification, estimated_value,
-                search_links, photo_url, is_permanent, shelf_life_days, requires_batch_control, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *"#,
+            r#"INSERT INTO catmat_items (pdm_id, unit_of_measure_id, code, description,
+                is_sustainable, ncm_code, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *"#,
         )
-        .bind(class_id)
+        .bind(pdm_id)
         .bind(unit_of_measure_id)
         .bind(code)
         .bind(description)
-        .bind(supplementary_description)
         .bind(is_sustainable)
-        .bind(specification)
-        .bind(estimated_value)
-        .bind(search_links)
-        .bind(photo_url)
-        .bind(is_permanent)
-        .bind(shelf_life_days)
-        .bind(requires_batch_control)
+        .bind(ncm_code)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await
@@ -592,47 +776,53 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
     }
 
     async fn update(
-        &self, id: Uuid, class_id: Option<Uuid>, unit_of_measure_id: Option<Uuid>,
-        code: Option<&str>, description: Option<&str>, supplementary_description: Option<&str>,
-        is_sustainable: Option<bool>, specification: Option<&str>,
-        estimated_value: Option<rust_decimal::Decimal>, search_links: Option<&str>,
-        photo_url: Option<&str>, is_permanent: Option<bool>, shelf_life_days: Option<i32>,
-        requires_batch_control: Option<bool>, is_active: Option<bool>,
+        &self, id: Uuid, pdm_id: Option<Uuid>, unit_of_measure_id: Option<Uuid>,
+        code: Option<&str>, description: Option<&str>, is_sustainable: Option<bool>,
+        ncm_code: Option<&str>, is_active: Option<bool>,
     ) -> Result<CatmatItemDto, RepositoryError> {
-        sqlx::query_as::<_, CatmatItemDto>(
-            r#"UPDATE catmat_items SET
-                class_id = COALESCE($2, class_id), unit_of_measure_id = COALESCE($3, unit_of_measure_id),
-                code = COALESCE($4, code), description = COALESCE($5, description),
-                supplementary_description = CASE WHEN $6::TEXT IS NOT NULL THEN $6 ELSE supplementary_description END,
-                is_sustainable = COALESCE($7, is_sustainable),
-                specification = CASE WHEN $8::TEXT IS NOT NULL THEN $8 ELSE specification END,
-                estimated_value = COALESCE($9, estimated_value),
-                search_links = CASE WHEN $10::TEXT IS NOT NULL THEN $10 ELSE search_links END,
-                photo_url = CASE WHEN $11::TEXT IS NOT NULL THEN $11 ELSE photo_url END,
-                is_permanent = COALESCE($12, is_permanent),
-                shelf_life_days = CASE WHEN $13::INTEGER IS NOT NULL THEN $13 ELSE shelf_life_days END,
-                requires_batch_control = COALESCE($14, requires_batch_control),
-                is_active = COALESCE($15, is_active), updated_at = NOW()
-            WHERE id = $1 RETURNING *"#,
-        )
-        .bind(id)
-        .bind(class_id)
-        .bind(unit_of_measure_id)
-        .bind(code)
-        .bind(description)
-        .bind(supplementary_description)
-        .bind(is_sustainable)
-        .bind(specification)
-        .bind(estimated_value)
-        .bind(search_links)
-        .bind(photo_url)
-        .bind(is_permanent)
-        .bind(shelf_life_days)
-        .bind(requires_batch_control)
-        .bind(is_active)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(map_db_error)
+        let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new("UPDATE catmat_items SET ");
+        let mut separated = builder.separated(", ");
+
+        if let Some(v) = pdm_id {
+            separated.push("pdm_id = ");
+            separated.push_bind_unseparated(v);
+        }
+        if let Some(v) = unit_of_measure_id {
+            separated.push("unit_of_measure_id = ");
+            separated.push_bind_unseparated(v);
+        }
+        if let Some(v) = code {
+            separated.push("code = ");
+            separated.push_bind_unseparated(v.to_string());
+        }
+        if let Some(v) = description {
+            separated.push("description = ");
+            separated.push_bind_unseparated(v.to_string());
+        }
+        if let Some(v) = is_sustainable {
+            separated.push("is_sustainable = ");
+            separated.push_bind_unseparated(v);
+        }
+        if let Some(v) = ncm_code {
+            separated.push("ncm_code = ");
+            separated.push_bind_unseparated(v.to_string());
+        }
+        if let Some(v) = is_active {
+            separated.push("is_active = ");
+            separated.push_bind_unseparated(v);
+        }
+
+        separated.push("updated_at = NOW()");
+
+        builder.push(" WHERE id = ");
+        builder.push_bind(id);
+        builder.push(" RETURNING *");
+
+        builder
+            .build_query_as::<CatmatItemDto>()
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_db_error)
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -645,29 +835,29 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
     }
 
     async fn list(
-        &self, limit: i64, offset: i64, search: Option<String>, class_id: Option<Uuid>,
-        is_sustainable: Option<bool>, is_permanent: Option<bool>, is_active: Option<bool>,
+        &self, limit: i64, offset: i64, search: Option<String>, pdm_id: Option<Uuid>,
+        is_sustainable: Option<bool>, is_active: Option<bool>,
     ) -> Result<(Vec<CatmatItemWithDetailsDto>, i64), RepositoryError> {
         let search_pattern = search.map(|s| format!("%{}%", s));
         let records = sqlx::query(
-            r#"SELECT i.*, c.name AS class_name, c.code AS class_code,
-                g.id AS group_id, g.name AS group_name, g.code AS group_code,
+            r#"SELECT i.*, p.description AS pdm_description, p.code AS pdm_code,
+                cc.id AS class_id, cc.name AS class_name, cc.code AS class_code,
+                cg.id AS group_id, cg.name AS group_name, cg.code AS group_code,
                 u.name AS unit_name, u.symbol AS unit_symbol
             FROM catmat_items i
-            JOIN catmat_classes c ON i.class_id = c.id
-            JOIN catmat_groups g ON c.group_id = g.id
+            JOIN catmat_pdms p ON i.pdm_id = p.id
+            JOIN catmat_classes cc ON p.class_id = cc.id
+            JOIN catmat_groups cg ON cc.group_id = cg.id
             JOIN units_of_measure u ON i.unit_of_measure_id = u.id
-            WHERE ($1::TEXT IS NULL OR i.description ILIKE $1 OR i.code ILIKE $1 OR i.specification ILIKE $1)
-              AND ($2::UUID IS NULL OR i.class_id = $2)
+            WHERE ($1::TEXT IS NULL OR i.description ILIKE $1 OR i.code ILIKE $1)
+              AND ($2::UUID IS NULL OR i.pdm_id = $2)
               AND ($3::BOOLEAN IS NULL OR i.is_sustainable = $3)
-              AND ($4::BOOLEAN IS NULL OR i.is_permanent = $4)
-              AND ($5::BOOLEAN IS NULL OR i.is_active = $5)
-            ORDER BY i.code LIMIT $6 OFFSET $7"#,
+              AND ($4::BOOLEAN IS NULL OR i.is_active = $4)
+            ORDER BY i.code LIMIT $5 OFFSET $6"#,
         )
         .bind(&search_pattern)
-        .bind(class_id)
+        .bind(pdm_id)
         .bind(is_sustainable)
-        .bind(is_permanent)
         .bind(is_active)
         .bind(limit)
         .bind(offset)
@@ -677,6 +867,9 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
 
         let items = records.into_iter().map(|r| CatmatItemWithDetailsDto {
             id: r.get("id"),
+            pdm_id: r.get("pdm_id"),
+            pdm_description: r.get("pdm_description"),
+            pdm_code: r.get("pdm_code"),
             class_id: r.get("class_id"),
             class_name: r.get("class_name"),
             class_code: r.get("class_code"),
@@ -688,15 +881,8 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             unit_symbol: r.get("unit_symbol"),
             code: r.get("code"),
             description: r.get("description"),
-            supplementary_description: r.get("supplementary_description"),
             is_sustainable: r.get("is_sustainable"),
-            specification: r.get("specification"),
-            estimated_value: r.get("estimated_value"),
-            search_links: r.get("search_links"),
-            photo_url: r.get("photo_url"),
-            is_permanent: r.get("is_permanent"),
-            shelf_life_days: r.get("shelf_life_days"),
-            requires_batch_control: r.get("requires_batch_control"),
+            ncm_code: r.get("ncm_code"),
             is_active: r.get("is_active"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -704,16 +890,14 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
 
         let total: i64 = sqlx::query_scalar(
             r#"SELECT COUNT(*) FROM catmat_items i
-            WHERE ($1::TEXT IS NULL OR i.description ILIKE $1 OR i.code ILIKE $1 OR i.specification ILIKE $1)
-              AND ($2::UUID IS NULL OR i.class_id = $2)
+            WHERE ($1::TEXT IS NULL OR i.description ILIKE $1 OR i.code ILIKE $1)
+              AND ($2::UUID IS NULL OR i.pdm_id = $2)
               AND ($3::BOOLEAN IS NULL OR i.is_sustainable = $3)
-              AND ($4::BOOLEAN IS NULL OR i.is_permanent = $4)
-              AND ($5::BOOLEAN IS NULL OR i.is_active = $5)"#,
+              AND ($4::BOOLEAN IS NULL OR i.is_active = $4)"#,
         )
         .bind(&search_pattern)
-        .bind(class_id)
+        .bind(pdm_id)
         .bind(is_sustainable)
-        .bind(is_permanent)
         .bind(is_active)
         .fetch_one(&self.pool)
         .await

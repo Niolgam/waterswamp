@@ -11,6 +11,7 @@ pub struct CatalogService {
     conversion_repo: Arc<dyn UnitConversionRepositoryPort>,
     catmat_group_repo: Arc<dyn CatmatGroupRepositoryPort>,
     catmat_class_repo: Arc<dyn CatmatClassRepositoryPort>,
+    catmat_pdm_repo: Arc<dyn CatmatPdmRepositoryPort>,
     catmat_item_repo: Arc<dyn CatmatItemRepositoryPort>,
     catser_group_repo: Arc<dyn CatserGroupRepositoryPort>,
     catser_class_repo: Arc<dyn CatserClassRepositoryPort>,
@@ -23,6 +24,7 @@ impl CatalogService {
         conversion_repo: Arc<dyn UnitConversionRepositoryPort>,
         catmat_group_repo: Arc<dyn CatmatGroupRepositoryPort>,
         catmat_class_repo: Arc<dyn CatmatClassRepositoryPort>,
+        catmat_pdm_repo: Arc<dyn CatmatPdmRepositoryPort>,
         catmat_item_repo: Arc<dyn CatmatItemRepositoryPort>,
         catser_group_repo: Arc<dyn CatserGroupRepositoryPort>,
         catser_class_repo: Arc<dyn CatserClassRepositoryPort>,
@@ -30,7 +32,7 @@ impl CatalogService {
     ) -> Self {
         Self {
             unit_repo, conversion_repo,
-            catmat_group_repo, catmat_class_repo, catmat_item_repo,
+            catmat_group_repo, catmat_class_repo, catmat_pdm_repo, catmat_item_repo,
             catser_group_repo, catser_class_repo, catser_item_repo,
         }
     }
@@ -174,8 +176,8 @@ impl CatalogService {
     }
 
     pub async fn delete_catmat_class(&self, id: Uuid) -> Result<bool, ServiceError> {
-        if self.catmat_class_repo.has_items(id).await? {
-            return Err(ServiceError::Conflict("Não é possível excluir: a classe possui itens vinculados".to_string()));
+        if self.catmat_class_repo.has_pdms(id).await? {
+            return Err(ServiceError::Conflict("Não é possível excluir classe com PDMs vinculados".to_string()));
         }
         self.catmat_class_repo.delete(id).await.map_err(ServiceError::from)
     }
@@ -185,24 +187,60 @@ impl CatalogService {
     }
 
     // ============================
-    // CATMAT Items (PDM)
+    // CATMAT PDMs (Padrão Descritivo de Material)
+    // ============================
+
+    pub async fn create_catmat_pdm(&self, payload: CreateCatmatPdmPayload) -> Result<CatmatPdmDto, ServiceError> {
+        if self.catmat_pdm_repo.exists_by_code(&payload.code).await? {
+            return Err(ServiceError::Conflict(format!("PDM CATMAT com código '{}' já existe", payload.code)));
+        }
+        let _ = self.catmat_class_repo.find_by_id(payload.class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
+        self.catmat_pdm_repo.create(payload.class_id, &payload.code, &payload.description, payload.is_active).await.map_err(ServiceError::from)
+    }
+
+    pub async fn get_catmat_pdm(&self, id: Uuid) -> Result<CatmatPdmWithDetailsDto, ServiceError> {
+        self.catmat_pdm_repo.find_with_details_by_id(id).await?.ok_or(ServiceError::NotFound("PDM CATMAT não encontrado".to_string()))
+    }
+
+    pub async fn list_catmat_pdms(&self, limit: i64, offset: i64, search: Option<String>, class_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatmatPdmWithDetailsDto>, i64), ServiceError> {
+        self.catmat_pdm_repo.list(limit, offset, search, class_id, is_active).await.map_err(ServiceError::from)
+    }
+
+    pub async fn update_catmat_pdm(&self, id: Uuid, payload: UpdateCatmatPdmPayload) -> Result<CatmatPdmWithDetailsDto, ServiceError> {
+        let _ = self.catmat_pdm_repo.find_by_id(id).await?.ok_or(ServiceError::NotFound("PDM CATMAT não encontrado".to_string()))?;
+        if let Some(ref code) = payload.code {
+            if self.catmat_pdm_repo.exists_by_code_excluding(code, id).await? {
+                return Err(ServiceError::Conflict(format!("PDM CATMAT com código '{}' já existe", code)));
+            }
+        }
+        if let Some(class_id) = payload.class_id {
+            let _ = self.catmat_class_repo.find_by_id(class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
+        }
+        self.catmat_pdm_repo.update(id, payload.class_id, payload.code.as_deref(), payload.description.as_deref(), payload.is_active).await?;
+        self.get_catmat_pdm(id).await
+    }
+
+    pub async fn delete_catmat_pdm(&self, id: Uuid) -> Result<bool, ServiceError> {
+        let _ = self.catmat_pdm_repo.find_by_id(id).await?.ok_or(ServiceError::NotFound("PDM CATMAT não encontrado".to_string()))?;
+        if self.catmat_pdm_repo.has_items(id).await? {
+            return Err(ServiceError::Conflict("Não é possível excluir PDM com itens vinculados".to_string()));
+        }
+        self.catmat_pdm_repo.delete(id).await.map_err(ServiceError::from)
+    }
+
+    // ============================
+    // CATMAT Items
     // ============================
 
     pub async fn create_catmat_item(&self, payload: CreateCatmatItemPayload) -> Result<CatmatItemDto, ServiceError> {
-        let _ = self.catmat_class_repo.find_by_id(payload.class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
+        let _ = self.catmat_pdm_repo.find_by_id(payload.pdm_id).await?.ok_or(ServiceError::NotFound("PDM CATMAT não encontrado".to_string()))?;
         let _ = self.unit_repo.find_by_id(payload.unit_of_measure_id).await?.ok_or(ServiceError::NotFound("Unidade de medida não encontrada".to_string()))?;
         if self.catmat_item_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!("Item CATMAT com código '{}' já existe", payload.code)));
         }
-        if let Some(days) = payload.shelf_life_days {
-            if days < 1 { return Err(ServiceError::BadRequest("Validade deve ser maior que 0 dias".to_string())); }
-        }
         self.catmat_item_repo.create(
-            payload.class_id, payload.unit_of_measure_id, &payload.code, &payload.description,
-            payload.supplementary_description.as_deref(), payload.is_sustainable,
-            payload.specification.as_deref(), payload.estimated_value,
-            payload.search_links.as_deref(), payload.photo_url.as_deref(),
-            payload.is_permanent, payload.shelf_life_days, payload.requires_batch_control, payload.is_active,
+            payload.pdm_id, payload.unit_of_measure_id, &payload.code, &payload.description,
+            payload.is_sustainable, payload.ncm_code.as_deref(), payload.is_active,
         ).await.map_err(ServiceError::from)
     }
 
@@ -217,18 +255,15 @@ impl CatalogService {
                 return Err(ServiceError::Conflict(format!("Item CATMAT com código '{}' já existe", code)));
             }
         }
-        if let Some(class_id) = payload.class_id {
-            let _ = self.catmat_class_repo.find_by_id(class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
+        if let Some(pdm_id) = payload.pdm_id {
+            let _ = self.catmat_pdm_repo.find_by_id(pdm_id).await?.ok_or(ServiceError::NotFound("PDM CATMAT não encontrado".to_string()))?;
         }
         if let Some(unit_id) = payload.unit_of_measure_id {
             let _ = self.unit_repo.find_by_id(unit_id).await?.ok_or(ServiceError::NotFound("Unidade de medida não encontrada".to_string()))?;
         }
         self.catmat_item_repo.update(
-            id, payload.class_id, payload.unit_of_measure_id, payload.code.as_deref(),
-            payload.description.as_deref(), payload.supplementary_description.as_deref(),
-            payload.is_sustainable, payload.specification.as_deref(), payload.estimated_value,
-            payload.search_links.as_deref(), payload.photo_url.as_deref(),
-            payload.is_permanent, payload.shelf_life_days, payload.requires_batch_control, payload.is_active,
+            id, payload.pdm_id, payload.unit_of_measure_id, payload.code.as_deref(),
+            payload.description.as_deref(), payload.is_sustainable, payload.ncm_code.as_deref(), payload.is_active,
         ).await.map_err(ServiceError::from)
     }
 
@@ -236,8 +271,8 @@ impl CatalogService {
         self.catmat_item_repo.delete(id).await.map_err(ServiceError::from)
     }
 
-    pub async fn list_catmat_items(&self, limit: i64, offset: i64, search: Option<String>, class_id: Option<Uuid>, is_sustainable: Option<bool>, is_permanent: Option<bool>, is_active: Option<bool>) -> Result<(Vec<CatmatItemWithDetailsDto>, i64), ServiceError> {
-        self.catmat_item_repo.list(limit, offset, search, class_id, is_sustainable, is_permanent, is_active).await.map_err(ServiceError::from)
+    pub async fn list_catmat_items(&self, limit: i64, offset: i64, search: Option<String>, pdm_id: Option<Uuid>, is_sustainable: Option<bool>, is_active: Option<bool>) -> Result<(Vec<CatmatItemWithDetailsDto>, i64), ServiceError> {
+        self.catmat_item_repo.list(limit, offset, search, pdm_id, is_sustainable, is_active).await.map_err(ServiceError::from)
     }
 
     // ============================

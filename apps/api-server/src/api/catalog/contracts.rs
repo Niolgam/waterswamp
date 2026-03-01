@@ -8,6 +8,7 @@ pub use domain::models::catalog::{
     // CATMAT
     CatmatGroupDto, CreateCatmatGroupPayload, UpdateCatmatGroupPayload, CatmatGroupTreeNode,
     CatmatClassWithDetailsDto, CreateCatmatClassPayload, UpdateCatmatClassPayload,
+    CatmatPdmDto, CatmatPdmWithDetailsDto, CreateCatmatPdmPayload, UpdateCatmatPdmPayload,
     CatmatItemWithDetailsDto, CreateCatmatItemPayload, UpdateCatmatItemPayload,
     // CATSER
     CatserGroupDto, CreateCatserGroupPayload, UpdateCatserGroupPayload, CatserGroupTreeNode,
@@ -46,6 +47,14 @@ pub struct CatmatGroupsListResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CatmatClassesListResponse {
     pub classes: Vec<CatmatClassWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatPdmsListResponse {
+    pub pdms: Vec<CatmatPdmWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
