@@ -1,14 +1,19 @@
-use domain::models::catalog::*;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-// Re-export domain types for API use
 pub use domain::models::catalog::{
-    CatalogGroupTreeNode, CatalogGroupWithDetailsDto, CatalogItemWithDetailsDto,
-    CreateCatalogGroupPayload, CreateCatalogItemPayload, CreateUnitConversionPayload,
-    CreateUnitOfMeasurePayload, ItemType, UnitConversionWithDetailsDto, UnitOfMeasureDto,
-    UpdateCatalogGroupPayload, UpdateCatalogItemPayload, UpdateUnitConversionPayload,
-    UpdateUnitOfMeasurePayload,
+    // Units
+    UnitOfMeasureDto, CreateUnitOfMeasurePayload, UpdateUnitOfMeasurePayload,
+    UnitConversionWithDetailsDto, CreateUnitConversionPayload, UpdateUnitConversionPayload,
+    // CATMAT
+    CatmatGroupDto, CreateCatmatGroupPayload, UpdateCatmatGroupPayload, CatmatGroupTreeNode,
+    CatmatClassWithDetailsDto, CreateCatmatClassPayload, UpdateCatmatClassPayload,
+    CatmatPdmDto, CatmatPdmWithDetailsDto, CreateCatmatPdmPayload, UpdateCatmatPdmPayload,
+    CatmatItemWithDetailsDto, CreateCatmatItemPayload, UpdateCatmatItemPayload,
+    // CATSER
+    CatserGroupDto, CreateCatserGroupPayload, UpdateCatserGroupPayload, CatserGroupTreeNode,
+    CatserClassWithDetailsDto, CreateCatserClassPayload, UpdateCatserClassPayload,
+    CatserItemWithDetailsDto, CreateCatserItemPayload, UpdateCatserItemPayload,
 };
 
 // ============================
@@ -24,24 +29,64 @@ pub struct UnitsOfMeasureListResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CatalogGroupsListResponse {
-    pub groups: Vec<CatalogGroupWithDetailsDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct CatalogItemsListResponse {
-    pub items: Vec<CatalogItemWithDetailsDto>,
-    pub total: i64,
-    pub limit: i64,
-    pub offset: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UnitConversionsListResponse {
     pub conversions: Vec<UnitConversionWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatGroupsListResponse {
+    pub groups: Vec<CatmatGroupDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatClassesListResponse {
+    pub classes: Vec<CatmatClassWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatPdmsListResponse {
+    pub pdms: Vec<CatmatPdmWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatmatItemsListResponse {
+    pub items: Vec<CatmatItemWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserGroupsListResponse {
+    pub groups: Vec<CatserGroupDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserClassesListResponse {
+    pub classes: Vec<CatserClassWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserItemsListResponse {
+    pub items: Vec<CatserItemWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

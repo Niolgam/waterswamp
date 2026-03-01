@@ -134,7 +134,8 @@ pub struct RollbackPointEntry {
 pub struct ItemResponse {
     pub id: Uuid,
     pub requisition_id: Uuid,
-    pub catalog_item_id: Uuid,
+    pub catmat_item_id: Option<Uuid>,
+    pub catser_item_id: Option<Uuid>,
     pub requested_quantity: rust_decimal::Decimal,
     pub approved_quantity: Option<rust_decimal::Decimal>,
     pub fulfilled_quantity: Option<rust_decimal::Decimal>,
@@ -217,7 +218,8 @@ impl From<domain::models::requisition::RequisitionItemDto> for ItemResponse {
         Self {
             id: dto.id,
             requisition_id: dto.requisition_id,
-            catalog_item_id: dto.catalog_item_id,
+            catmat_item_id: dto.catmat_item_id,
+            catser_item_id: dto.catser_item_id,
             requested_quantity: dto.requested_quantity,
             approved_quantity: dto.approved_quantity,
             fulfilled_quantity: dto.fulfilled_quantity,

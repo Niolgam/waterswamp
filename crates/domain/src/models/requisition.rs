@@ -82,7 +82,8 @@ pub struct RequisitionDto {
 pub struct RequisitionItemDto {
     pub id: Uuid,
     pub requisition_id: Uuid,
-    pub catalog_item_id: Uuid,
+    pub catmat_item_id: Option<Uuid>,
+    pub catser_item_id: Option<Uuid>,
     pub requested_quantity: Decimal,
     pub approved_quantity: Option<Decimal>,
     pub fulfilled_quantity: Option<Decimal>,
