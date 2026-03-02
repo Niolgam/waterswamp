@@ -11,6 +11,8 @@ pub use domain::models::catalog::{
     CatmatPdmDto, CatmatPdmWithDetailsDto, CreateCatmatPdmPayload, UpdateCatmatPdmPayload,
     CatmatItemWithDetailsDto, CreateCatmatItemPayload, UpdateCatmatItemPayload,
     // CATSER
+    CatserSecaoDto, CatserSecaoWithDetailsDto, CreateCatserSecaoPayload, UpdateCatserSecaoPayload, CatserSecaoTreeNode,
+    CatserDivisaoDto, CatserDivisaoWithDetailsDto, CreateCatserDivisaoPayload, UpdateCatserDivisaoPayload,
     CatserGroupDto, CreateCatserGroupPayload, UpdateCatserGroupPayload, CatserGroupTreeNode,
     CatserClassWithDetailsDto, CreateCatserClassPayload, UpdateCatserClassPayload,
     CatserItemWithDetailsDto, CreateCatserItemPayload, UpdateCatserItemPayload,
@@ -63,6 +65,22 @@ pub struct CatmatPdmsListResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CatmatItemsListResponse {
     pub items: Vec<CatmatItemWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserSecoesListResponse {
+    pub secoes: Vec<CatserSecaoWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserDivisoesListResponse {
+    pub divisoes: Vec<CatserDivisaoWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

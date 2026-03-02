@@ -36,6 +36,8 @@ use utoipa::OpenApi;
         (name = "CATMAT - Classes", description = "Classes do Catálogo de Materiais (CATMAT)"),
         (name = "CATMAT - PDMs", description = "Padrões Descritivos de Material do Catálogo de Materiais (CATMAT)"),
         (name = "CATMAT - Items", description = "Itens do Catálogo de Materiais (CATMAT)"),
+        (name = "CATSER - Seções", description = "Seções do Catálogo de Serviços (CATSER)"),
+        (name = "CATSER - Divisões", description = "Divisões do Catálogo de Serviços (CATSER)"),
         (name = "CATSER - Groups", description = "Grupos do Catálogo de Serviços (CATSER)"),
         (name = "CATSER - Classes", description = "Classes do Catálogo de Serviços (CATSER)"),
         (name = "CATSER - Items", description = "Itens do Catálogo de Serviços (CATSER)"),
@@ -145,6 +147,21 @@ use utoipa::OpenApi;
         crate::api::catalog::handlers::list_catmat_items,
         crate::api::catalog::handlers::update_catmat_item,
         crate::api::catalog::handlers::delete_catmat_item,
+
+        // CATSER - Seções
+        crate::api::catalog::handlers::create_catser_secao,
+        crate::api::catalog::handlers::get_catser_secao,
+        crate::api::catalog::handlers::list_catser_secoes,
+        crate::api::catalog::handlers::get_catser_secao_tree,
+        crate::api::catalog::handlers::update_catser_secao,
+        crate::api::catalog::handlers::delete_catser_secao,
+
+        // CATSER - Divisões
+        crate::api::catalog::handlers::create_catser_divisao,
+        crate::api::catalog::handlers::get_catser_divisao,
+        crate::api::catalog::handlers::list_catser_divisoes,
+        crate::api::catalog::handlers::update_catser_divisao,
+        crate::api::catalog::handlers::delete_catser_divisao,
 
         // CATSER - Groups
         crate::api::catalog::handlers::create_catser_group,
@@ -294,6 +311,16 @@ use utoipa::OpenApi;
             domain::models::catalog::UpdateCatmatItemPayload,
 
             // CATSER - Domain Models
+            domain::models::catalog::CatserSecaoDto,
+            domain::models::catalog::CatserSecaoWithDetailsDto,
+            domain::models::catalog::CreateCatserSecaoPayload,
+            domain::models::catalog::UpdateCatserSecaoPayload,
+            domain::models::catalog::CatserSecaoTreeNode,
+            domain::models::catalog::CatserDivisaoDto,
+            domain::models::catalog::CatserDivisaoWithDetailsDto,
+            domain::models::catalog::CatserDivisaoTreeNode,
+            domain::models::catalog::CreateCatserDivisaoPayload,
+            domain::models::catalog::UpdateCatserDivisaoPayload,
             domain::models::catalog::CatserGroupDto,
             domain::models::catalog::CreateCatserGroupPayload,
             domain::models::catalog::UpdateCatserGroupPayload,
@@ -315,6 +342,8 @@ use utoipa::OpenApi;
             crate::api::catalog::contracts::CatmatClassesListResponse,
             crate::api::catalog::contracts::CatmatPdmsListResponse,
             crate::api::catalog::contracts::CatmatItemsListResponse,
+            crate::api::catalog::contracts::CatserSecoesListResponse,
+            crate::api::catalog::contracts::CatserDivisoesListResponse,
             crate::api::catalog::contracts::CatserGroupsListResponse,
             crate::api::catalog::contracts::CatserClassesListResponse,
             crate::api::catalog::contracts::CatserItemsListResponse,

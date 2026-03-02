@@ -200,6 +200,7 @@ pub struct CatmatItemDto {
     pub id: Uuid,
     pub pdm_id: Uuid,
     pub unit_of_measure_id: Uuid,
+    pub budget_classification_id: Option<Uuid>,
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
@@ -224,6 +225,9 @@ pub struct CatmatItemWithDetailsDto {
     pub unit_of_measure_id: Uuid,
     pub unit_name: String,
     pub unit_symbol: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub budget_classification_name: Option<String>,
+    pub budget_classification_full_code: Option<String>,
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
@@ -237,6 +241,7 @@ pub struct CatmatItemWithDetailsDto {
 pub struct CreateCatmatItemPayload {
     pub pdm_id: Uuid,
     pub unit_of_measure_id: Uuid,
+    pub budget_classification_id: Option<Uuid>,
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
@@ -248,6 +253,7 @@ pub struct CreateCatmatItemPayload {
 pub struct UpdateCatmatItemPayload {
     pub pdm_id: Option<Uuid>,
     pub unit_of_measure_id: Option<Uuid>,
+    pub budget_classification_id: Option<Uuid>,
     pub code: Option<String>,
     pub description: Option<String>,
     pub is_sustainable: Option<bool>,
@@ -284,11 +290,83 @@ pub struct CatmatClassTreeNode {
 // CATSER DTOs (Catálogo de Serviços)
 // ============================
 
+// --- Seções ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatserSecaoDto {
+    pub id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserSecaoWithDetailsDto {
+    pub id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub divisao_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatserSecaoPayload {
+    pub name: String,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatserSecaoPayload {
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+// --- Divisões ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatserDivisaoDto {
+    pub id: Uuid,
+    pub secao_id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserDivisaoWithDetailsDto {
+    pub id: Uuid,
+    pub secao_id: Uuid,
+    pub secao_name: String,
+    pub name: String,
+    pub is_active: bool,
+    pub grupo_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatserDivisaoPayload {
+    pub secao_id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatserDivisaoPayload {
+    pub secao_id: Option<Uuid>,
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
 // --- Groups ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct CatserGroupDto {
     pub id: Uuid,
+    pub divisao_id: Option<Uuid>,
     pub code: String,
     pub name: String,
     pub is_active: bool,
@@ -298,6 +376,7 @@ pub struct CatserGroupDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateCatserGroupPayload {
+    pub divisao_id: Option<Uuid>,
     pub code: String,
     pub name: String,
     pub is_active: bool,
@@ -305,6 +384,7 @@ pub struct CreateCatserGroupPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateCatserGroupPayload {
+    pub divisao_id: Option<Uuid>,
     pub code: Option<String>,
     pub name: Option<String>,
     pub is_active: Option<bool>,
@@ -360,7 +440,9 @@ pub struct CatserItemDto {
     pub id: Uuid,
     pub class_id: Uuid,
     pub unit_of_measure_id: Uuid,
+    pub budget_classification_id: Option<Uuid>,
     pub code: String,
+    pub code_cpc: Option<String>,
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
@@ -382,7 +464,11 @@ pub struct CatserItemWithDetailsDto {
     pub unit_of_measure_id: Uuid,
     pub unit_name: String,
     pub unit_symbol: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub budget_classification_name: Option<String>,
+    pub budget_classification_full_code: Option<String>,
     pub code: String,
+    pub code_cpc: Option<String>,
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
@@ -396,7 +482,9 @@ pub struct CatserItemWithDetailsDto {
 pub struct CreateCatserItemPayload {
     pub class_id: Uuid,
     pub unit_of_measure_id: Uuid,
+    pub budget_classification_id: Option<Uuid>,
     pub code: String,
+    pub code_cpc: Option<String>,
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
@@ -408,7 +496,9 @@ pub struct CreateCatserItemPayload {
 pub struct UpdateCatserItemPayload {
     pub class_id: Option<Uuid>,
     pub unit_of_measure_id: Option<Uuid>,
+    pub budget_classification_id: Option<Uuid>,
     pub code: Option<String>,
+    pub code_cpc: Option<String>,
     pub description: Option<String>,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
@@ -419,8 +509,30 @@ pub struct UpdateCatserItemPayload {
 // --- Tree ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserSecaoTreeNode {
+    pub id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub divisoes: Vec<CatserDivisaoTreeNode>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserDivisaoTreeNode {
+    pub id: Uuid,
+    pub secao_id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub grupos: Vec<CatserGroupTreeNode>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CatserGroupTreeNode {
     pub id: Uuid,
+    pub divisao_id: Option<Uuid>,
     pub code: String,
     pub name: String,
     pub is_active: bool,
