@@ -300,13 +300,3 @@ pub trait CatserItemRepositoryPort: Send + Sync {
         is_active: Option<bool>,
     ) -> Result<(Vec<CatserItemWithDetailsDto>, i64), RepositoryError>;
 }
-
-// ============================
-// System Settings Repository Port
-// ============================
-
-#[async_trait]
-pub trait SystemSettingsRepositoryPort: Send + Sync {
-    async fn get_setting(&self, key: &str) -> Result<Option<serde_json::Value>, RepositoryError>;
-    async fn set_setting(&self, key: &str, value: serde_json::Value) -> Result<(), RepositoryError>;
-}

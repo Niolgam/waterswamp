@@ -204,6 +204,16 @@ impl CatmatGroupRepositoryPort for CatmatGroupRepository {
         .map_err(map_db_error)
     }
 
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catmat_groups SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
+    }
+
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let result = sqlx::query("DELETE FROM catmat_groups WHERE id = $1")
             .bind(id)
@@ -335,6 +345,7 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
             code: r.get("code"),
             name: r.get("name"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             pdm_count: r.get("pdm_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -397,6 +408,16 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         .map_err(map_db_error)
     }
 
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catmat_classes SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
+    }
+
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let result = sqlx::query("DELETE FROM catmat_classes WHERE id = $1")
             .bind(id)
@@ -444,6 +465,7 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
             code: r.get("code"),
             name: r.get("name"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             pdm_count: r.get("pdm_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -516,6 +538,7 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
             code: r.get("code"),
             description: r.get("description"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             item_count: r.get("item_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -597,6 +620,16 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
             .map_err(map_db_error)
     }
 
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catmat_pdms SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
+    }
+
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let result = sqlx::query("DELETE FROM catmat_pdms WHERE id = $1")
             .bind(id)
@@ -649,6 +682,7 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
             code: r.get("code"),
             description: r.get("description"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             item_count: r.get("item_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -737,6 +771,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             is_sustainable: r.get("is_sustainable"),
             code_ncm: r.get("code_ncm"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }))
@@ -848,6 +883,16 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             .map_err(map_db_error)
     }
 
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catmat_items SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
+    }
+
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let result = sqlx::query("DELETE FROM catmat_items WHERE id = $1")
             .bind(id)
@@ -912,6 +957,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             is_sustainable: r.get("is_sustainable"),
             code_ncm: r.get("code_ncm"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }).collect();
@@ -1013,6 +1059,16 @@ impl CatserGroupRepositoryPort for CatserGroupRepository {
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
+    }
+
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catser_groups SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -1151,6 +1207,7 @@ impl CatserClassRepositoryPort for CatserClassRepository {
             code: r.get("code"),
             name: r.get("name"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             item_count: r.get("item_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -1213,6 +1270,16 @@ impl CatserClassRepositoryPort for CatserClassRepository {
         .map_err(map_db_error)
     }
 
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catser_classes SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
+    }
+
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let result = sqlx::query("DELETE FROM catser_classes WHERE id = $1")
             .bind(id)
@@ -1260,6 +1327,7 @@ impl CatserClassRepositoryPort for CatserClassRepository {
             code: r.get("code"),
             name: r.get("name"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             item_count: r.get("item_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -1345,6 +1413,7 @@ impl CatserItemRepositoryPort for CatserItemRepository {
             specification: r.get("specification"),
             search_links: r.get("search_links"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }))
@@ -1440,6 +1509,16 @@ impl CatserItemRepositoryPort for CatserItemRepository {
         .map_err(map_db_error)
     }
 
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catser_items SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
+    }
+
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let result = sqlx::query("DELETE FROM catser_items WHERE id = $1")
             .bind(id)
@@ -1498,6 +1577,7 @@ impl CatserItemRepositoryPort for CatserItemRepository {
             specification: r.get("specification"),
             search_links: r.get("search_links"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }).collect();
@@ -1559,18 +1639,20 @@ impl CatserSecaoRepositoryPort for CatserSecaoRepository {
             id: r.get("id"),
             name: r.get("name"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             divisao_count: r.get("divisao_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }))
     }
 
-    async fn create(&self, name: &str, is_active: bool) -> Result<CatserSecaoDto, RepositoryError> {
+    async fn create(&self, name: &str, is_active: bool, verification_status: &str) -> Result<CatserSecaoDto, RepositoryError> {
         sqlx::query_as::<_, CatserSecaoDto>(
-            "INSERT INTO catser_secoes (name, is_active) VALUES ($1, $2) RETURNING *",
+            "INSERT INTO catser_secoes (name, is_active, verification_status) VALUES ($1, $2, $3) RETURNING *",
         )
         .bind(name)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -1587,6 +1669,16 @@ impl CatserSecaoRepositoryPort for CatserSecaoRepository {
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
+    }
+
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catser_secoes SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -1629,6 +1721,7 @@ impl CatserSecaoRepositoryPort for CatserSecaoRepository {
             id: r.get("id"),
             name: r.get("name"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             divisao_count: r.get("divisao_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -1764,19 +1857,21 @@ impl CatserDivisaoRepositoryPort for CatserDivisaoRepository {
             secao_name: r.get("secao_name"),
             name: r.get("name"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             grupo_count: r.get("grupo_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
         }))
     }
 
-    async fn create(&self, secao_id: Uuid, name: &str, is_active: bool) -> Result<CatserDivisaoDto, RepositoryError> {
+    async fn create(&self, secao_id: Uuid, name: &str, is_active: bool, verification_status: &str) -> Result<CatserDivisaoDto, RepositoryError> {
         sqlx::query_as::<_, CatserDivisaoDto>(
-            "INSERT INTO catser_divisoes (secao_id, name, is_active) VALUES ($1, $2, $3) RETURNING *",
+            "INSERT INTO catser_divisoes (secao_id, name, is_active, verification_status) VALUES ($1, $2, $3, $4) RETURNING *",
         )
         .bind(secao_id)
         .bind(name)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -1794,6 +1889,16 @@ impl CatserDivisaoRepositoryPort for CatserDivisaoRepository {
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
+    }
+
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError> {
+        sqlx::query("UPDATE catser_divisoes SET verification_status = $2, updated_at = NOW() WHERE id = $1")
+            .bind(id)
+            .bind(verification_status)
+            .execute(&self.pool)
+            .await
+            .map_err(map_db_error)?;
+        Ok(())
     }
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError> {
@@ -1841,6 +1946,7 @@ impl CatserDivisaoRepositoryPort for CatserDivisaoRepository {
             secao_name: r.get("secao_name"),
             name: r.get("name"),
             is_active: r.get("is_active"),
+            verification_status: r.get("verification_status"),
             grupo_count: r.get("grupo_count"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
