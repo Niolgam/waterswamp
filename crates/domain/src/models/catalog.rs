@@ -86,6 +86,7 @@ pub struct CatmatGroupDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -113,6 +114,7 @@ pub struct CatmatClassDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -126,6 +128,7 @@ pub struct CatmatClassWithDetailsDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub pdm_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -156,6 +159,7 @@ pub struct CatmatPdmDto {
     pub code: String,
     pub description: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -172,6 +176,7 @@ pub struct CatmatPdmWithDetailsDto {
     pub code: String,
     pub description: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub item_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -200,11 +205,13 @@ pub struct CatmatItemDto {
     pub id: Uuid,
     pub pdm_id: Uuid,
     pub unit_of_measure_id: Uuid,
+    pub budget_classification_id: Option<Uuid>,
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
     pub code_ncm: Option<String>,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -224,11 +231,15 @@ pub struct CatmatItemWithDetailsDto {
     pub unit_of_measure_id: Uuid,
     pub unit_name: String,
     pub unit_symbol: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub budget_classification_name: Option<String>,
+    pub budget_classification_full_code: Option<String>,
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
     pub code_ncm: Option<String>,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -237,6 +248,7 @@ pub struct CatmatItemWithDetailsDto {
 pub struct CreateCatmatItemPayload {
     pub pdm_id: Uuid,
     pub unit_of_measure_id: Uuid,
+    pub budget_classification_id: Option<Uuid>,
     pub code: String,
     pub description: String,
     pub is_sustainable: bool,
@@ -248,6 +260,7 @@ pub struct CreateCatmatItemPayload {
 pub struct UpdateCatmatItemPayload {
     pub pdm_id: Option<Uuid>,
     pub unit_of_measure_id: Option<Uuid>,
+    pub budget_classification_id: Option<Uuid>,
     pub code: Option<String>,
     pub description: Option<String>,
     pub is_sustainable: Option<bool>,
@@ -284,20 +297,98 @@ pub struct CatmatClassTreeNode {
 // CATSER DTOs (Catálogo de Serviços)
 // ============================
 
+// --- Sections ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatserSectionDto {
+    pub id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub verification_status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserSectionWithDetailsDto {
+    pub id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub verification_status: String,
+    pub division_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatserSectionPayload {
+    pub name: String,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatserSectionPayload {
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+// --- Divisions ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct CatserDivisionDto {
+    pub id: Uuid,
+    pub section_id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub verification_status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserDivisionWithDetailsDto {
+    pub id: Uuid,
+    pub section_id: Uuid,
+    pub section_name: String,
+    pub name: String,
+    pub is_active: bool,
+    pub verification_status: String,
+    pub group_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateCatserDivisionPayload {
+    pub section_id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateCatserDivisionPayload {
+    pub section_id: Option<Uuid>,
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
 // --- Groups ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct CatserGroupDto {
     pub id: Uuid,
+    pub division_id: Option<Uuid>,
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateCatserGroupPayload {
+    pub division_id: Option<Uuid>,
     pub code: String,
     pub name: String,
     pub is_active: bool,
@@ -305,6 +396,7 @@ pub struct CreateCatserGroupPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateCatserGroupPayload {
+    pub division_id: Option<Uuid>,
     pub code: Option<String>,
     pub name: Option<String>,
     pub is_active: Option<bool>,
@@ -319,6 +411,7 @@ pub struct CatserClassDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -332,6 +425,7 @@ pub struct CatserClassWithDetailsDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub item_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -360,12 +454,15 @@ pub struct CatserItemDto {
     pub id: Uuid,
     pub class_id: Uuid,
     pub unit_of_measure_id: Uuid,
+    pub budget_classification_id: Option<Uuid>,
     pub code: String,
+    pub code_cpc: Option<String>,
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
     pub search_links: Option<String>,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -382,12 +479,17 @@ pub struct CatserItemWithDetailsDto {
     pub unit_of_measure_id: Uuid,
     pub unit_name: String,
     pub unit_symbol: String,
+    pub budget_classification_id: Option<Uuid>,
+    pub budget_classification_name: Option<String>,
+    pub budget_classification_full_code: Option<String>,
     pub code: String,
+    pub code_cpc: Option<String>,
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
     pub search_links: Option<String>,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -396,7 +498,9 @@ pub struct CatserItemWithDetailsDto {
 pub struct CreateCatserItemPayload {
     pub class_id: Uuid,
     pub unit_of_measure_id: Uuid,
+    pub budget_classification_id: Option<Uuid>,
     pub code: String,
+    pub code_cpc: Option<String>,
     pub description: String,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
@@ -408,7 +512,9 @@ pub struct CreateCatserItemPayload {
 pub struct UpdateCatserItemPayload {
     pub class_id: Option<Uuid>,
     pub unit_of_measure_id: Option<Uuid>,
+    pub budget_classification_id: Option<Uuid>,
     pub code: Option<String>,
+    pub code_cpc: Option<String>,
     pub description: Option<String>,
     pub supplementary_description: Option<String>,
     pub specification: Option<String>,
@@ -419,8 +525,30 @@ pub struct UpdateCatserItemPayload {
 // --- Tree ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserSectionTreeNode {
+    pub id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub divisions: Vec<CatserDivisionTreeNode>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CatserDivisionTreeNode {
+    pub id: Uuid,
+    pub section_id: Uuid,
+    pub name: String,
+    pub is_active: bool,
+    pub groups: Vec<CatserGroupTreeNode>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CatserGroupTreeNode {
     pub id: Uuid,
+    pub division_id: Option<Uuid>,
     pub code: String,
     pub name: String,
     pub is_active: bool,
@@ -439,4 +567,107 @@ pub struct CatserClassTreeNode {
     pub item_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+// ============================
+// ComprasGov API Response DTOs
+// ============================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovResponse<T> {
+    pub resultado: Vec<T>,
+    pub total_registros: i64,
+    pub total_paginas: i64,
+    pub paginas_restantes: i64,
+}
+
+// --- CATMAT API entities ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovGrupoMaterial {
+    pub codigo_grupo: i64,
+    pub nome_grupo: String,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovClasseMaterial {
+    pub codigo_classe: i64,
+    pub nome_classe: String,
+    pub codigo_grupo: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovPdmMaterial {
+    pub codigo_pdm: i64,
+    pub nome_pdm: String,
+    pub codigo_classe: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovItemMaterial {
+    pub codigo_item: i64,
+    pub nome_item: String,
+    pub codigo_pdm: i64,
+    pub codigo_classe: i64,
+    pub codigo_grupo: i64,
+    pub status: bool,
+    pub sustentavel: bool,
+}
+
+// --- CATSER API entities ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovSectionService {
+    pub codigo_secao: i64,
+    pub nome_secao: String,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovDivisionService {
+    pub codigo_divisao: i64,
+    pub nome_divisao: String,
+    pub codigo_secao: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovGrupoServico {
+    pub codigo_grupo: i64,
+    pub nome_grupo: String,
+    pub codigo_divisao: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovClasseServico {
+    pub codigo_classe: i64,
+    pub nome_classe: String,
+    pub codigo_grupo: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovItemServico {
+    pub codigo_item: i64,
+    pub nome_item: String,
+    pub codigo_classe: i64,
+    pub codigo_grupo: i64,
+    pub codigo_divisao: i64,
+    pub codigo_secao: i64,
+    pub codigo_cpc: Option<String>,
+    pub status: bool,
 }

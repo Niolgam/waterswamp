@@ -77,6 +77,38 @@ pub struct CatserItemListQuery {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
+pub struct SectionListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    pub search: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct DivisionListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    pub search: Option<String>,
+    pub section_id: Option<Uuid>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct CatserGroupListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    pub search: Option<String>,
+    pub division_id: Option<Uuid>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
 pub struct ConversionListQuery {
     #[serde(default = "default_limit")]
     pub limit: i64,
@@ -381,6 +413,107 @@ pub async fn delete_catmat_item(_user: CurrentUser, State(state): State<AppState
 }
 
 // ============================
+// CATSER Seção Handlers
+// ============================
+
+#[utoipa::path(post, path = "/api/admin/catalog/catser/sections", tag = "CATSER - Seções",
+    request_body = CreateCatserSectionPayload,
+    responses((status = 201, description = "Seção created", body = CatserSectionDto), (status = 409, description = "Code already exists"))
+)]
+pub async fn create_catser_section(_user: CurrentUser, State(state): State<AppState>, Json(p): Json<CreateCatserSectionPayload>) -> Result<(StatusCode, Json<CatserSectionDto>), (StatusCode, String)> {
+    svc(&state).create_catser_section(p).await.map(|s| (StatusCode::CREATED, Json(s))).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(get, path = "/api/admin/catalog/catser/sections/{id}", tag = "CATSER - Seções",
+    params(("id" = Uuid, Path,)),
+    responses((status = 200, description = "Seção found", body = CatserSectionWithDetailsDto), (status = 404, description = "Not found"))
+)]
+pub async fn get_catser_section(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<Json<CatserSectionWithDetailsDto>, (StatusCode, String)> {
+    svc(&state).get_catser_section(id).await.map(Json).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(get, path = "/api/admin/catalog/catser/sections", tag = "CATSER - Seções",
+    params(SectionListQuery),
+    responses((status = 200, description = "List of CATSER seções", body = CatserSectionsListResponse))
+)]
+pub async fn list_catser_sections(_user: CurrentUser, State(state): State<AppState>, Query(q): Query<SectionListQuery>) -> Result<Json<CatserSectionsListResponse>, (StatusCode, String)> {
+    let (sections, total) = svc(&state).list_catser_sections(q.limit, q.offset, q.search, q.is_active).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(CatserSectionsListResponse { sections, total, limit: q.limit, offset: q.offset }))
+}
+
+#[utoipa::path(put, path = "/api/admin/catalog/catser/sections/{id}", tag = "CATSER - Seções",
+    params(("id" = Uuid, Path,)),
+    request_body = UpdateCatserSectionPayload,
+    responses((status = 200, description = "Seção updated", body = CatserSectionDto), (status = 404, description = "Not found"))
+)]
+pub async fn update_catser_section(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>, Json(p): Json<UpdateCatserSectionPayload>) -> Result<Json<CatserSectionDto>, (StatusCode, String)> {
+    svc(&state).update_catser_section(id, p).await.map(Json).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(delete, path = "/api/admin/catalog/catser/sections/{id}", tag = "CATSER - Seções",
+    params(("id" = Uuid, Path,)),
+    responses((status = 204, description = "Seção deleted"), (status = 404, description = "Not found"))
+)]
+pub async fn delete_catser_section(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, String)> {
+    svc(&state).delete_catser_section(id).await.map(|_| StatusCode::NO_CONTENT).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(get, path = "/api/admin/catalog/catser/sections/tree", tag = "CATSER - Seções",
+    responses((status = 200, description = "CATSER seção hierarchical tree", body = Vec<CatserSectionTreeNode>))
+)]
+pub async fn get_catser_section_tree(_user: CurrentUser, State(state): State<AppState>) -> Result<Json<Vec<CatserSectionTreeNode>>, (StatusCode, String)> {
+    svc(&state).get_catser_section_tree().await.map(Json).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+// ============================
+// CATSER Divisão Handlers
+// ============================
+
+#[utoipa::path(post, path = "/api/admin/catalog/catser/divisions", tag = "CATSER - Divisões",
+    request_body = CreateCatserDivisionPayload,
+    responses((status = 201, description = "Divisão created", body = CatserDivisionWithDetailsDto), (status = 409, description = "Code already exists"))
+)]
+pub async fn create_catser_division(_user: CurrentUser, State(state): State<AppState>, Json(p): Json<CreateCatserDivisionPayload>) -> Result<(StatusCode, Json<CatserDivisionWithDetailsDto>), (StatusCode, String)> {
+    let d = svc(&state).create_catser_division(p).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    svc(&state).get_catser_division(d.id).await.map(|d| (StatusCode::CREATED, Json(d))).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(get, path = "/api/admin/catalog/catser/divisions/{id}", tag = "CATSER - Divisões",
+    params(("id" = Uuid, Path,)),
+    responses((status = 200, description = "Divisão found", body = CatserDivisionWithDetailsDto), (status = 404, description = "Not found"))
+)]
+pub async fn get_catser_division(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<Json<CatserDivisionWithDetailsDto>, (StatusCode, String)> {
+    svc(&state).get_catser_division(id).await.map(Json).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(get, path = "/api/admin/catalog/catser/divisions", tag = "CATSER - Divisões",
+    params(DivisionListQuery),
+    responses((status = 200, description = "List of CATSER divisões", body = CatserDivisionsListResponse))
+)]
+pub async fn list_catser_divisions(_user: CurrentUser, State(state): State<AppState>, Query(q): Query<DivisionListQuery>) -> Result<Json<CatserDivisionsListResponse>, (StatusCode, String)> {
+    let (divisions, total) = svc(&state).list_catser_divisions(q.limit, q.offset, q.search, q.section_id, q.is_active).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(CatserDivisionsListResponse { divisions, total, limit: q.limit, offset: q.offset }))
+}
+
+#[utoipa::path(put, path = "/api/admin/catalog/catser/divisions/{id}", tag = "CATSER - Divisões",
+    params(("id" = Uuid, Path,)),
+    request_body = UpdateCatserDivisionPayload,
+    responses((status = 200, description = "Divisão updated", body = CatserDivisionWithDetailsDto), (status = 404, description = "Not found"))
+)]
+pub async fn update_catser_division(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>, Json(p): Json<UpdateCatserDivisionPayload>) -> Result<Json<CatserDivisionWithDetailsDto>, (StatusCode, String)> {
+    let _ = svc(&state).update_catser_division(id, p).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    svc(&state).get_catser_division(id).await.map(Json).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+#[utoipa::path(delete, path = "/api/admin/catalog/catser/divisions/{id}", tag = "CATSER - Divisões",
+    params(("id" = Uuid, Path,)),
+    responses((status = 204, description = "Divisão deleted"), (status = 404, description = "Not found"))
+)]
+pub async fn delete_catser_division(_user: CurrentUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode, (StatusCode, String)> {
+    svc(&state).delete_catser_division(id).await.map(|_| StatusCode::NO_CONTENT).map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+// ============================
 // CATSER Group Handlers
 // ============================
 
@@ -401,11 +534,11 @@ pub async fn get_catser_group(_user: CurrentUser, State(state): State<AppState>,
 }
 
 #[utoipa::path(get, path = "/api/admin/catalog/catser/groups", tag = "CATSER - Groups",
-    params(GroupListQuery),
+    params(CatserGroupListQuery),
     responses((status = 200, description = "List of CATSER groups", body = CatserGroupsListResponse))
 )]
-pub async fn list_catser_groups(_user: CurrentUser, State(state): State<AppState>, Query(q): Query<GroupListQuery>) -> Result<Json<CatserGroupsListResponse>, (StatusCode, String)> {
-    let (groups, total) = svc(&state).list_catser_groups(q.limit, q.offset, q.search, q.is_active).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+pub async fn list_catser_groups(_user: CurrentUser, State(state): State<AppState>, Query(q): Query<CatserGroupListQuery>) -> Result<Json<CatserGroupsListResponse>, (StatusCode, String)> {
+    let (groups, total) = svc(&state).list_catser_groups(q.limit, q.offset, q.search, q.division_id, q.is_active).await.map_err(|e| (StatusCode::from(&e), e.to_string()))?;
     Ok(Json(CatserGroupsListResponse { groups, total, limit: q.limit, offset: q.offset }))
 }
 

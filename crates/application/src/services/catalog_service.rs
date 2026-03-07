@@ -13,6 +13,8 @@ pub struct CatalogService {
     catmat_class_repo: Arc<dyn CatmatClassRepositoryPort>,
     catmat_pdm_repo: Arc<dyn CatmatPdmRepositoryPort>,
     catmat_item_repo: Arc<dyn CatmatItemRepositoryPort>,
+    catser_section_repo: Arc<dyn CatserSectionRepositoryPort>,
+    catser_division_repo: Arc<dyn CatserDivisionRepositoryPort>,
     catser_group_repo: Arc<dyn CatserGroupRepositoryPort>,
     catser_class_repo: Arc<dyn CatserClassRepositoryPort>,
     catser_item_repo: Arc<dyn CatserItemRepositoryPort>,
@@ -26,6 +28,8 @@ impl CatalogService {
         catmat_class_repo: Arc<dyn CatmatClassRepositoryPort>,
         catmat_pdm_repo: Arc<dyn CatmatPdmRepositoryPort>,
         catmat_item_repo: Arc<dyn CatmatItemRepositoryPort>,
+        catser_section_repo: Arc<dyn CatserSectionRepositoryPort>,
+        catser_division_repo: Arc<dyn CatserDivisionRepositoryPort>,
         catser_group_repo: Arc<dyn CatserGroupRepositoryPort>,
         catser_class_repo: Arc<dyn CatserClassRepositoryPort>,
         catser_item_repo: Arc<dyn CatserItemRepositoryPort>,
@@ -33,7 +37,7 @@ impl CatalogService {
         Self {
             unit_repo, conversion_repo,
             catmat_group_repo, catmat_class_repo, catmat_pdm_repo, catmat_item_repo,
-            catser_group_repo, catser_class_repo, catser_item_repo,
+            catser_section_repo, catser_division_repo, catser_group_repo, catser_class_repo, catser_item_repo,
         }
     }
 
@@ -117,7 +121,7 @@ impl CatalogService {
         if self.catmat_group_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!("Grupo CATMAT com código '{}' já existe", payload.code)));
         }
-        self.catmat_group_repo.create(&payload.code, &payload.name, payload.is_active).await.map_err(ServiceError::from)
+        self.catmat_group_repo.create(&payload.code, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
     pub async fn get_catmat_group(&self, id: Uuid) -> Result<CatmatGroupDto, ServiceError> {
@@ -155,7 +159,7 @@ impl CatalogService {
         if self.catmat_class_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!("Classe CATMAT com código '{}' já existe", payload.code)));
         }
-        self.catmat_class_repo.create(payload.group_id, &payload.code, &payload.name, payload.is_active).await.map_err(ServiceError::from)
+        self.catmat_class_repo.create(payload.group_id, &payload.code, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
     pub async fn get_catmat_class(&self, id: Uuid) -> Result<CatmatClassWithDetailsDto, ServiceError> {
@@ -195,7 +199,7 @@ impl CatalogService {
             return Err(ServiceError::Conflict(format!("PDM CATMAT com código '{}' já existe", payload.code)));
         }
         let _ = self.catmat_class_repo.find_by_id(payload.class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
-        self.catmat_pdm_repo.create(payload.class_id, &payload.code, &payload.description, payload.is_active).await.map_err(ServiceError::from)
+        self.catmat_pdm_repo.create(payload.class_id, &payload.code, &payload.description, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
     pub async fn get_catmat_pdm(&self, id: Uuid) -> Result<CatmatPdmWithDetailsDto, ServiceError> {
@@ -239,8 +243,8 @@ impl CatalogService {
             return Err(ServiceError::Conflict(format!("Item CATMAT com código '{}' já existe", payload.code)));
         }
         self.catmat_item_repo.create(
-            payload.pdm_id, payload.unit_of_measure_id, &payload.code, &payload.description,
-            payload.is_sustainable, payload.code_ncm.as_deref(), payload.is_active,
+            payload.pdm_id, payload.unit_of_measure_id, payload.budget_classification_id, &payload.code, &payload.description,
+            payload.is_sustainable, payload.code_ncm.as_deref(), payload.is_active, "pending",
         ).await.map_err(ServiceError::from)
     }
 
@@ -262,7 +266,7 @@ impl CatalogService {
             let _ = self.unit_repo.find_by_id(unit_id).await?.ok_or(ServiceError::NotFound("Unidade de medida não encontrada".to_string()))?;
         }
         self.catmat_item_repo.update(
-            id, payload.pdm_id, payload.unit_of_measure_id, payload.code.as_deref(),
+            id, payload.pdm_id, payload.unit_of_measure_id, payload.budget_classification_id, payload.code.as_deref(),
             payload.description.as_deref(), payload.is_sustainable, payload.code_ncm.as_deref(), payload.is_active,
         ).await.map_err(ServiceError::from)
     }
@@ -276,6 +280,70 @@ impl CatalogService {
     }
 
     // ============================
+    // CATSER Sections
+    // ============================
+
+    pub async fn create_catser_section(&self, payload: CreateCatserSectionPayload) -> Result<CatserSectionDto, ServiceError> {
+        self.catser_section_repo.create(&payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
+    }
+
+    pub async fn get_catser_section(&self, id: Uuid) -> Result<CatserSectionWithDetailsDto, ServiceError> {
+        self.catser_section_repo.find_with_details_by_id(id).await?.ok_or(ServiceError::NotFound("CATSER Section not found".to_string()))
+    }
+
+    pub async fn update_catser_section(&self, id: Uuid, payload: UpdateCatserSectionPayload) -> Result<CatserSectionDto, ServiceError> {
+        let _ = self.catser_section_repo.find_by_id(id).await?.ok_or(ServiceError::NotFound("CATSER Section not found".to_string()))?;
+        self.catser_section_repo.update(id, payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
+    }
+
+    pub async fn delete_catser_section(&self, id: Uuid) -> Result<bool, ServiceError> {
+        if self.catser_section_repo.has_divisions(id).await? {
+            return Err(ServiceError::Conflict("Não é possível excluir: section has linked divisions".to_string()));
+        }
+        self.catser_section_repo.delete(id).await.map_err(ServiceError::from)
+    }
+
+    pub async fn list_catser_sections(&self, limit: i64, offset: i64, search: Option<String>, is_active: Option<bool>) -> Result<(Vec<CatserSectionWithDetailsDto>, i64), ServiceError> {
+        self.catser_section_repo.list(limit, offset, search, is_active).await.map_err(ServiceError::from)
+    }
+
+    pub async fn get_catser_section_tree(&self) -> Result<Vec<CatserSectionTreeNode>, ServiceError> {
+        self.catser_section_repo.get_tree().await.map_err(ServiceError::from)
+    }
+
+    // ============================
+    // CATSER Divisions
+    // ============================
+
+    pub async fn create_catser_division(&self, payload: CreateCatserDivisionPayload) -> Result<CatserDivisionDto, ServiceError> {
+        let _ = self.catser_section_repo.find_by_id(payload.section_id).await?.ok_or(ServiceError::NotFound("CATSER Section not found".to_string()))?;
+        self.catser_division_repo.create(payload.section_id, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
+    }
+
+    pub async fn get_catser_division(&self, id: Uuid) -> Result<CatserDivisionWithDetailsDto, ServiceError> {
+        self.catser_division_repo.find_with_details_by_id(id).await?.ok_or(ServiceError::NotFound("CATSER Division not found".to_string()))
+    }
+
+    pub async fn update_catser_division(&self, id: Uuid, payload: UpdateCatserDivisionPayload) -> Result<CatserDivisionDto, ServiceError> {
+        let _ = self.catser_division_repo.find_by_id(id).await?.ok_or(ServiceError::NotFound("CATSER Division not found".to_string()))?;
+        if let Some(section_id) = payload.section_id {
+            let _ = self.catser_section_repo.find_by_id(section_id).await?.ok_or(ServiceError::NotFound("CATSER Section not found".to_string()))?;
+        }
+        self.catser_division_repo.update(id, payload.section_id, payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
+    }
+
+    pub async fn delete_catser_division(&self, id: Uuid) -> Result<bool, ServiceError> {
+        if self.catser_division_repo.has_groups(id).await? {
+            return Err(ServiceError::Conflict("Não é possível excluir: division has linked groups".to_string()));
+        }
+        self.catser_division_repo.delete(id).await.map_err(ServiceError::from)
+    }
+
+    pub async fn list_catser_divisions(&self, limit: i64, offset: i64, search: Option<String>, section_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserDivisionWithDetailsDto>, i64), ServiceError> {
+        self.catser_division_repo.list(limit, offset, search, section_id, is_active).await.map_err(ServiceError::from)
+    }
+
+    // ============================
     // CATSER Groups
     // ============================
 
@@ -283,7 +351,7 @@ impl CatalogService {
         if self.catser_group_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!("Grupo CATSER com código '{}' já existe", payload.code)));
         }
-        self.catser_group_repo.create(&payload.code, &payload.name, payload.is_active).await.map_err(ServiceError::from)
+        self.catser_group_repo.create(payload.division_id, &payload.code, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
     pub async fn get_catser_group(&self, id: Uuid) -> Result<CatserGroupDto, ServiceError> {
@@ -297,15 +365,15 @@ impl CatalogService {
                 return Err(ServiceError::Conflict(format!("Grupo CATSER com código '{}' já existe", code)));
             }
         }
-        self.catser_group_repo.update(id, payload.code.as_deref(), payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
+        self.catser_group_repo.update(id, payload.division_id, payload.code.as_deref(), payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
     }
 
     pub async fn delete_catser_group(&self, id: Uuid) -> Result<bool, ServiceError> {
         self.catser_group_repo.delete(id).await.map_err(ServiceError::from)
     }
 
-    pub async fn list_catser_groups(&self, limit: i64, offset: i64, search: Option<String>, is_active: Option<bool>) -> Result<(Vec<CatserGroupDto>, i64), ServiceError> {
-        self.catser_group_repo.list(limit, offset, search, is_active).await.map_err(ServiceError::from)
+    pub async fn list_catser_groups(&self, limit: i64, offset: i64, search: Option<String>, division_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserGroupDto>, i64), ServiceError> {
+        self.catser_group_repo.list(limit, offset, search, division_id, is_active).await.map_err(ServiceError::from)
     }
 
     pub async fn get_catser_tree(&self) -> Result<Vec<CatserGroupTreeNode>, ServiceError> {
@@ -321,7 +389,7 @@ impl CatalogService {
         if self.catser_class_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!("Classe CATSER com código '{}' já existe", payload.code)));
         }
-        self.catser_class_repo.create(payload.group_id, &payload.code, &payload.name, payload.is_active).await.map_err(ServiceError::from)
+        self.catser_class_repo.create(payload.group_id, &payload.code, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
     pub async fn get_catser_class(&self, id: Uuid) -> Result<CatserClassWithDetailsDto, ServiceError> {
@@ -363,9 +431,10 @@ impl CatalogService {
             return Err(ServiceError::Conflict(format!("Serviço CATSER com código '{}' já existe", payload.code)));
         }
         self.catser_item_repo.create(
-            payload.class_id, payload.unit_of_measure_id, &payload.code, &payload.description,
+            payload.class_id, payload.unit_of_measure_id, payload.budget_classification_id, &payload.code,
+            payload.code_cpc.as_deref(), &payload.description,
             payload.supplementary_description.as_deref(), payload.specification.as_deref(),
-            payload.search_links.as_deref(), payload.is_active,
+            payload.search_links.as_deref(), payload.is_active, "pending",
         ).await.map_err(ServiceError::from)
     }
 
@@ -387,8 +456,8 @@ impl CatalogService {
             let _ = self.unit_repo.find_by_id(unit_id).await?.ok_or(ServiceError::NotFound("Unidade de medida não encontrada".to_string()))?;
         }
         self.catser_item_repo.update(
-            id, payload.class_id, payload.unit_of_measure_id, payload.code.as_deref(),
-            payload.description.as_deref(), payload.supplementary_description.as_deref(),
+            id, payload.class_id, payload.unit_of_measure_id, payload.budget_classification_id, payload.code.as_deref(),
+            payload.code_cpc.as_deref(), payload.description.as_deref(), payload.supplementary_description.as_deref(),
             payload.specification.as_deref(), payload.search_links.as_deref(), payload.is_active,
         ).await.map_err(ServiceError::from)
     }
