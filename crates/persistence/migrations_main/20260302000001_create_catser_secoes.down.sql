@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS catser_secoes CASCADE;

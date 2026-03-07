@@ -3,8 +3,8 @@ ALTER TABLE catmat_groups ADD COLUMN verification_status VARCHAR(20) NOT NULL DE
 ALTER TABLE catmat_classes ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
 ALTER TABLE catmat_pdms ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
 ALTER TABLE catmat_items ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
-ALTER TABLE catser_secoes ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
-ALTER TABLE catser_divisoes ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
+ALTER TABLE catser_sections ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
+ALTER TABLE catser_divisions ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
 ALTER TABLE catser_groups ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
 ALTER TABLE catser_classes ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';
 ALTER TABLE catser_items ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending';

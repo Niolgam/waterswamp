@@ -13,8 +13,8 @@ pub struct CatalogService {
     catmat_class_repo: Arc<dyn CatmatClassRepositoryPort>,
     catmat_pdm_repo: Arc<dyn CatmatPdmRepositoryPort>,
     catmat_item_repo: Arc<dyn CatmatItemRepositoryPort>,
-    catser_secao_repo: Arc<dyn CatserSecaoRepositoryPort>,
-    catser_divisao_repo: Arc<dyn CatserDivisaoRepositoryPort>,
+    catser_section_repo: Arc<dyn CatserSectionRepositoryPort>,
+    catser_division_repo: Arc<dyn CatserDivisionRepositoryPort>,
     catser_group_repo: Arc<dyn CatserGroupRepositoryPort>,
     catser_class_repo: Arc<dyn CatserClassRepositoryPort>,
     catser_item_repo: Arc<dyn CatserItemRepositoryPort>,
@@ -28,8 +28,8 @@ impl CatalogService {
         catmat_class_repo: Arc<dyn CatmatClassRepositoryPort>,
         catmat_pdm_repo: Arc<dyn CatmatPdmRepositoryPort>,
         catmat_item_repo: Arc<dyn CatmatItemRepositoryPort>,
-        catser_secao_repo: Arc<dyn CatserSecaoRepositoryPort>,
-        catser_divisao_repo: Arc<dyn CatserDivisaoRepositoryPort>,
+        catser_section_repo: Arc<dyn CatserSectionRepositoryPort>,
+        catser_division_repo: Arc<dyn CatserDivisionRepositoryPort>,
         catser_group_repo: Arc<dyn CatserGroupRepositoryPort>,
         catser_class_repo: Arc<dyn CatserClassRepositoryPort>,
         catser_item_repo: Arc<dyn CatserItemRepositoryPort>,
@@ -37,7 +37,7 @@ impl CatalogService {
         Self {
             unit_repo, conversion_repo,
             catmat_group_repo, catmat_class_repo, catmat_pdm_repo, catmat_item_repo,
-            catser_secao_repo, catser_divisao_repo, catser_group_repo, catser_class_repo, catser_item_repo,
+            catser_section_repo, catser_division_repo, catser_group_repo, catser_class_repo, catser_item_repo,
         }
     }
 
@@ -280,67 +280,67 @@ impl CatalogService {
     }
 
     // ============================
-    // CATSER Seções
+    // CATSER Sections
     // ============================
 
-    pub async fn create_catser_secao(&self, payload: CreateCatserSecaoPayload) -> Result<CatserSecaoDto, ServiceError> {
-        self.catser_secao_repo.create(&payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
+    pub async fn create_catser_section(&self, payload: CreateCatserSectionPayload) -> Result<CatserSectionDto, ServiceError> {
+        self.catser_section_repo.create(&payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
-    pub async fn get_catser_secao(&self, id: Uuid) -> Result<CatserSecaoWithDetailsDto, ServiceError> {
-        self.catser_secao_repo.find_with_details_by_id(id).await?.ok_or(ServiceError::NotFound("Seção CATSER não encontrada".to_string()))
+    pub async fn get_catser_section(&self, id: Uuid) -> Result<CatserSectionWithDetailsDto, ServiceError> {
+        self.catser_section_repo.find_with_details_by_id(id).await?.ok_or(ServiceError::NotFound("CATSER Section not found".to_string()))
     }
 
-    pub async fn update_catser_secao(&self, id: Uuid, payload: UpdateCatserSecaoPayload) -> Result<CatserSecaoDto, ServiceError> {
-        let _ = self.catser_secao_repo.find_by_id(id).await?.ok_or(ServiceError::NotFound("Seção CATSER não encontrada".to_string()))?;
-        self.catser_secao_repo.update(id, payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
+    pub async fn update_catser_section(&self, id: Uuid, payload: UpdateCatserSectionPayload) -> Result<CatserSectionDto, ServiceError> {
+        let _ = self.catser_section_repo.find_by_id(id).await?.ok_or(ServiceError::NotFound("CATSER Section not found".to_string()))?;
+        self.catser_section_repo.update(id, payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
     }
 
-    pub async fn delete_catser_secao(&self, id: Uuid) -> Result<bool, ServiceError> {
-        if self.catser_secao_repo.has_divisoes(id).await? {
-            return Err(ServiceError::Conflict("Não é possível excluir: a seção possui divisões vinculadas".to_string()));
+    pub async fn delete_catser_section(&self, id: Uuid) -> Result<bool, ServiceError> {
+        if self.catser_section_repo.has_divisions(id).await? {
+            return Err(ServiceError::Conflict("Não é possível excluir: section has linked divisions".to_string()));
         }
-        self.catser_secao_repo.delete(id).await.map_err(ServiceError::from)
+        self.catser_section_repo.delete(id).await.map_err(ServiceError::from)
     }
 
-    pub async fn list_catser_secoes(&self, limit: i64, offset: i64, search: Option<String>, is_active: Option<bool>) -> Result<(Vec<CatserSecaoWithDetailsDto>, i64), ServiceError> {
-        self.catser_secao_repo.list(limit, offset, search, is_active).await.map_err(ServiceError::from)
+    pub async fn list_catser_sections(&self, limit: i64, offset: i64, search: Option<String>, is_active: Option<bool>) -> Result<(Vec<CatserSectionWithDetailsDto>, i64), ServiceError> {
+        self.catser_section_repo.list(limit, offset, search, is_active).await.map_err(ServiceError::from)
     }
 
-    pub async fn get_catser_secao_tree(&self) -> Result<Vec<CatserSecaoTreeNode>, ServiceError> {
-        self.catser_secao_repo.get_tree().await.map_err(ServiceError::from)
+    pub async fn get_catser_section_tree(&self) -> Result<Vec<CatserSectionTreeNode>, ServiceError> {
+        self.catser_section_repo.get_tree().await.map_err(ServiceError::from)
     }
 
     // ============================
-    // CATSER Divisões
+    // CATSER Divisions
     // ============================
 
-    pub async fn create_catser_divisao(&self, payload: CreateCatserDivisaoPayload) -> Result<CatserDivisaoDto, ServiceError> {
-        let _ = self.catser_secao_repo.find_by_id(payload.secao_id).await?.ok_or(ServiceError::NotFound("Seção CATSER não encontrada".to_string()))?;
-        self.catser_divisao_repo.create(payload.secao_id, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
+    pub async fn create_catser_division(&self, payload: CreateCatserDivisionPayload) -> Result<CatserDivisionDto, ServiceError> {
+        let _ = self.catser_section_repo.find_by_id(payload.section_id).await?.ok_or(ServiceError::NotFound("CATSER Section not found".to_string()))?;
+        self.catser_division_repo.create(payload.section_id, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
-    pub async fn get_catser_divisao(&self, id: Uuid) -> Result<CatserDivisaoWithDetailsDto, ServiceError> {
-        self.catser_divisao_repo.find_with_details_by_id(id).await?.ok_or(ServiceError::NotFound("Divisão CATSER não encontrada".to_string()))
+    pub async fn get_catser_division(&self, id: Uuid) -> Result<CatserDivisionWithDetailsDto, ServiceError> {
+        self.catser_division_repo.find_with_details_by_id(id).await?.ok_or(ServiceError::NotFound("CATSER Division not found".to_string()))
     }
 
-    pub async fn update_catser_divisao(&self, id: Uuid, payload: UpdateCatserDivisaoPayload) -> Result<CatserDivisaoDto, ServiceError> {
-        let _ = self.catser_divisao_repo.find_by_id(id).await?.ok_or(ServiceError::NotFound("Divisão CATSER não encontrada".to_string()))?;
-        if let Some(secao_id) = payload.secao_id {
-            let _ = self.catser_secao_repo.find_by_id(secao_id).await?.ok_or(ServiceError::NotFound("Seção CATSER não encontrada".to_string()))?;
+    pub async fn update_catser_division(&self, id: Uuid, payload: UpdateCatserDivisionPayload) -> Result<CatserDivisionDto, ServiceError> {
+        let _ = self.catser_division_repo.find_by_id(id).await?.ok_or(ServiceError::NotFound("CATSER Division not found".to_string()))?;
+        if let Some(section_id) = payload.section_id {
+            let _ = self.catser_section_repo.find_by_id(section_id).await?.ok_or(ServiceError::NotFound("CATSER Section not found".to_string()))?;
         }
-        self.catser_divisao_repo.update(id, payload.secao_id, payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
+        self.catser_division_repo.update(id, payload.section_id, payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
     }
 
-    pub async fn delete_catser_divisao(&self, id: Uuid) -> Result<bool, ServiceError> {
-        if self.catser_divisao_repo.has_grupos(id).await? {
-            return Err(ServiceError::Conflict("Não é possível excluir: a divisão possui grupos vinculados".to_string()));
+    pub async fn delete_catser_division(&self, id: Uuid) -> Result<bool, ServiceError> {
+        if self.catser_division_repo.has_groups(id).await? {
+            return Err(ServiceError::Conflict("Não é possível excluir: division has linked groups".to_string()));
         }
-        self.catser_divisao_repo.delete(id).await.map_err(ServiceError::from)
+        self.catser_division_repo.delete(id).await.map_err(ServiceError::from)
     }
 
-    pub async fn list_catser_divisoes(&self, limit: i64, offset: i64, search: Option<String>, secao_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserDivisaoWithDetailsDto>, i64), ServiceError> {
-        self.catser_divisao_repo.list(limit, offset, search, secao_id, is_active).await.map_err(ServiceError::from)
+    pub async fn list_catser_divisions(&self, limit: i64, offset: i64, search: Option<String>, section_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserDivisionWithDetailsDto>, i64), ServiceError> {
+        self.catser_division_repo.list(limit, offset, search, section_id, is_active).await.map_err(ServiceError::from)
     }
 
     // ============================
@@ -351,7 +351,7 @@ impl CatalogService {
         if self.catser_group_repo.exists_by_code(&payload.code).await? {
             return Err(ServiceError::Conflict(format!("Grupo CATSER com código '{}' já existe", payload.code)));
         }
-        self.catser_group_repo.create(payload.divisao_id, &payload.code, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
+        self.catser_group_repo.create(payload.division_id, &payload.code, &payload.name, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
     pub async fn get_catser_group(&self, id: Uuid) -> Result<CatserGroupDto, ServiceError> {
@@ -365,15 +365,15 @@ impl CatalogService {
                 return Err(ServiceError::Conflict(format!("Grupo CATSER com código '{}' já existe", code)));
             }
         }
-        self.catser_group_repo.update(id, payload.divisao_id, payload.code.as_deref(), payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
+        self.catser_group_repo.update(id, payload.division_id, payload.code.as_deref(), payload.name.as_deref(), payload.is_active).await.map_err(ServiceError::from)
     }
 
     pub async fn delete_catser_group(&self, id: Uuid) -> Result<bool, ServiceError> {
         self.catser_group_repo.delete(id).await.map_err(ServiceError::from)
     }
 
-    pub async fn list_catser_groups(&self, limit: i64, offset: i64, search: Option<String>, divisao_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserGroupDto>, i64), ServiceError> {
-        self.catser_group_repo.list(limit, offset, search, divisao_id, is_active).await.map_err(ServiceError::from)
+    pub async fn list_catser_groups(&self, limit: i64, offset: i64, search: Option<String>, division_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserGroupDto>, i64), ServiceError> {
+        self.catser_group_repo.list(limit, offset, search, division_id, is_active).await.map_err(ServiceError::from)
     }
 
     pub async fn get_catser_tree(&self) -> Result<Vec<CatserGroupTreeNode>, ServiceError> {

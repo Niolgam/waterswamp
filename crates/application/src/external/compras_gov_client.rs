@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use domain::models::catalog::{
-    ComprasGovClasseMaterial, ComprasGovClasseServico, ComprasGovDivisaoServico,
+    ComprasGovClasseMaterial, ComprasGovClasseServico, ComprasGovDivisionService,
     ComprasGovGrupoMaterial, ComprasGovGrupoServico, ComprasGovItemMaterial,
-    ComprasGovItemServico, ComprasGovPdmMaterial, ComprasGovResponse, ComprasGovSecaoServico,
+    ComprasGovItemServico, ComprasGovPdmMaterial, ComprasGovResponse, ComprasGovSectionService,
 };
 use reqwest::Client;
 use std::time::Duration;
@@ -142,14 +142,14 @@ impl ComprasGovClient {
     // CATSER - Service endpoints
     // ========================================================================
 
-    pub async fn search_secoes_servico(
+    pub async fn search_sections_service(
         &self,
-        codigo_secao: Option<i64>,
+        section_code: Option<i64>,
         pagina: Option<i64>,
-    ) -> Result<ComprasGovResponse<ComprasGovSecaoServico>> {
+    ) -> Result<ComprasGovResponse<ComprasGovSectionService>> {
         let mut url = format!("{}/1_consultarSecaoServico", self.catser_base_url);
         let mut params = vec![];
-        if let Some(c) = codigo_secao {
+        if let Some(c) = section_code {
             params.push(format!("codigoSecao={}", c));
         }
         if let Some(p) = pagina {
@@ -162,18 +162,18 @@ impl ComprasGovClient {
         self.get_json(&url, "seções serviço").await
     }
 
-    pub async fn search_divisoes_servico(
+    pub async fn search_divisions_service(
         &self,
-        codigo_divisao: Option<i64>,
-        codigo_secao: Option<i64>,
+        division_code: Option<i64>,
+        section_code: Option<i64>,
         pagina: Option<i64>,
-    ) -> Result<ComprasGovResponse<ComprasGovDivisaoServico>> {
+    ) -> Result<ComprasGovResponse<ComprasGovDivisionService>> {
         let mut url = format!("{}/2_consultarDivisaoServico", self.catser_base_url);
         let mut params = vec![];
-        if let Some(c) = codigo_divisao {
+        if let Some(c) = division_code {
             params.push(format!("codigoDivisao={}", c));
         }
-        if let Some(s) = codigo_secao {
+        if let Some(s) = section_code {
             params.push(format!("codigoSecao={}", s));
         }
         if let Some(p) = pagina {
@@ -189,7 +189,7 @@ impl ComprasGovClient {
     pub async fn search_grupos_servico(
         &self,
         codigo_grupo: Option<i64>,
-        codigo_divisao: Option<i64>,
+        division_code: Option<i64>,
         pagina: Option<i64>,
     ) -> Result<ComprasGovResponse<ComprasGovGrupoServico>> {
         let mut url = format!("{}/3_consultarGrupoServico", self.catser_base_url);
@@ -197,7 +197,7 @@ impl ComprasGovClient {
         if let Some(c) = codigo_grupo {
             params.push(format!("codigoGrupo={}", c));
         }
-        if let Some(d) = codigo_divisao {
+        if let Some(d) = division_code {
             params.push(format!("codigoDivisao={}", d));
         }
         if let Some(p) = pagina {

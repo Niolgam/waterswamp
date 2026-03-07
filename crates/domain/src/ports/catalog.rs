@@ -181,36 +181,36 @@ pub trait CatmatItemRepositoryPort: Send + Sync {
 }
 
 // ============================
-// CATSER Seção Repository Port
+// CATSER Section Repository Port
 // ============================
 
 #[async_trait]
-pub trait CatserSecaoRepositoryPort: Send + Sync {
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserSecaoDto>, RepositoryError>;
-    async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserSecaoWithDetailsDto>, RepositoryError>;
-    async fn create(&self, name: &str, is_active: bool, verification_status: &str) -> Result<CatserSecaoDto, RepositoryError>;
-    async fn update(&self, id: Uuid, name: Option<&str>, is_active: Option<bool>) -> Result<CatserSecaoDto, RepositoryError>;
+pub trait CatserSectionRepositoryPort: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserSectionDto>, RepositoryError>;
+    async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserSectionWithDetailsDto>, RepositoryError>;
+    async fn create(&self, name: &str, is_active: bool, verification_status: &str) -> Result<CatserSectionDto, RepositoryError>;
+    async fn update(&self, id: Uuid, name: Option<&str>, is_active: Option<bool>) -> Result<CatserSectionDto, RepositoryError>;
     async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
-    async fn has_divisoes(&self, id: Uuid) -> Result<bool, RepositoryError>;
-    async fn list(&self, limit: i64, offset: i64, search: Option<String>, is_active: Option<bool>) -> Result<(Vec<CatserSecaoWithDetailsDto>, i64), RepositoryError>;
-    async fn get_tree(&self) -> Result<Vec<CatserSecaoTreeNode>, RepositoryError>;
+    async fn has_divisions(&self, id: Uuid) -> Result<bool, RepositoryError>;
+    async fn list(&self, limit: i64, offset: i64, search: Option<String>, is_active: Option<bool>) -> Result<(Vec<CatserSectionWithDetailsDto>, i64), RepositoryError>;
+    async fn get_tree(&self) -> Result<Vec<CatserSectionTreeNode>, RepositoryError>;
 }
 
 // ============================
-// CATSER Divisão Repository Port
+// CATSER Division Repository Port
 // ============================
 
 #[async_trait]
-pub trait CatserDivisaoRepositoryPort: Send + Sync {
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserDivisaoDto>, RepositoryError>;
-    async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserDivisaoWithDetailsDto>, RepositoryError>;
-    async fn create(&self, secao_id: Uuid, name: &str, is_active: bool, verification_status: &str) -> Result<CatserDivisaoDto, RepositoryError>;
-    async fn update(&self, id: Uuid, secao_id: Option<Uuid>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserDivisaoDto, RepositoryError>;
+pub trait CatserDivisionRepositoryPort: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserDivisionDto>, RepositoryError>;
+    async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserDivisionWithDetailsDto>, RepositoryError>;
+    async fn create(&self, section_id: Uuid, name: &str, is_active: bool, verification_status: &str) -> Result<CatserDivisionDto, RepositoryError>;
+    async fn update(&self, id: Uuid, section_id: Option<Uuid>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserDivisionDto, RepositoryError>;
     async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
-    async fn has_grupos(&self, id: Uuid) -> Result<bool, RepositoryError>;
-    async fn list(&self, limit: i64, offset: i64, search: Option<String>, secao_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserDivisaoWithDetailsDto>, i64), RepositoryError>;
+    async fn has_groups(&self, id: Uuid) -> Result<bool, RepositoryError>;
+    async fn list(&self, limit: i64, offset: i64, search: Option<String>, section_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserDivisionWithDetailsDto>, i64), RepositoryError>;
 }
 
 // ============================
@@ -223,11 +223,11 @@ pub trait CatserGroupRepositoryPort: Send + Sync {
     async fn find_by_code(&self, code: &str) -> Result<Option<CatserGroupDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, divisao_id: Option<Uuid>, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatserGroupDto, RepositoryError>;
-    async fn update(&self, id: Uuid, divisao_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserGroupDto, RepositoryError>;
+    async fn create(&self, division_id: Option<Uuid>, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatserGroupDto, RepositoryError>;
+    async fn update(&self, id: Uuid, division_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserGroupDto, RepositoryError>;
     async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
-    async fn list(&self, limit: i64, offset: i64, search: Option<String>, divisao_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserGroupDto>, i64), RepositoryError>;
+    async fn list(&self, limit: i64, offset: i64, search: Option<String>, division_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserGroupDto>, i64), RepositoryError>;
     async fn get_tree(&self) -> Result<Vec<CatserGroupTreeNode>, RepositoryError>;
 }
 

@@ -29,7 +29,7 @@ use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
     BuildingTypeRepositoryPort,
     CatmatGroupRepositoryPort, CatmatClassRepositoryPort, CatmatPdmRepositoryPort, CatmatItemRepositoryPort,
-    CatserSecaoRepositoryPort, CatserDivisaoRepositoryPort,
+    CatserSectionRepositoryPort, CatserDivisionRepositoryPort,
     CatserGroupRepositoryPort, CatserClassRepositoryPort, CatserItemRepositoryPort,
     CityRepositoryPort, CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
     MfaRepositoryPort, OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
@@ -52,7 +52,7 @@ use persistence::repositories::{
     budget_classifications_repository::BudgetClassificationRepository,
     catalog_repository::{
         CatmatGroupRepository, CatmatClassRepository, CatmatPdmRepository, CatmatItemRepository,
-        CatserSecaoRepository, CatserDivisaoRepository,
+        CatserSectionRepository, CatserDivisionRepository,
         CatserGroupRepository, CatserClassRepository, CatserItemRepository,
         UnitConversionRepository, UnitOfMeasureRepository,
     },
@@ -184,10 +184,10 @@ pub fn build_application_state(
         Arc::new(CatmatPdmRepository::new(pool_auth.clone()));
     let catmat_item_repo_port: Arc<dyn CatmatItemRepositoryPort> =
         Arc::new(CatmatItemRepository::new(pool_auth.clone()));
-    let catser_secao_repo_port: Arc<dyn CatserSecaoRepositoryPort> =
-        Arc::new(CatserSecaoRepository::new(pool_auth.clone()));
-    let catser_divisao_repo_port: Arc<dyn CatserDivisaoRepositoryPort> =
-        Arc::new(CatserDivisaoRepository::new(pool_auth.clone()));
+    let catser_section_repo_port: Arc<dyn CatserSectionRepositoryPort> =
+        Arc::new(CatserSectionRepository::new(pool_auth.clone()));
+    let catser_division_repo_port: Arc<dyn CatserDivisionRepositoryPort> =
+        Arc::new(CatserDivisionRepository::new(pool_auth.clone()));
     let catser_group_repo_port: Arc<dyn CatserGroupRepositoryPort> =
         Arc::new(CatserGroupRepository::new(pool_auth.clone()));
     let catser_class_repo_port: Arc<dyn CatserClassRepositoryPort> =
@@ -202,8 +202,8 @@ pub fn build_application_state(
         catmat_class_repo_port,
         catmat_pdm_repo_port,
         catmat_item_repo_port,
-        catser_secao_repo_port,
-        catser_divisao_repo_port,
+        catser_section_repo_port,
+        catser_division_repo_port,
         catser_group_repo_port,
         catser_class_repo_port,
         catser_item_repo_port,

@@ -86,30 +86,30 @@ pub fn router() -> Router<AppState> {
         );
 
     // CATSER Seções routes
-    let catser_secoes_router = Router::new()
+    let catser_sections_router = Router::new()
         .route(
             "/",
-            get(handlers::list_catser_secoes).post(handlers::create_catser_secao),
+            get(handlers::list_catser_sections).post(handlers::create_catser_section),
         )
-        .route("/tree", get(handlers::get_catser_secao_tree))
+        .route("/tree", get(handlers::get_catser_section_tree))
         .route(
             "/{id}",
-            get(handlers::get_catser_secao)
-                .put(handlers::update_catser_secao)
-                .delete(handlers::delete_catser_secao),
+            get(handlers::get_catser_section)
+                .put(handlers::update_catser_section)
+                .delete(handlers::delete_catser_section),
         );
 
     // CATSER Divisões routes
-    let catser_divisoes_router = Router::new()
+    let catser_divisions_router = Router::new()
         .route(
             "/",
-            get(handlers::list_catser_divisoes).post(handlers::create_catser_divisao),
+            get(handlers::list_catser_divisions).post(handlers::create_catser_division),
         )
         .route(
             "/{id}",
-            get(handlers::get_catser_divisao)
-                .put(handlers::update_catser_divisao)
-                .delete(handlers::delete_catser_divisao),
+            get(handlers::get_catser_division)
+                .put(handlers::update_catser_division)
+                .delete(handlers::delete_catser_division),
         );
 
     // CATSER Groups routes
@@ -159,8 +159,8 @@ pub fn router() -> Router<AppState> {
         .nest("/catmat/classes", catmat_classes_router)
         .nest("/catmat/pdms", catmat_pdms_router)
         .nest("/catmat/items", catmat_items_router)
-        .nest("/catser/secoes", catser_secoes_router)
-        .nest("/catser/divisoes", catser_divisoes_router)
+        .nest("/catser/sections", catser_sections_router)
+        .nest("/catser/divisions", catser_divisions_router)
         .nest("/catser/groups", catser_groups_router)
         .nest("/catser/classes", catser_classes_router)
         .nest("/catser/items", catser_items_router)
