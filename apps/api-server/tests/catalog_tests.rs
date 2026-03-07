@@ -789,6 +789,7 @@ async fn test_create_unit_conversion_success() {
         .json(&json!({
             "from_unit_id": from_unit["id"],
             "to_unit_id": to_unit["id"],
+            "description": "Meter to Centimeter",
             "conversion_factor": 100.0
         }))
         .await;
@@ -798,6 +799,7 @@ async fn test_create_unit_conversion_success() {
     assert!(body["id"].is_string());
     assert_eq!(body["from_unit_id"], from_unit["id"]);
     assert_eq!(body["to_unit_id"], to_unit["id"]);
+    assert_eq!(body["description"], "Meter to Centimeter");
 }
 
 #[tokio::test]
@@ -833,6 +835,7 @@ async fn test_get_unit_conversion_success() {
         .json(&json!({
             "from_unit_id": from_unit["id"],
             "to_unit_id": to_unit["id"],
+            "description": "Kilogram to Gram",
             "conversion_factor": 1000.0
         }))
         .await;
@@ -851,6 +854,7 @@ async fn test_get_unit_conversion_success() {
     assert_eq!(body["id"], conversion["id"]);
     assert!(body["from_unit_name"].is_string());
     assert!(body["to_unit_name"].is_string());
+    assert_eq!(body["description"], "Kilogram to Gram");
 }
 
 #[tokio::test]
@@ -867,6 +871,7 @@ async fn test_delete_unit_conversion_success() {
         .json(&json!({
             "from_unit_id": from_unit["id"],
             "to_unit_id": to_unit["id"],
+            "description": "Day to Hour",
             "conversion_factor": 24.0
         }))
         .await;
@@ -896,6 +901,7 @@ async fn test_list_unit_conversions_success() {
         .json(&json!({
             "from_unit_id": from_unit["id"],
             "to_unit_id": to_unit["id"],
+            "description": "Foot to Inch",
             "conversion_factor": 12.0
         }))
         .await;

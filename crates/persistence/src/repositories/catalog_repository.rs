@@ -2015,6 +2015,8 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
             to_unit_id: r.get("to_unit_id"),
             to_unit_name: r.get("to_unit_name"),
             to_unit_symbol: r.get("to_unit_symbol"),
+            catmat_id: r.get("catmat_id"),
+            description: r.get("description"),
             conversion_factor: r.get("conversion_factor"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
@@ -2044,23 +2046,27 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, from_unit_id: Uuid, to_unit_id: Uuid, conversion_factor: rust_decimal::Decimal) -> Result<UnitConversionDto, RepositoryError> {
+    async fn create(&self, from_unit_id: Uuid, to_unit_id: Uuid, catmat_id: Option<Uuid>, description: Option<&str>, conversion_factor: rust_decimal::Decimal) -> Result<UnitConversionDto, RepositoryError> {
         sqlx::query_as::<_, UnitConversionDto>(
-            "INSERT INTO unit_conversions (from_unit_id, to_unit_id, conversion_factor) VALUES ($1, $2, $3) RETURNING *",
+            "INSERT INTO unit_conversions (from_unit_id, to_unit_id, catmat_id, description, conversion_factor) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         )
         .bind(from_unit_id)
         .bind(to_unit_id)
+        .bind(catmat_id)
+        .bind(description)
         .bind(conversion_factor)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
     }
 
-    async fn update(&self, id: Uuid, conversion_factor: rust_decimal::Decimal) -> Result<UnitConversionDto, RepositoryError> {
+    async fn update(&self, id: Uuid, catmat_id: Option<Uuid>, description: Option<&str>, conversion_factor: rust_decimal::Decimal) -> Result<UnitConversionDto, RepositoryError> {
         sqlx::query_as::<_, UnitConversionDto>(
-            "UPDATE unit_conversions SET conversion_factor = $2, updated_at = NOW() WHERE id = $1 RETURNING *",
+            "UPDATE unit_conversions SET catmat_id = $2, description = $3, conversion_factor = $4, updated_at = NOW() WHERE id = $1 RETURNING *",
         )
         .bind(id)
+        .bind(catmat_id)
+        .bind(description)
         .bind(conversion_factor)
         .fetch_one(&self.pool)
         .await
@@ -2104,6 +2110,8 @@ impl UnitConversionRepositoryPort for UnitConversionRepository {
             to_unit_id: r.get("to_unit_id"),
             to_unit_name: r.get("to_unit_name"),
             to_unit_symbol: r.get("to_unit_symbol"),
+            catmat_id: r.get("catmat_id"),
+            description: r.get("description"),
             conversion_factor: r.get("conversion_factor"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),

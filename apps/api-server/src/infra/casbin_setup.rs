@@ -913,7 +913,171 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         ])
         .await?;
 
-    info!("Políticas de Catalog carregadas");
+    // --- CATMAT POLICIES ---
+    // CATMAT Groups
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/groups", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/groups", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/groups/tree", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/groups/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/groups/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/groups/{id}", ACTION_DELETE])
+        .await?;
+
+    // CATMAT Classes
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/classes", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/classes", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/classes/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/classes/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/classes/{id}", ACTION_DELETE])
+        .await?;
+
+    // CATMAT PDMs
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/pdms", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/pdms", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/pdms/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/pdms/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/pdms/{id}", ACTION_DELETE])
+        .await?;
+
+    // CATMAT Items
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/items", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/items", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/items/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/items/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catmat/items/{id}", ACTION_DELETE])
+        .await?;
+
+    // --- CATSER POLICIES ---
+    // CATSER Sections
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/sections", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/sections", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/sections/tree", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/sections/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/sections/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/sections/{id}", ACTION_DELETE])
+        .await?;
+
+    // CATSER Divisions
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/divisions", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/divisions", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/divisions/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/divisions/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/divisions/{id}", ACTION_DELETE])
+        .await?;
+
+    // CATSER Groups
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/groups", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/groups", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/groups/tree", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/groups/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/groups/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/groups/{id}", ACTION_DELETE])
+        .await?;
+
+    // CATSER Classes
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/classes", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/classes", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/classes/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/classes/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/classes/{id}", ACTION_DELETE])
+        .await?;
+
+    // CATSER Items
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/items", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/items", ACTION_POST])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/items/{id}", ACTION_GET])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/items/{id}", ACTION_PUT])
+        .await?;
+    enforcer
+        .add_policy(str_vec![ROLE_ADMIN, "/api/admin/catalog/catser/items/{id}", ACTION_DELETE])
+        .await?;
+
+    info!("Políticas de Catalog carregadas (incluindo CATMAT e CATSER)");
 
     // --- ORGANIZATIONAL POLICIES ---
     // System Settings

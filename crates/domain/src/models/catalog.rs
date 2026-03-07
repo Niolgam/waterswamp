@@ -43,6 +43,8 @@ pub struct UnitConversionDto {
     pub id: Uuid,
     pub from_unit_id: Uuid,
     pub to_unit_id: Uuid,
+    pub catmat_id: Option<Uuid>,
+    pub description: Option<String>,
     pub conversion_factor: rust_decimal::Decimal,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -57,6 +59,8 @@ pub struct UnitConversionWithDetailsDto {
     pub to_unit_id: Uuid,
     pub to_unit_name: String,
     pub to_unit_symbol: String,
+    pub catmat_id: Option<Uuid>,
+    pub description: Option<String>,
     pub conversion_factor: rust_decimal::Decimal,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -66,11 +70,15 @@ pub struct UnitConversionWithDetailsDto {
 pub struct CreateUnitConversionPayload {
     pub from_unit_id: Uuid,
     pub to_unit_id: Uuid,
+    pub catmat_id: Option<Uuid>,
+    pub description: Option<String>,
     pub conversion_factor: rust_decimal::Decimal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateUnitConversionPayload {
+    pub catmat_id: Option<Uuid>,
+    pub description: Option<String>,
     pub conversion_factor: rust_decimal::Decimal,
 }
 
