@@ -83,10 +83,12 @@ pub trait UnitConversionRepositoryPort: Send + Sync {
 #[async_trait]
 pub trait CatmatGroupRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatmatGroupDto>, RepositoryError>;
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatmatGroupDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, code: &str, name: &str, is_active: bool) -> Result<CatmatGroupDto, RepositoryError>;
+    async fn create(&self, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatmatGroupDto, RepositoryError>;
     async fn update(&self, id: Uuid, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatmatGroupDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, is_active: Option<bool>) -> Result<(Vec<CatmatGroupDto>, i64), RepositoryError>;
     async fn get_tree(&self) -> Result<Vec<CatmatGroupTreeNode>, RepositoryError>;
@@ -100,10 +102,12 @@ pub trait CatmatGroupRepositoryPort: Send + Sync {
 pub trait CatmatClassRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatmatClassDto>, RepositoryError>;
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatmatClassWithDetailsDto>, RepositoryError>;
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatmatClassDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool) -> Result<CatmatClassDto, RepositoryError>;
+    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatmatClassDto, RepositoryError>;
     async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatmatClassDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn has_pdms(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, group_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatmatClassWithDetailsDto>, i64), RepositoryError>;
@@ -117,10 +121,12 @@ pub trait CatmatClassRepositoryPort: Send + Sync {
 pub trait CatmatPdmRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatmatPdmDto>, RepositoryError>;
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatmatPdmWithDetailsDto>, RepositoryError>;
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatmatPdmDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, class_id: Uuid, code: &str, description: &str, is_active: bool) -> Result<CatmatPdmDto, RepositoryError>;
+    async fn create(&self, class_id: Uuid, code: &str, description: &str, is_active: bool, verification_status: &str) -> Result<CatmatPdmDto, RepositoryError>;
     async fn update(&self, id: Uuid, class_id: Option<Uuid>, code: Option<&str>, description: Option<&str>, is_active: Option<bool>) -> Result<CatmatPdmDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn has_items(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, class_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatmatPdmWithDetailsDto>, i64), RepositoryError>;
@@ -147,6 +153,7 @@ pub trait CatmatItemRepositoryPort: Send + Sync {
         is_sustainable: bool,
         code_ncm: Option<&str>,
         is_active: bool,
+        verification_status: &str,
     ) -> Result<CatmatItemDto, RepositoryError>;
     async fn update(
         &self,
@@ -160,6 +167,7 @@ pub trait CatmatItemRepositoryPort: Send + Sync {
         code_ncm: Option<&str>,
         is_active: Option<bool>,
     ) -> Result<CatmatItemDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(
         &self,
@@ -180,8 +188,9 @@ pub trait CatmatItemRepositoryPort: Send + Sync {
 pub trait CatserSecaoRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserSecaoDto>, RepositoryError>;
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserSecaoWithDetailsDto>, RepositoryError>;
-    async fn create(&self, name: &str, is_active: bool) -> Result<CatserSecaoDto, RepositoryError>;
+    async fn create(&self, name: &str, is_active: bool, verification_status: &str) -> Result<CatserSecaoDto, RepositoryError>;
     async fn update(&self, id: Uuid, name: Option<&str>, is_active: Option<bool>) -> Result<CatserSecaoDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn has_divisoes(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, is_active: Option<bool>) -> Result<(Vec<CatserSecaoWithDetailsDto>, i64), RepositoryError>;
@@ -196,8 +205,9 @@ pub trait CatserSecaoRepositoryPort: Send + Sync {
 pub trait CatserDivisaoRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserDivisaoDto>, RepositoryError>;
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserDivisaoWithDetailsDto>, RepositoryError>;
-    async fn create(&self, secao_id: Uuid, name: &str, is_active: bool) -> Result<CatserDivisaoDto, RepositoryError>;
+    async fn create(&self, secao_id: Uuid, name: &str, is_active: bool, verification_status: &str) -> Result<CatserDivisaoDto, RepositoryError>;
     async fn update(&self, id: Uuid, secao_id: Option<Uuid>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserDivisaoDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn has_grupos(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, secao_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserDivisaoWithDetailsDto>, i64), RepositoryError>;
@@ -210,10 +220,12 @@ pub trait CatserDivisaoRepositoryPort: Send + Sync {
 #[async_trait]
 pub trait CatserGroupRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserGroupDto>, RepositoryError>;
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatserGroupDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, divisao_id: Option<Uuid>, code: &str, name: &str, is_active: bool) -> Result<CatserGroupDto, RepositoryError>;
+    async fn create(&self, divisao_id: Option<Uuid>, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatserGroupDto, RepositoryError>;
     async fn update(&self, id: Uuid, divisao_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserGroupDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, divisao_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserGroupDto>, i64), RepositoryError>;
     async fn get_tree(&self) -> Result<Vec<CatserGroupTreeNode>, RepositoryError>;
@@ -227,10 +239,12 @@ pub trait CatserGroupRepositoryPort: Send + Sync {
 pub trait CatserClassRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserClassDto>, RepositoryError>;
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatserClassWithDetailsDto>, RepositoryError>;
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatserClassDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool) -> Result<CatserClassDto, RepositoryError>;
+    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatserClassDto, RepositoryError>;
     async fn update(&self, id: Uuid, group_id: Option<Uuid>, code: Option<&str>, name: Option<&str>, is_active: Option<bool>) -> Result<CatserClassDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn has_items(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(&self, limit: i64, offset: i64, search: Option<String>, group_id: Option<Uuid>, is_active: Option<bool>) -> Result<(Vec<CatserClassWithDetailsDto>, i64), RepositoryError>;
@@ -259,6 +273,7 @@ pub trait CatserItemRepositoryPort: Send + Sync {
         specification: Option<&str>,
         search_links: Option<&str>,
         is_active: bool,
+        verification_status: &str,
     ) -> Result<CatserItemDto, RepositoryError>;
     async fn update(
         &self,
@@ -274,6 +289,7 @@ pub trait CatserItemRepositoryPort: Send + Sync {
         search_links: Option<&str>,
         is_active: Option<bool>,
     ) -> Result<CatserItemDto, RepositoryError>;
+    async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn list(
         &self,
@@ -283,4 +299,14 @@ pub trait CatserItemRepositoryPort: Send + Sync {
         class_id: Option<Uuid>,
         is_active: Option<bool>,
     ) -> Result<(Vec<CatserItemWithDetailsDto>, i64), RepositoryError>;
+}
+
+// ============================
+// System Settings Repository Port
+// ============================
+
+#[async_trait]
+pub trait SystemSettingsRepositoryPort: Send + Sync {
+    async fn get_setting(&self, key: &str) -> Result<Option<serde_json::Value>, RepositoryError>;
+    async fn set_setting(&self, key: &str, value: serde_json::Value) -> Result<(), RepositoryError>;
 }

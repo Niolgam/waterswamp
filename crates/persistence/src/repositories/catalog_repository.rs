@@ -150,6 +150,14 @@ impl CatmatGroupRepositoryPort for CatmatGroupRepository {
             .map_err(map_db_error)
     }
 
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatmatGroupDto>, RepositoryError> {
+        sqlx::query_as::<_, CatmatGroupDto>("SELECT * FROM catmat_groups WHERE code = $1")
+            .bind(code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_db_error)
+    }
+
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catmat_groups WHERE code = $1")
             .bind(code)
@@ -169,13 +177,14 @@ impl CatmatGroupRepositoryPort for CatmatGroupRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, code: &str, name: &str, is_active: bool) -> Result<CatmatGroupDto, RepositoryError> {
+    async fn create(&self, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatmatGroupDto, RepositoryError> {
         sqlx::query_as::<_, CatmatGroupDto>(
-            "INSERT INTO catmat_groups (code, name, is_active) VALUES ($1, $2, $3) RETURNING *",
+            "INSERT INTO catmat_groups (code, name, is_active, verification_status) VALUES ($1, $2, $3, $4) RETURNING *",
         )
         .bind(code)
         .bind(name)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -332,6 +341,14 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         }))
     }
 
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatmatClassDto>, RepositoryError> {
+        sqlx::query_as::<_, CatmatClassDto>("SELECT * FROM catmat_classes WHERE code = $1")
+            .bind(code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_db_error)
+    }
+
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catmat_classes WHERE code = $1")
             .bind(code)
@@ -351,14 +368,15 @@ impl CatmatClassRepositoryPort for CatmatClassRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool) -> Result<CatmatClassDto, RepositoryError> {
+    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatmatClassDto, RepositoryError> {
         sqlx::query_as::<_, CatmatClassDto>(
-            "INSERT INTO catmat_classes (group_id, code, name, is_active) VALUES ($1, $2, $3, $4) RETURNING *",
+            "INSERT INTO catmat_classes (group_id, code, name, is_active, verification_status) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         )
         .bind(group_id)
         .bind(code)
         .bind(name)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -504,6 +522,14 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
         }))
     }
 
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatmatPdmDto>, RepositoryError> {
+        sqlx::query_as::<_, CatmatPdmDto>("SELECT * FROM catmat_pdms WHERE code = $1")
+            .bind(code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_db_error)
+    }
+
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catmat_pdms WHERE code = $1")
             .bind(code)
@@ -523,14 +549,15 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, class_id: Uuid, code: &str, description: &str, is_active: bool) -> Result<CatmatPdmDto, RepositoryError> {
+    async fn create(&self, class_id: Uuid, code: &str, description: &str, is_active: bool, verification_status: &str) -> Result<CatmatPdmDto, RepositoryError> {
         sqlx::query_as::<_, CatmatPdmDto>(
-            "INSERT INTO catmat_pdms (class_id, code, description, is_active) VALUES ($1, $2, $3, $4) RETURNING *",
+            "INSERT INTO catmat_pdms (class_id, code, description, is_active, verification_status) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         )
         .bind(class_id)
         .bind(code)
         .bind(description)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -745,12 +772,12 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
     async fn create(
         &self, pdm_id: Uuid, unit_of_measure_id: Uuid, budget_classification_id: Option<Uuid>,
         code: &str, description: &str,
-        is_sustainable: bool, code_ncm: Option<&str>, is_active: bool,
+        is_sustainable: bool, code_ncm: Option<&str>, is_active: bool, verification_status: &str,
     ) -> Result<CatmatItemDto, RepositoryError> {
         sqlx::query_as::<_, CatmatItemDto>(
             r#"INSERT INTO catmat_items (pdm_id, unit_of_measure_id, budget_classification_id, code, description,
-                is_sustainable, code_ncm, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *"#,
+                is_sustainable, code_ncm, is_active, verification_status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *"#,
         )
         .bind(pdm_id)
         .bind(unit_of_measure_id)
@@ -760,6 +787,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
         .bind(is_sustainable)
         .bind(code_ncm)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -931,6 +959,14 @@ impl CatserGroupRepositoryPort for CatserGroupRepository {
             .map_err(map_db_error)
     }
 
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatserGroupDto>, RepositoryError> {
+        sqlx::query_as::<_, CatserGroupDto>("SELECT * FROM catser_groups WHERE code = $1")
+            .bind(code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_db_error)
+    }
+
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catser_groups WHERE code = $1")
             .bind(code)
@@ -950,14 +986,15 @@ impl CatserGroupRepositoryPort for CatserGroupRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, divisao_id: Option<Uuid>, code: &str, name: &str, is_active: bool) -> Result<CatserGroupDto, RepositoryError> {
+    async fn create(&self, divisao_id: Option<Uuid>, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatserGroupDto, RepositoryError> {
         sqlx::query_as::<_, CatserGroupDto>(
-            "INSERT INTO catser_groups (divisao_id, code, name, is_active) VALUES ($1, $2, $3, $4) RETURNING *",
+            "INSERT INTO catser_groups (divisao_id, code, name, is_active, verification_status) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         )
         .bind(divisao_id)
         .bind(code)
         .bind(name)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -1120,6 +1157,14 @@ impl CatserClassRepositoryPort for CatserClassRepository {
         }))
     }
 
+    async fn find_by_code(&self, code: &str) -> Result<Option<CatserClassDto>, RepositoryError> {
+        sqlx::query_as::<_, CatserClassDto>("SELECT * FROM catser_classes WHERE code = $1")
+            .bind(code)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_db_error)
+    }
+
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM catser_classes WHERE code = $1")
             .bind(code)
@@ -1139,14 +1184,15 @@ impl CatserClassRepositoryPort for CatserClassRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool) -> Result<CatserClassDto, RepositoryError> {
+    async fn create(&self, group_id: Uuid, code: &str, name: &str, is_active: bool, verification_status: &str) -> Result<CatserClassDto, RepositoryError> {
         sqlx::query_as::<_, CatserClassDto>(
-            "INSERT INTO catser_classes (group_id, code, name, is_active) VALUES ($1, $2, $3, $4) RETURNING *",
+            "INSERT INTO catser_classes (group_id, code, name, is_active, verification_status) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         )
         .bind(group_id)
         .bind(code)
         .bind(name)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
@@ -1335,12 +1381,12 @@ impl CatserItemRepositoryPort for CatserItemRepository {
         &self, class_id: Uuid, unit_of_measure_id: Uuid, budget_classification_id: Option<Uuid>,
         code: &str, code_cpc: Option<&str>, description: &str,
         supplementary_description: Option<&str>, specification: Option<&str>,
-        search_links: Option<&str>, is_active: bool,
+        search_links: Option<&str>, is_active: bool, verification_status: &str,
     ) -> Result<CatserItemDto, RepositoryError> {
         sqlx::query_as::<_, CatserItemDto>(
             r#"INSERT INTO catser_items (class_id, unit_of_measure_id, budget_classification_id, code, code_cpc, description,
-                supplementary_description, specification, search_links, is_active)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *"#,
+                supplementary_description, specification, search_links, is_active, verification_status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *"#,
         )
         .bind(class_id)
         .bind(unit_of_measure_id)
@@ -1352,6 +1398,7 @@ impl CatserItemRepositoryPort for CatserItemRepository {
         .bind(specification)
         .bind(search_links)
         .bind(is_active)
+        .bind(verification_status)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)

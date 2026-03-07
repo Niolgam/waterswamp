@@ -86,6 +86,7 @@ pub struct CatmatGroupDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -113,6 +114,7 @@ pub struct CatmatClassDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -126,6 +128,7 @@ pub struct CatmatClassWithDetailsDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub pdm_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -156,6 +159,7 @@ pub struct CatmatPdmDto {
     pub code: String,
     pub description: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -172,6 +176,7 @@ pub struct CatmatPdmWithDetailsDto {
     pub code: String,
     pub description: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub item_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -206,6 +211,7 @@ pub struct CatmatItemDto {
     pub is_sustainable: bool,
     pub code_ncm: Option<String>,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -233,6 +239,7 @@ pub struct CatmatItemWithDetailsDto {
     pub is_sustainable: bool,
     pub code_ncm: Option<String>,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -297,6 +304,7 @@ pub struct CatserSecaoDto {
     pub id: Uuid,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -306,6 +314,7 @@ pub struct CatserSecaoWithDetailsDto {
     pub id: Uuid,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub divisao_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -331,6 +340,7 @@ pub struct CatserDivisaoDto {
     pub secao_id: Uuid,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -342,6 +352,7 @@ pub struct CatserDivisaoWithDetailsDto {
     pub secao_name: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub grupo_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -370,6 +381,7 @@ pub struct CatserGroupDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -399,6 +411,7 @@ pub struct CatserClassDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -412,6 +425,7 @@ pub struct CatserClassWithDetailsDto {
     pub code: String,
     pub name: String,
     pub is_active: bool,
+    pub verification_status: String,
     pub item_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -448,6 +462,7 @@ pub struct CatserItemDto {
     pub specification: Option<String>,
     pub search_links: Option<String>,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -474,6 +489,7 @@ pub struct CatserItemWithDetailsDto {
     pub specification: Option<String>,
     pub search_links: Option<String>,
     pub is_active: bool,
+    pub verification_status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -551,4 +567,107 @@ pub struct CatserClassTreeNode {
     pub item_count: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+// ============================
+// ComprasGov API Response DTOs
+// ============================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovResponse<T> {
+    pub resultado: Vec<T>,
+    pub total_registros: i64,
+    pub total_paginas: i64,
+    pub paginas_restantes: i64,
+}
+
+// --- CATMAT API entities ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovGrupoMaterial {
+    pub codigo_grupo: i64,
+    pub nome_grupo: String,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovClasseMaterial {
+    pub codigo_classe: i64,
+    pub nome_classe: String,
+    pub codigo_grupo: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovPdmMaterial {
+    pub codigo_pdm: i64,
+    pub nome_pdm: String,
+    pub codigo_classe: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovItemMaterial {
+    pub codigo_item: i64,
+    pub nome_item: String,
+    pub codigo_pdm: i64,
+    pub codigo_classe: i64,
+    pub codigo_grupo: i64,
+    pub status: bool,
+    pub sustentavel: bool,
+}
+
+// --- CATSER API entities ---
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovSecaoServico {
+    pub codigo_secao: i64,
+    pub nome_secao: String,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovDivisaoServico {
+    pub codigo_divisao: i64,
+    pub nome_divisao: String,
+    pub codigo_secao: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovGrupoServico {
+    pub codigo_grupo: i64,
+    pub nome_grupo: String,
+    pub codigo_divisao: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovClasseServico {
+    pub codigo_classe: i64,
+    pub nome_classe: String,
+    pub codigo_grupo: i64,
+    pub status: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComprasGovItemServico {
+    pub codigo_item: i64,
+    pub nome_item: String,
+    pub codigo_classe: i64,
+    pub codigo_grupo: i64,
+    pub codigo_divisao: i64,
+    pub codigo_secao: i64,
+    pub codigo_cpc: Option<String>,
+    pub status: bool,
 }
