@@ -14,7 +14,7 @@ CREATE TYPE stock_movement_type_enum AS ENUM (
 CREATE TABLE stock_movements (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
-    catalog_item_id UUID NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+    catalog_item_id UUID NOT NULL REFERENCES catmat_items(id) ON DELETE RESTRICT,
     movement_type stock_movement_type_enum NOT NULL,
     movement_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -106,7 +106,7 @@ DECLARE
 BEGIN
     -- 1. VERIFICAÇÃO: Item é estocável?
     SELECT is_stockable INTO v_is_stockable 
-    FROM catalog_items 
+    FROM catmat_items 
     WHERE id = NEW.catalog_item_id;
 
     -- Se não for estocável (Serviço), não afeta saldo físico

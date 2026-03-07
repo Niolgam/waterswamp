@@ -3,7 +3,7 @@ CREATE TABLE requisition_items (
 
     -- Relacionamentos
     requisition_id UUID NOT NULL REFERENCES requisitions(id) ON DELETE CASCADE,
-    catalog_item_id UUID NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+    catalog_item_id UUID NOT NULL REFERENCES catmat_items(id) ON DELETE RESTRICT,
 
     -- Quantidades (usando unidade base do item)
     requested_quantity DECIMAL(15, 3) NOT NULL CHECK (requested_quantity > 0),
@@ -71,7 +71,7 @@ DECLARE
 BEGIN
     SELECT COALESCE(ws.average_unit_value, ci.estimated_value, 0)
     INTO v_avg_value
-    FROM catalog_items ci
+    FROM catmat_items ci
     LEFT JOIN warehouse_stocks ws ON ws.catalog_item_id = ci.id 
         AND ws.warehouse_id = (SELECT warehouse_id FROM requisitions WHERE id = NEW.requisition_id)
     WHERE ci.id = NEW.catalog_item_id;

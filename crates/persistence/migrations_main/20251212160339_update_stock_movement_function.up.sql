@@ -17,7 +17,7 @@ DECLARE
 BEGIN
     -- 1. VERIFICATION: Is item stockable?
     SELECT is_stockable INTO v_is_stockable
-    FROM catalog_items
+    FROM catmat_items
     WHERE id = NEW.catalog_item_id;
 
     -- If not stockable (Service), doesn't affect physical balance

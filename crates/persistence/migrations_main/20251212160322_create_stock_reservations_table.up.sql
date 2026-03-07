@@ -2,7 +2,7 @@ CREATE TABLE stock_reservations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     requisition_id UUID NOT NULL REFERENCES requisitions(id) ON DELETE CASCADE,
     requisition_item_id UUID NOT NULL REFERENCES requisition_items(id) ON DELETE CASCADE,
-    catalog_item_id UUID NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+    catalog_item_id UUID NOT NULL REFERENCES catmat_items(id) ON DELETE RESTRICT,
     warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE RESTRICT,
     quantity DECIMAL(15, 3) NOT NULL CHECK (quantity > 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,

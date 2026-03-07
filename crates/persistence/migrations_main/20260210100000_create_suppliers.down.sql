@@ -1,2 +1,0 @@
-DROP TABLE IF EXISTS suppliers CASCADE;
-DROP TYPE IF EXISTS supplier_type_enum CASCADE;

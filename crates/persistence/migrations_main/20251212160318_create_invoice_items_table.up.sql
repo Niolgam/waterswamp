@@ -3,7 +3,7 @@ CREATE TABLE invoice_items (
 
     -- Relacionamentos
     invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
-    catalog_item_id UUID NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+    catalog_item_id UUID NOT NULL REFERENCES catmat_items(id) ON DELETE RESTRICT,
     
     unit_conversion_id UUID REFERENCES unit_conversions(id) ON DELETE SET NULL,
 

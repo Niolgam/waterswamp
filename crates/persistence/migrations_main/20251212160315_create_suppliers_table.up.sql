@@ -1,48 +1,36 @@
-CREATE TYPE supplier_type_enum AS ENUM ('PJ', 'PF', 'MEI');
-
 CREATE TABLE suppliers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL, -- Razão Social
-    trade_name VARCHAR(255), -- Nome Fantasia
-    tax_id VARCHAR(20) NOT NULL, -- CNPJ ou CPF (sem formatação)
-    supplier_type supplier_type_enum NOT NULL DEFAULT 'PJ',
-    state_registration VARCHAR(20), -- Inscrição Estadual
-    municipal_registration VARCHAR(20), -- Inscrição Municipal
-    
-    city_id UUID REFERENCES cities(id) ON DELETE SET NULL,
-    address TEXT,
-    zip_code VARCHAR(8),
-    
-    email VARCHAR(255),
-    phone VARCHAR(20),
-    contact_name VARCHAR(100), -- Nome do contato principal
-
-    bank_name VARCHAR(100),
-    bank_agency VARCHAR(10),
-    bank_account VARCHAR(20),
-    pix_key VARCHAR(100),
-
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Names
+    legal_name VARCHAR(200) NOT NULL,
+    trade_name VARCHAR(200),
+    -- Document: CPF (11 digits) for Individual, CNPJ (14 digits) for Legal Entity, UG code for Government Unit
+    document_number VARCHAR(20) NOT NULL,
+    -- Representative
+    representative_name VARCHAR(200),
+    -- Address
+    address VARCHAR(300),
+    neighborhood VARCHAR(100),
+    city_id UUID REFERENCES cities(id),
+    zip_code VARCHAR(10),
+    -- Contact
+    email VARCHAR(200),
+    phone VARCHAR(30),
+    -- Status
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    -- Timestamps
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
+    created_by UUID,
+    updated_by UUID,
     -- Constraints
-    CONSTRAINT uq_suppliers_tax_id UNIQUE (tax_id),
-    CONSTRAINT ck_suppliers_tax_id_length CHECK (
-        (supplier_type = 'PJ' AND length(tax_id) = 14) OR
-        (supplier_type IN ('PF', 'MEI') AND length(tax_id) = 11)
-    )
+    CONSTRAINT uq_suppliers_document_number UNIQUE (document_number)
 );
 
-CREATE INDEX idx_suppliers_tax_id ON suppliers(tax_id);
-CREATE INDEX idx_suppliers_name ON suppliers(name);
-CREATE INDEX idx_suppliers_trade_name ON suppliers(trade_name) WHERE trade_name IS NOT NULL;
-CREATE INDEX idx_suppliers_city ON suppliers(city_id) WHERE city_id IS NOT NULL;
-CREATE INDEX idx_suppliers_active ON suppliers(is_active) WHERE is_active = TRUE;
-CREATE INDEX idx_suppliers_search ON suppliers USING gin ((name || ' ' || COALESCE(trade_name, '')) gin_trgm_ops);
+CREATE INDEX idx_suppliers_city ON suppliers (city_id);
+CREATE INDEX idx_suppliers_legal_name_trgm ON suppliers USING gin (legal_name gin_trgm_ops);
+CREATE INDEX idx_suppliers_document_number_trgm ON suppliers USING gin (document_number gin_trgm_ops);
+CREATE INDEX idx_suppliers_is_active ON suppliers (is_active);
 
-CREATE TRIGGER set_timestamp_suppliers
-BEFORE UPDATE ON suppliers
-FOR EACH ROW
-EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER set_suppliers_updated_at
+    BEFORE UPDATE ON suppliers
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

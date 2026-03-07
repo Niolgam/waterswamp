@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS catmat_pdms CASCADE;
