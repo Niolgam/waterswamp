@@ -59,11 +59,15 @@ pub trait UnitConversionRepositoryPort: Send + Sync {
         &self,
         from_unit_id: Uuid,
         to_unit_id: Uuid,
+        catmat_id: Option<Uuid>,
+        description: Option<&str>,
         conversion_factor: rust_decimal::Decimal,
     ) -> Result<UnitConversionDto, RepositoryError>;
     async fn update(
         &self,
         id: Uuid,
+        catmat_id: Option<Uuid>,
+        description: Option<&str>,
         conversion_factor: rust_decimal::Decimal,
     ) -> Result<UnitConversionDto, RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;

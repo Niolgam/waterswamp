@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS catser_divisions CASCADE;

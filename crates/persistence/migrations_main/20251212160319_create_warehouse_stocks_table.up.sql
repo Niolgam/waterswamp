@@ -3,7 +3,7 @@ CREATE TABLE warehouse_stocks (
 
     -- Relacionamentos
     warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
-    catalog_item_id UUID NOT NULL REFERENCES catalog_items(id) ON DELETE RESTRICT,
+    catalog_item_id UUID NOT NULL REFERENCES catmat_items(id) ON DELETE RESTRICT,
 
     -- Quantidades (Estado Atual)
     quantity DECIMAL(15, 3) NOT NULL DEFAULT 0 CHECK (quantity >= 0),

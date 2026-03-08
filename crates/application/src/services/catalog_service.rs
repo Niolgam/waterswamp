@@ -90,7 +90,7 @@ impl CatalogService {
         if payload.conversion_factor <= rust_decimal::Decimal::ZERO {
             return Err(ServiceError::BadRequest("Fator de conversão deve ser maior que zero".to_string()));
         }
-        self.conversion_repo.create(payload.from_unit_id, payload.to_unit_id, payload.conversion_factor).await.map_err(ServiceError::from)
+        self.conversion_repo.create(payload.from_unit_id, payload.to_unit_id, payload.catmat_id, payload.description.as_deref(), payload.conversion_factor).await.map_err(ServiceError::from)
     }
 
     pub async fn get_unit_conversion(&self, id: Uuid) -> Result<UnitConversionWithDetailsDto, ServiceError> {
@@ -102,7 +102,7 @@ impl CatalogService {
         if payload.conversion_factor <= rust_decimal::Decimal::ZERO {
             return Err(ServiceError::BadRequest("Fator de conversão deve ser maior que zero".to_string()));
         }
-        self.conversion_repo.update(id, payload.conversion_factor).await.map_err(ServiceError::from)
+        self.conversion_repo.update(id, payload.catmat_id, payload.description.as_deref(), payload.conversion_factor).await.map_err(ServiceError::from)
     }
 
     pub async fn delete_unit_conversion(&self, id: Uuid) -> Result<bool, ServiceError> {

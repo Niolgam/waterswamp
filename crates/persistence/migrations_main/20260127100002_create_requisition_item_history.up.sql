@@ -108,7 +108,7 @@ BEGIN
     
     -- Buscar nome do item do catálogo
     SELECT name INTO v_catalog_name 
-    FROM catalog_items 
+    FROM catmat_items 
     WHERE id = COALESCE(NEW.catalog_item_id, OLD.catalog_item_id);
     
     IF TG_OP = 'INSERT' THEN
