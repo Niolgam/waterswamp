@@ -322,19 +322,22 @@ async fn test_create_organization_duplicate_cnpj() {
     let cnpj = format!("{:014}", rand::random::<u64>() % 100000000000000);
 
     // First creation should succeed
-    app.api
+    let first_response = app
+        .api
         .post("/api/admin/organizational/organizations")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "acronym": random_code(),
             "name": random_name("Organization"),
             "cnpj": cnpj,
-            "ug_code": 123456,
-            "siorg_code": 789012,
+            "ug_code": rand::random::<u32>() % 1000000,
+            "siorg_code": random_numeric_code(),
             "is_main_organization": false,
             "is_active": true
         }))
         .await;
+
+    assert_eq!(first_response.status_code(), StatusCode::CREATED);
 
     // Second creation with same CNPJ should fail
     let response = app
@@ -345,8 +348,8 @@ async fn test_create_organization_duplicate_cnpj() {
             "acronym": random_code(),
             "name": random_name("Organization"),
             "cnpj": cnpj,
-            "ug_code": 654321,
-            "siorg_code": 210987,
+            "ug_code": rand::random::<u32>() % 1000000,
+            "siorg_code": random_numeric_code(),
             "is_main_organization": false,
             "is_active": true
         }))

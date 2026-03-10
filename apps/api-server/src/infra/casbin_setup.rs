@@ -1,5 +1,6 @@
 pub use crate::extractors::current_user::CurrentUser;
 use crate::state::SharedEnforcer;
+use crate::utils::constants::{ROLE_ADMIN, ROLE_USER};
 use anyhow::{Context, Result};
 use axum::http::request::Parts;
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
@@ -75,19 +76,38 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         }
     }
 
-    info!("Iniciando seeding de usuários de teste...");
+    info!("Iniciando seeding de usuários...");
 
+    let vinicius_hash =
+        tokio::task::spawn_blocking(move || security::hash_password("password123")).await??;
     let alice_hash =
         tokio::task::spawn_blocking(move || security::hash_password("password123")).await??;
     let bob_hash =
         tokio::task::spawn_blocking(move || security::hash_password("password123")).await??;
 
+    // Usuário admin principal (criado na inicialização do sistema)
+    let vinicius_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO users (username, email, password_hash, role)
+        VALUES ('vinicius', 'vinicius@waterswamp.com', $1, 'admin')
+        ON CONFLICT (username) DO UPDATE
+        SET password_hash = EXCLUDED.password_hash,
+            role = 'admin'
+        RETURNING id
+        "#,
+    )
+    .bind(&vinicius_hash)
+    .fetch_one(pool)
+    .await?;
+
+    // Usuários auxiliares para testes
     let alice_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO users (username, email, password_hash)
-        VALUES ('alice', 'alice@temp.example.com', $1)
+        INSERT INTO users (username, email, password_hash, role)
+        VALUES ('alice', 'alice@temp.example.com', $1, 'admin')
         ON CONFLICT (username) DO UPDATE
-        SET password_hash = EXCLUDED.password_hash
+        SET password_hash = EXCLUDED.password_hash,
+            role = 'admin'
         RETURNING id
         "#,
     )
@@ -97,10 +117,11 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
 
     let bob_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO users (username, email, password_hash)
-        VALUES ('bob','bob@temp.example.com', $1)
+        INSERT INTO users (username, email, password_hash, role)
+        VALUES ('bob', 'bob@temp.example.com', $1, 'user')
         ON CONFLICT (username) DO UPDATE
-        SET password_hash = EXCLUDED.password_hash
+        SET password_hash = EXCLUDED.password_hash,
+            role = 'user'
         RETURNING id
         "#,
     )
@@ -108,17 +129,20 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
     .fetch_one(pool)
     .await?;
 
-    info!("Usuários criados: alice={}, bob={}", alice_id, bob_id);
+    info!("Usuários criados: vinicius={}, alice={}, bob={}", vinicius_id, alice_id, bob_id);
 
     enforcer
-        .add_grouping_policy(vec![alice_id.to_string(), "ROLE_ADMIN".to_string()])
+        .add_grouping_policy(vec![vinicius_id.to_string(), ROLE_ADMIN.to_string()])
         .await?;
     enforcer
-        .add_grouping_policy(vec![bob_id.to_string(), "ROLE_USER".to_string()])
+        .add_grouping_policy(vec![alice_id.to_string(), ROLE_ADMIN.to_string()])
+        .await?;
+    enforcer
+        .add_grouping_policy(vec![bob_id.to_string(), ROLE_USER.to_string()])
         .await?;
 
     enforcer
-        .add_grouping_policy(vec!["ROLE_ADMIN".to_string(), "ROLE_USER".to_string()])
+        .add_grouping_policy(vec![ROLE_ADMIN.to_string(), ROLE_USER.to_string()])
         .await?;
 
     if let Err(e) = enforcer.save_policy().await {
@@ -130,7 +154,7 @@ async fn seed_policies(enforcer: &mut Enforcer, pool: &PgPool) -> Result<()> {
         }
     }
 
-    info!("Grupos do Casbin associados aos UUIDs dos usuários.");
+    info!("Grupos do Casbin associados ao UUID do usuário admin.");
 
     Ok(())
 }

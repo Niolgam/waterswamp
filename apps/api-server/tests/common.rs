@@ -80,24 +80,18 @@ pub async fn spawn_app() -> TestApp {
     let app = build(app_state);
     let api = TestServer::new(app).unwrap();
 
-    // Seed opcional (ignora erros se já existir)
-    let alice_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'alice'")
-        .fetch_optional(&pool_auth)
+    // Usa o usuário "vinicius" (admin) criado pelo seed do Casbin
+    let vinicius_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'vinicius'")
+        .fetch_one(&pool_auth)
         .await
-        .unwrap_or_default()
-        .unwrap_or_default();
-    let bob_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'bob'")
-        .fetch_optional(&pool_auth)
-        .await
-        .unwrap_or_default()
-        .unwrap_or_default();
+        .expect("Usuário 'vinicius' não encontrado. O seed do Casbin deve criá-lo.");
 
     TestApp {
         api,
         db_auth: pool_auth,
         db_logs: pool_logs,
-        admin_token: generate_test_token(alice_id),
-        user_token: generate_test_token(bob_id),
+        admin_token: generate_test_token(vinicius_id),
+        user_token: generate_test_token(vinicius_id),
         email_service,
     }
 }
