@@ -388,15 +388,16 @@ async fn test_admin_delete_user_and_cannot_delete_self() {
 
     // 3. Tentar apagar 'alice' (o próprio admin) (DEVE FALHAR)
     // (Temos de ir buscar o ID da 'alice' à DB, tal como o common.rs faz)
-    let alice_id = sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'alice'")
-        .fetch_one(&app.db_auth)
-        .await
-        .expect("Alice não encontrada no seed");
+    let vinicius_id =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM users WHERE username = 'vinicius'")
+            .fetch_one(&app.db_auth)
+            .await
+            .expect("Vinicius não encontrado no seed");
 
     let delete_self_response = app
         .api
-        .delete(&format!("/api/admin/users/{}", alice_id))
-        .add_header("Authorization", format!("Bearer {}", app.admin_token)) // Token de Alice
+        .delete(&format!("/api/admin/users/{}", vinicius_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     // O handler admin_delete_user retorna AppError::Forbidden
