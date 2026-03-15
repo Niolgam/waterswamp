@@ -12,7 +12,7 @@ async fn test_login_success() {
     let app = common::spawn_app().await;
 
     // Create unique test user to avoid conflicts with parallel tests
-    let (username, _email, password) = common::create_test_user(&app.db_auth)
+    let (username, _email, password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -57,7 +57,7 @@ async fn test_login_fail_wrong_password() {
     let app = common::spawn_app().await;
 
     // Create unique test user
-    let (username, _email, _password) = common::create_test_user(&app.db_auth)
+    let (username, _email, _password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -121,7 +121,7 @@ async fn test_refresh_token_rotation_success() {
     let app = common::spawn_app().await;
 
     // Create unique test user and login
-    let (username, _email, password) = common::create_test_user(&app.db_auth)
+    let (username, _email, password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -184,7 +184,7 @@ async fn test_refresh_token_rotation_success() {
 async fn test_refresh_token_revoked_after_use() {
     let app = common::spawn_app().await;
 
-    let (username, _email, password) = common::create_test_user(&app.db_auth)
+    let (username, _email, password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -242,7 +242,7 @@ async fn test_refresh_token_revoked_after_use() {
 async fn test_refresh_token_theft_detection_revokes_family() {
     let app = common::spawn_app().await;
 
-    let (username, _email, password) = common::create_test_user(&app.db_auth)
+    let (username, _email, password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -416,7 +416,7 @@ async fn test_logout_success() {
     let app = common::spawn_app().await;
 
     // Create unique test user and login
-    let (username, _email, password) = common::create_test_user(&app.db_auth)
+    let (username, _email, password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
         .await
         .expect("Failed to create test user");
 

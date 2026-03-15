@@ -107,6 +107,7 @@ jobs:
           WS_AUTH_DATABASE_URL: postgres://postgres:test_password@localhost:5432/auth_db
           WS_LOGS_DATABASE_URL: postgres://postgres:test_password@localhost:5433/logs_db
           WS_JWT_SECRET: test_jwt_secret_for_ci
+          WS_FIELD_ENCRYPTION_KEY: ${{ secrets.WS_FIELD_ENCRYPTION_KEY }}
           DISABLE_RATE_LIMIT: "true"
         run: cargo test --test '*' -- --nocapture
 
@@ -260,9 +261,10 @@ jobs:
 # SECRETS NECESSÁRIOS (Settings → Secrets and variables → Actions)
 # =============================================================================
 #
-# GITHUB_TOKEN          – automático, gerado pelo GitHub
-# KUBECONFIG_STAGING    – `cat ~/.kube/config-staging | base64`
-# KUBECONFIG_PRODUCTION – `cat ~/.kube/config-prod | base64`
-# CODECOV_TOKEN         – obtido em https://codecov.io  (opcional)
+# GITHUB_TOKEN             – automático, gerado pelo GitHub
+# KUBECONFIG_STAGING       – `cat ~/.kube/config-staging | base64`
+# KUBECONFIG_PRODUCTION    – `cat ~/.kube/config-prod | base64`
+# CODECOV_TOKEN            – obtido em https://codecov.io  (opcional)
+# WS_FIELD_ENCRYPTION_KEY  – `openssl rand -hex 32` (64-char hex, AES-256 key)
 #
 # =============================================================================
