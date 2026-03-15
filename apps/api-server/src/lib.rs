@@ -80,6 +80,7 @@ use persistence::repositories::{
 };
 
 // Core & Infra
+use core_services::field_encryption;
 use core_services::jwt::JwtService;
 use email_service::{EmailConfig, EmailSender, EmailService}; // Removido MockEmailService
 
@@ -109,13 +110,17 @@ pub fn build_application_state(
 ) -> state::AppState {
     let audit_service = AuditService::new(pool_logs.clone());
 
+    let enc_key = field_encryption::parse_key(&config.field_encryption_key)
+        .expect("WS_FIELD_ENCRYPTION_KEY must be a valid 64-char hex string (openssl rand -hex 32)");
+
     let user_repo_port: Arc<dyn UserRepositoryPort> =
-        Arc::new(UserRepository::new(pool_auth.clone()));
+        Arc::new(UserRepository::new(pool_auth.clone(), enc_key));
 
     let auth_repo_port: Arc<dyn AuthRepositoryPort> =
         Arc::new(AuthRepository::new(pool_auth.clone()));
 
-    let mfa_repo_port: Arc<dyn MfaRepositoryPort> = Arc::new(MfaRepository::new(pool_auth.clone()));
+    let mfa_repo_port: Arc<dyn MfaRepositoryPort> =
+        Arc::new(MfaRepository::new(pool_auth.clone(), enc_key));
 
     let auth_service = Arc::new(AuthService::new(
         user_repo_port.clone(),
@@ -374,6 +379,7 @@ pub fn build_application_state(
         fueling_service,
         vehicle_fine_service,
         config,
+        field_encryption_key: enc_key,
 
         site_repository: site_repo_port,
         building_repository: building_repo_port,

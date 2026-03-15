@@ -189,7 +189,7 @@ pub async fn session_login(
     })?;
 
     // 2. Find user
-    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+    let user_repo = UserRepository::new(state.db_pool_auth.clone(), state.field_encryption_key);
     let user_info = user_repo
         .find_for_login(&payload.username)
         .await?
@@ -443,7 +443,7 @@ pub async fn session_info(
         .ok_or_else(|| AppError::Unauthorized("Invalid or expired session".to_string()))?;
 
     // 2. Get username
-    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+    let user_repo = UserRepository::new(state.db_pool_auth.clone(), state.field_encryption_key);
     let user = user_repo
         .find_by_id(session.user_id)
         .await?

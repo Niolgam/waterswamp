@@ -1,4 +1,70 @@
 use anyhow::{Context, Result};
+
+// ---------------------------------------------------------------------------
+// SSRF protection
+// ---------------------------------------------------------------------------
+
+const COMPRAS_ALLOWED_HOSTS: &[&str] = &[
+    "compras.gov.br",
+    "dadosabertos.compras.gov.br",
+    "api.compras.gov.br",
+];
+
+fn ssrf_validate(url: &str, allowed_hosts: &[&str]) -> Result<()> {
+    let host = extract_host(url)
+        .ok_or_else(|| anyhow::anyhow!("SSRF: could not parse host from URL '{}'", url))?;
+
+    if is_private_host(host) {
+        anyhow::bail!("SSRF: URL '{}' resolves to a private/loopback address", url);
+    }
+
+    let allowed = allowed_hosts
+        .iter()
+        .any(|&a| host == a || host.ends_with(&format!(".{}", a)));
+
+    if !allowed {
+        anyhow::bail!(
+            "SSRF: host '{}' is not in the allowed list {:?}",
+            host,
+            allowed_hosts
+        );
+    }
+    Ok(())
+}
+
+fn extract_host(url: &str) -> Option<&str> {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+    let end = rest
+        .find(|c| c == '/' || c == ':' || c == '?' || c == '#')
+        .unwrap_or(rest.len());
+    let host = &rest[..end];
+    if host.is_empty() { None } else { Some(host) }
+}
+
+fn is_private_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
+        || host.starts_with("10.")
+        || host.starts_with("192.168.")
+        || host.starts_with("169.254.")
+        || host.starts_with("0.")
+        || is_172_private(host)
+}
+
+fn is_172_private(host: &str) -> bool {
+    if let Some(rest) = host.strip_prefix("172.") {
+        if let Some(second) = rest.split('.').next() {
+            if let Ok(n) = second.parse::<u8>() {
+                return (16..=31).contains(&n);
+            }
+        }
+    }
+    false
+}
+
+// ---------------------------------------------------------------------------
+
 use domain::models::catalog::{
     ComprasGovClasseMaterial, ComprasGovClasseServico, ComprasGovDivisionService,
     ComprasGovGrupoMaterial, ComprasGovGrupoServico, ComprasGovItemMaterial,
@@ -16,6 +82,11 @@ pub struct ComprasGovClient {
 
 impl ComprasGovClient {
     pub fn new(catmat_base_url: String, catser_base_url: String) -> Result<Self> {
+        ssrf_validate(&catmat_base_url, COMPRAS_ALLOWED_HOSTS)
+            .context("SSRF validation failed for CATMAT_BASE_URL")?;
+        ssrf_validate(&catser_base_url, COMPRAS_ALLOWED_HOSTS)
+            .context("SSRF validation failed for CATSER_BASE_URL")?;
+
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(10))
@@ -29,9 +100,14 @@ impl ComprasGovClient {
         })
     }
 
-    pub fn update_urls(&mut self, catmat_base_url: String, catser_base_url: String) {
+    pub fn update_urls(&mut self, catmat_base_url: String, catser_base_url: String) -> Result<()> {
+        ssrf_validate(&catmat_base_url, COMPRAS_ALLOWED_HOSTS)
+            .context("SSRF validation failed for new CATMAT URL")?;
+        ssrf_validate(&catser_base_url, COMPRAS_ALLOWED_HOSTS)
+            .context("SSRF validation failed for new CATSER URL")?;
         self.catmat_base_url = catmat_base_url;
         self.catser_base_url = catser_base_url;
+        Ok(())
     }
 
     // ========================================================================

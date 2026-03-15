@@ -63,6 +63,8 @@ pub struct AppState {
     pub fueling_service: Arc<FuelingService>,
     pub vehicle_fine_service: Arc<VehicleFineService>,
     pub config: Arc<Config>,
+    /// AES-256-GCM key for field-level encryption (email, MFA secrets).
+    pub field_encryption_key: [u8; 32],
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,
     pub building_repository: Arc<dyn BuildingRepositoryPort>,
