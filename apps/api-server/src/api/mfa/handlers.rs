@@ -105,8 +105,8 @@ pub async fn disable_mfa(
         return Err(AppError::Validation(e));
     }
 
-    let mfa_repo = MfaRepository::new(state.db_pool_auth.clone());
-    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+    let mfa_repo = MfaRepository::new(state.db_pool_auth.clone(), state.field_encryption_key);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone(), state.field_encryption_key);
 
     // 1. Verify Password
     let stored_hash = user_repo
@@ -167,7 +167,7 @@ pub async fn get_status(
     State(state): State<AppState>,
     current_user: CurrentUser,
 ) -> Result<Json<MfaStatusResponse>, AppError> {
-    let mfa_repo = MfaRepository::new(state.db_pool_auth.clone());
+    let mfa_repo = MfaRepository::new(state.db_pool_auth.clone(), state.field_encryption_key);
 
     let enabled = mfa_repo.is_mfa_enabled(current_user.id).await?;
     let backup_remaining = if enabled {
@@ -188,8 +188,8 @@ pub async fn regenerate_backup_codes(
     current_user: CurrentUser,
     Json(payload): Json<MfaRegenerateBackupCodesRequest>,
 ) -> Result<Json<MfaBackupCodesResponse>, AppError> {
-    let mfa_repo = MfaRepository::new(state.db_pool_auth.clone());
-    let user_repo = UserRepository::new(state.db_pool_auth.clone());
+    let mfa_repo = MfaRepository::new(state.db_pool_auth.clone(), state.field_encryption_key);
+    let user_repo = UserRepository::new(state.db_pool_auth.clone(), state.field_encryption_key);
 
     // 1. Verify Password
     let stored_hash = user_repo

@@ -3,6 +3,65 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+// ---------------------------------------------------------------------------
+// SSRF protection
+// ---------------------------------------------------------------------------
+
+const SIORG_ALLOWED_HOSTS: &[&str] = &["estruturaorganizacional.dados.gov.br"];
+
+fn ssrf_validate(url: &str, allowed_hosts: &[&str]) -> Result<()> {
+    let host = extract_host(url)
+        .ok_or_else(|| anyhow::anyhow!("SSRF: could not parse host from URL '{}'", url))?;
+
+    if is_private_host(host) {
+        anyhow::bail!("SSRF: URL '{}' resolves to a private/loopback address", url);
+    }
+
+    let allowed = allowed_hosts
+        .iter()
+        .any(|&a| host == a || host.ends_with(&format!(".{}", a)));
+
+    if !allowed {
+        anyhow::bail!(
+            "SSRF: host '{}' is not in the allowed list {:?}",
+            host,
+            allowed_hosts
+        );
+    }
+    Ok(())
+}
+
+fn extract_host(url: &str) -> Option<&str> {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+    let end = rest
+        .find(|c| c == '/' || c == ':' || c == '?' || c == '#')
+        .unwrap_or(rest.len());
+    let host = &rest[..end];
+    if host.is_empty() { None } else { Some(host) }
+}
+
+fn is_private_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "0.0.0.0")
+        || host.starts_with("10.")
+        || host.starts_with("192.168.")
+        || host.starts_with("169.254.")
+        || host.starts_with("0.")
+        || is_172_private(host)
+}
+
+fn is_172_private(host: &str) -> bool {
+    if let Some(rest) = host.strip_prefix("172.") {
+        if let Some(second) = rest.split('.').next() {
+            if let Ok(n) = second.parse::<u8>() {
+                return (16..=31).contains(&n);
+            }
+        }
+    }
+    false
+}
+
 // ============================================================================
 // SIORG API Response Types
 // ============================================================================
@@ -204,6 +263,9 @@ impl SiorgClient {
     /// Cria um novo cliente da API SIORG.
     /// `_api_token` é aceito por compatibilidade, mas a API é pública e não exige autenticação.
     pub fn new(base_url: String, _api_token: Option<String>) -> Result<Self> {
+        ssrf_validate(&base_url, SIORG_ALLOWED_HOSTS)
+            .context("SSRF validation failed for SIORG_API_URL")?;
+
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(10))

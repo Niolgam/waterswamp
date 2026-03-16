@@ -98,7 +98,7 @@ async fn test_api_auth_login_success() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create test user using existing helper (1 argument)
-    let (username, _email, password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -200,7 +200,7 @@ async fn test_api_auth_login_with_mfa_enabled() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create user
-    let (username, _email, password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -316,7 +316,7 @@ async fn test_api_auth_register_duplicate_username() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create first user
-    let (username, _email, _password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, _password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -351,7 +351,7 @@ async fn test_api_auth_register_duplicate_email() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create first user
-    let (username, _email, _password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, _password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -525,7 +525,7 @@ async fn test_api_auth_refresh_token_success() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create and login user
-    let (username, _email, password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
     let (_, refresh_token) = login_user(&server, &username, &password).await;
@@ -561,7 +561,7 @@ async fn test_api_auth_refresh_token_reuse_detection() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create and login user
-    let (username, _email, password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
     let (_, refresh_token) = login_user(&server, &username, &password).await;
@@ -632,7 +632,7 @@ async fn test_api_auth_logout_success() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create and login user
-    let (username, _email, password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
     let (_, refresh_token) = login_user(&server, &username, &password).await;
@@ -676,7 +676,7 @@ async fn test_api_auth_forgot_password_existing_email() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create user
-    let (username, _email, _password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, _password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
 
@@ -757,7 +757,7 @@ async fn test_api_auth_reset_password_success() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create user
-    let (username, _email, old_password) = create_test_user(&state.db_pool_auth)
+    let (username, _email, old_password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
         .await
         .expect("Failed to create test user");
 

@@ -199,7 +199,8 @@ impl CatalogService {
             return Err(ServiceError::Conflict(format!("PDM CATMAT com código '{}' já existe", payload.code)));
         }
         let _ = self.catmat_class_repo.find_by_id(payload.class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
-        self.catmat_pdm_repo.create(payload.class_id, &payload.code, &payload.description, payload.is_active, "pending").await.map_err(ServiceError::from)
+        let classification = payload.material_classification.unwrap_or(MaterialClassification::Stockable);
+        self.catmat_pdm_repo.create(payload.class_id, &payload.code, &payload.description, classification, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
     pub async fn get_catmat_pdm(&self, id: Uuid) -> Result<CatmatPdmWithDetailsDto, ServiceError> {
@@ -220,7 +221,7 @@ impl CatalogService {
         if let Some(class_id) = payload.class_id {
             let _ = self.catmat_class_repo.find_by_id(class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
         }
-        self.catmat_pdm_repo.update(id, payload.class_id, payload.code.as_deref(), payload.description.as_deref(), payload.is_active).await?;
+        self.catmat_pdm_repo.update(id, payload.class_id, payload.code.as_deref(), payload.description.as_deref(), payload.material_classification, payload.is_active).await?;
         self.get_catmat_pdm(id).await
     }
 

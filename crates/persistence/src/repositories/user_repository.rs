@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use core_services::field_encryption;
 use domain::errors::RepositoryError;
 use domain::models::{UserDto, UserDtoExtended, UserLoginInfo};
 use domain::ports::UserRepositoryPort;
@@ -8,36 +9,135 @@ use uuid::Uuid;
 
 use crate::db_utils::map_db_error;
 
+// ---------------------------------------------------------------------------
+// Raw DB row types — email column contains AES-256-GCM ciphertext at rest.
+// We do NOT use `query_as::<_, UserDto>()` directly because the Email value
+// object would reject the ciphertext during TryFrom validation.
+// ---------------------------------------------------------------------------
+
+#[derive(sqlx::FromRow)]
+struct RawUserRow {
+    id: Uuid,
+    username: String,
+    email: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct RawUserExtendedRow {
+    id: Uuid,
+    username: String,
+    email: String,
+    role: String,
+    email_verified: bool,
+    email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
+    mfa_enabled: bool,
+    is_banned: bool,
+    banned_at: Option<chrono::DateTime<chrono::Utc>>,
+    banned_reason: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+// ---------------------------------------------------------------------------
+
 #[derive(Clone)]
 pub struct UserRepository {
     pool: PgPool,
+    encryption_key: [u8; 32],
 }
 
 impl UserRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: PgPool, encryption_key: [u8; 32]) -> Self {
+        Self {
+            pool,
+            encryption_key,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    fn encrypt_email(&self, email: &str) -> Result<String, RepositoryError> {
+        field_encryption::encrypt_field(email, &self.encryption_key)
+            .map_err(|e| RepositoryError::InvalidData(e.to_string()))
+    }
+
+    /// Decrypts email ciphertext. Falls back to returning the raw value during
+    /// the migration period when rows may still contain plaintext.
+    fn decrypt_email(&self, raw: &str) -> Result<String, RepositoryError> {
+        match field_encryption::decrypt_field(raw, &self.encryption_key) {
+            Ok(plain) => Ok(plain),
+            // If decryption fails the value is likely a legacy plaintext email.
+            Err(_) => Ok(raw.to_string()),
+        }
+    }
+
+    fn email_index(&self, email: &str) -> String {
+        field_encryption::blind_index(email, &self.encryption_key)
+    }
+
+    fn to_user_dto(&self, row: RawUserRow) -> Result<UserDto, RepositoryError> {
+        let email_plain = self.decrypt_email(&row.email)?;
+        let email = Email::try_from(email_plain)
+            .map_err(|e| RepositoryError::InvalidData(e))?;
+        let username = Username::try_from(row.username)
+            .map_err(|e| RepositoryError::InvalidData(e))?;
+        Ok(UserDto {
+            id: row.id,
+            username,
+            email,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+
+    fn to_user_dto_extended(&self, row: RawUserExtendedRow) -> Result<UserDtoExtended, RepositoryError> {
+        let email_plain = self.decrypt_email(&row.email)?;
+        let email = Email::try_from(email_plain)
+            .map_err(|e| RepositoryError::InvalidData(e))?;
+        let username = Username::try_from(row.username)
+            .map_err(|e| RepositoryError::InvalidData(e))?;
+        Ok(UserDtoExtended {
+            id: row.id,
+            username,
+            email,
+            role: row.role,
+            email_verified: row.email_verified,
+            email_verified_at: row.email_verified_at,
+            mfa_enabled: row.mfa_enabled,
+            is_banned: row.is_banned,
+            banned_at: row.banned_at,
+            banned_reason: row.banned_reason,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
     }
 }
 
-// REMOVIDO: Lifetime <'a> do impl e do Trait
+// ---------------------------------------------------------------------------
+
 #[async_trait]
 impl UserRepositoryPort for UserRepository {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserDto>, RepositoryError> {
-        sqlx::query_as::<_, UserDto>(
+        let row: Option<RawUserRow> = sqlx::query_as(
             "SELECT id, username, email, created_at, updated_at FROM users WHERE id = $1",
         )
         .bind(id)
-        // ALTERADO: &self.pool (referência para o owned) em vez de self.pool (que já era ref)
         .fetch_optional(&self.pool)
         .await
-        .map_err(map_db_error)
+        .map_err(map_db_error)?;
+
+        row.map(|r| self.to_user_dto(r)).transpose()
     }
 
     async fn find_extended_by_id(
         &self,
         id: Uuid,
     ) -> Result<Option<UserDtoExtended>, RepositoryError> {
-        sqlx::query_as::<_, UserDtoExtended>(
+        let row: Option<RawUserExtendedRow> = sqlx::query_as(
             r#"
             SELECT
                 id, username, email, role,
@@ -51,7 +151,9 @@ impl UserRepositoryPort for UserRepository {
         .bind(id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(map_db_error)
+        .map_err(map_db_error)?;
+
+        row.map(|r| self.to_user_dto_extended(r)).transpose()
     }
 
     async fn get_password_hash(&self, id: Uuid) -> Result<Option<String>, RepositoryError> {
@@ -77,41 +179,54 @@ impl UserRepositoryPort for UserRepository {
         &self,
         username: &Username,
     ) -> Result<Option<UserDto>, RepositoryError> {
-        sqlx::query_as::<_, UserDto>(
+        let row: Option<RawUserRow> = sqlx::query_as(
             "SELECT id, username, email, created_at, updated_at FROM users WHERE username = $1",
         )
         .bind(username.as_str())
         .fetch_optional(&self.pool)
         .await
-        .map_err(map_db_error)
+        .map_err(map_db_error)?;
+
+        row.map(|r| self.to_user_dto(r)).transpose()
     }
 
     async fn find_by_email(&self, email: &Email) -> Result<Option<UserDto>, RepositoryError> {
-        sqlx::query_as::<_, UserDto>(
-            "SELECT id, username, email, created_at, updated_at FROM users WHERE LOWER(email) = LOWER($1)",
+        let idx = self.email_index(email.as_str());
+        let row: Option<RawUserRow> = sqlx::query_as(
+            "SELECT id, username, email, created_at, updated_at \
+             FROM users WHERE email_index = $1",
         )
-        .bind(email.as_str())
+        .bind(&idx)
         .fetch_optional(&self.pool)
         .await
-        .map_err(map_db_error)
+        .map_err(map_db_error)?;
+
+        row.map(|r| self.to_user_dto(r)).transpose()
     }
 
     async fn find_for_login(&self, identifier: &str) -> Result<Option<UserLoginInfo>, RepositoryError> {
+        // Compute the email blind index so we can match encrypted emails.
+        let idx = self.email_index(identifier);
         sqlx::query_as::<_, UserLoginInfo>(
-            "SELECT id, username, password_hash, mfa_enabled FROM users WHERE username = $1 OR LOWER(email) = LOWER($1)",
+            "SELECT id, username, password_hash, mfa_enabled \
+             FROM users WHERE username = $1 OR email_index = $2",
         )
         .bind(identifier)
+        .bind(&idx)
         .fetch_optional(&self.pool)
         .await
         .map_err(map_db_error)
     }
 
     async fn exists_by_email(&self, email: &Email) -> Result<bool, RepositoryError> {
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1))")
-            .bind(email.as_str())
-            .fetch_one(&self.pool)
-            .await
-            .map_err(map_db_error)
+        let idx = self.email_index(email.as_str());
+        sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE email_index = $1)",
+        )
+        .bind(&idx)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_error)
     }
 
     async fn exists_by_username(&self, username: &Username) -> Result<bool, RepositoryError> {
@@ -127,10 +242,11 @@ impl UserRepositoryPort for UserRepository {
         email: &Email,
         exclude_id: Uuid,
     ) -> Result<bool, RepositoryError> {
+        let idx = self.email_index(email.as_str());
         sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND id != $2)",
+            "SELECT EXISTS(SELECT 1 FROM users WHERE email_index = $1 AND id != $2)",
         )
-        .bind(email.as_str())
+        .bind(&idx)
         .bind(exclude_id)
         .fetch_one(&self.pool)
         .await
@@ -156,19 +272,25 @@ impl UserRepositoryPort for UserRepository {
         email: &Email,
         password_hash: &str,
     ) -> Result<UserDto, RepositoryError> {
-        sqlx::query_as::<_, UserDto>(
+        let email_encrypted = self.encrypt_email(email.as_str())?;
+        let email_idx = self.email_index(email.as_str());
+
+        let row: RawUserRow = sqlx::query_as(
             r#"
-            INSERT INTO users (username, email, password_hash)
-            VALUES ($1, $2, $3)
+            INSERT INTO users (username, email, email_index, password_hash)
+            VALUES ($1, $2, $3, $4)
             RETURNING id, username, email, created_at, updated_at
             "#,
         )
         .bind(username.as_str())
-        .bind(email.as_str())
+        .bind(&email_encrypted)
+        .bind(&email_idx)
         .bind(password_hash)
         .fetch_one(&self.pool)
         .await
-        .map_err(map_db_error)
+        .map_err(map_db_error)?;
+
+        self.to_user_dto(row)
     }
 
     async fn update_username(
@@ -186,12 +308,18 @@ impl UserRepositoryPort for UserRepository {
     }
 
     async fn update_email(&self, id: Uuid, new_email: &Email) -> Result<(), RepositoryError> {
-        sqlx::query("UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2")
-            .bind(new_email.as_str())
-            .bind(id)
-            .execute(&self.pool)
-            .await
-            .map_err(map_db_error)?;
+        let email_encrypted = self.encrypt_email(new_email.as_str())?;
+        let email_idx = self.email_index(new_email.as_str());
+
+        sqlx::query(
+            "UPDATE users SET email = $1, email_index = $2, updated_at = NOW() WHERE id = $3",
+        )
+        .bind(&email_encrypted)
+        .bind(&email_idx)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(map_db_error)?;
         Ok(())
     }
 
@@ -282,24 +410,18 @@ impl UserRepositoryPort for UserRepository {
         offset: i64,
         search: Option<String>,
     ) -> Result<(Vec<UserDto>, i64), RepositoryError> {
+        // Email search is disabled while the column is encrypted.
+        // Search is applied to username only.
         let mut query_str =
             "SELECT id, username, email, created_at, updated_at FROM users".to_string();
         let mut count_str = "SELECT COUNT(*) FROM users".to_string();
         let mut params_count = 0;
-        let mut conditions = Vec::new();
 
-        if let Some(_) = search {
+        if search.is_some() {
             params_count += 1;
-            conditions.push(format!(
-                "(username ILIKE ${0} OR email ILIKE ${0})",
-                params_count
-            ));
-        }
-
-        if !conditions.is_empty() {
-            let where_clause = format!(" WHERE {}", conditions.join(" AND "));
-            query_str.push_str(&where_clause);
-            count_str.push_str(&where_clause);
+            let clause = format!(" WHERE username ILIKE ${}", params_count);
+            query_str.push_str(&clause);
+            count_str.push_str(&clause);
         }
 
         query_str.push_str(&format!(
@@ -308,7 +430,7 @@ impl UserRepositoryPort for UserRepository {
             params_count + 2
         ));
 
-        let mut query = sqlx::query_as::<_, UserDto>(&query_str);
+        let mut query = sqlx::query_as::<_, RawUserRow>(&query_str);
         let mut count_query = sqlx::query_scalar::<_, i64>(&count_str);
 
         if let Some(s) = search {
@@ -319,12 +441,15 @@ impl UserRepositoryPort for UserRepository {
 
         query = query.bind(limit).bind(offset);
 
-        let users = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
+        let raw_rows = query.fetch_all(&self.pool).await.map_err(map_db_error)?;
         let total = count_query
             .fetch_one(&self.pool)
             .await
             .map_err(map_db_error)?;
 
-        Ok((users, total))
+        let users: Result<Vec<UserDto>, RepositoryError> =
+            raw_rows.into_iter().map(|r| self.to_user_dto(r)).collect();
+
+        Ok((users?, total))
     }
 }

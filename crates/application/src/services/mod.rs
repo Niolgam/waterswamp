@@ -13,3 +13,5 @@ pub mod vehicle_service;
 pub mod driver_service;
 pub mod fueling_service;
 pub mod vehicle_fine_service;
+pub mod invoice_service;
+pub mod warehouse_service;

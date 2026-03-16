@@ -17,6 +17,8 @@ pub mod vehicle;
 pub mod driver;
 pub mod fueling;
 pub mod vehicle_fine;
+pub mod invoice;
+pub mod warehouse;
 
 pub use audit::*;
 pub use auth::*;
@@ -37,3 +39,5 @@ pub use vehicle::*;
 pub use driver::*;
 pub use fueling::*;
 pub use vehicle_fine::*;
+pub use invoice::*;
+pub use warehouse::*;

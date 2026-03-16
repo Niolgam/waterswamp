@@ -1,4 +1,5 @@
 use axum_test::TestServer;
+use core_services::field_encryption;
 use core_services::jwt::JwtService;
 use domain::models::{Claims, TokenType};
 use domain::ports::EmailServicePort;
@@ -22,6 +23,15 @@ pub struct TestApp {
     pub admin_token: String,
     pub user_token: String,
     pub email_service: Arc<MockEmailService>,
+    pub field_encryption_key: [u8; 32],
+}
+
+impl TestApp {
+    /// Encrypts `plaintext` with the test app's field encryption key.
+    pub fn encrypt_field(&self, plaintext: &str) -> String {
+        field_encryption::encrypt_field(plaintext, &self.field_encryption_key)
+            .expect("encrypt_field failed in test helper")
+    }
 }
 
 pub async fn spawn_app() -> TestApp {
@@ -92,6 +102,9 @@ pub async fn spawn_app() -> TestApp {
         .await
         .expect("Usuário 'bob' não encontrado.");
 
+    let field_encryption_key = field_encryption::parse_key(&config.field_encryption_key)
+        .expect("WS_FIELD_ENCRYPTION_KEY must be a valid 64-char hex string");
+
     TestApp {
         api,
         db_auth: pool_auth,
@@ -99,6 +112,7 @@ pub async fn spawn_app() -> TestApp {
         admin_token: generate_test_token(vinicius_id),
         user_token: generate_test_token(bob_id),
         email_service,
+        field_encryption_key,
     }
 }
 
@@ -181,6 +195,7 @@ pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
 // Helpers para criar usuário no banco (bypass API)
 pub async fn create_test_user(
     pool: &PgPool,
+    enc_key: &[u8; 32],
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
     use core_services::security::hash_password;
     let counter = std::time::SystemTime::now()
@@ -196,12 +211,19 @@ pub async fn create_test_user(
     })
     .await??;
 
-    sqlx::query("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3)")
-        .bind(&username)
-        .bind(&email)
-        .bind(&hash)
-        .execute(pool)
-        .await?;
+    let encrypted_email = field_encryption::encrypt_field(&email, enc_key)
+        .expect("encrypt_field failed in create_test_user");
+    let email_index = field_encryption::blind_index(&email, enc_key);
+
+    sqlx::query(
+        "INSERT INTO users (username, email, email_index, password_hash) VALUES ($1, $2, $3, $4)",
+    )
+    .bind(&username)
+    .bind(&encrypted_email)
+    .bind(&email_index)
+    .bind(&hash)
+    .execute(pool)
+    .await?;
 
     Ok((username, email, password))
 }

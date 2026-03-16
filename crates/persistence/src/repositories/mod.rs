@@ -17,3 +17,5 @@ pub mod vehicle_repository;
 pub mod driver_repository;
 pub mod fueling_repository;
 pub mod vehicle_fine_repository;
+pub mod invoice_repository;
+pub mod warehouse_repository;

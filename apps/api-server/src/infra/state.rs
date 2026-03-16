@@ -16,6 +16,8 @@ use application::services::vehicle_service::VehicleService;
 use application::services::driver_service::DriverService;
 use application::services::fueling_service::FuelingService;
 use application::services::vehicle_fine_service::VehicleFineService;
+use application::services::invoice_service::InvoiceService;
+use application::services::warehouse_service::WarehouseService;
 use application::external::SiorgSyncService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
@@ -62,7 +64,11 @@ pub struct AppState {
     pub driver_service: Arc<DriverService>,
     pub fueling_service: Arc<FuelingService>,
     pub vehicle_fine_service: Arc<VehicleFineService>,
+    pub invoice_service: Arc<InvoiceService>,
+    pub warehouse_service: Arc<WarehouseService>,
     pub config: Arc<Config>,
+    /// AES-256-GCM key for field-level encryption (email, MFA secrets).
+    pub field_encryption_key: [u8; 32],
     // Repositories for direct access in public handlers
     pub site_repository: Arc<dyn SiteRepositoryPort>,
     pub building_repository: Arc<dyn BuildingRepositoryPort>,

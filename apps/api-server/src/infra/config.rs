@@ -19,6 +19,12 @@ pub struct Config {
 
     #[serde(rename = "jwt_public_key")]
     pub jwt_public_key: String,
+
+    /// 64-character hex-encoded 32-byte key used for field-level AES-256-GCM
+    /// encryption (email, MFA secrets). Set via WS_FIELD_ENCRYPTION_KEY.
+    /// Generate with: `openssl rand -hex 32`
+    #[serde(rename = "field_encryption_key")]
+    pub field_encryption_key: String,
 }
 
 impl Config {

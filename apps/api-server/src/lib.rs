@@ -22,6 +22,8 @@ use application::services::{
     driver_service::DriverService,
     fueling_service::FuelingService,
     vehicle_fine_service::VehicleFineService,
+    invoice_service::InvoiceService,
+    warehouse_service::WarehouseService,
     user_service::UserService,
     vehicle_service::VehicleService,
 };
@@ -45,6 +47,8 @@ use domain::ports::{
     DriverRepositoryPort,
     FuelingRepositoryPort,
     VehicleFineTypeRepositoryPort, VehicleFineRepositoryPort, VehicleFineStatusHistoryRepositoryPort,
+    InvoiceRepositoryPort, InvoiceItemRepositoryPort,
+    WarehouseRepositoryPort, WarehouseStockRepositoryPort,
     VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
 use persistence::repositories::{
@@ -72,6 +76,8 @@ use persistence::repositories::{
     driver_repository::DriverRepository,
     fueling_repository::FuelingRepository,
     vehicle_fine_repository::{VehicleFineTypeRepository, VehicleFineRepository, VehicleFineStatusHistoryRepository},
+    invoice_repository::{InvoiceRepository, InvoiceItemRepository},
+    warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
     vehicle_repository::{
         VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
         VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
@@ -80,6 +86,7 @@ use persistence::repositories::{
 };
 
 // Core & Infra
+use core_services::field_encryption;
 use core_services::jwt::JwtService;
 use email_service::{EmailConfig, EmailSender, EmailService}; // Removido MockEmailService
 
@@ -109,13 +116,17 @@ pub fn build_application_state(
 ) -> state::AppState {
     let audit_service = AuditService::new(pool_logs.clone());
 
+    let enc_key = field_encryption::parse_key(&config.field_encryption_key)
+        .expect("WS_FIELD_ENCRYPTION_KEY must be a valid 64-char hex string (openssl rand -hex 32)");
+
     let user_repo_port: Arc<dyn UserRepositoryPort> =
-        Arc::new(UserRepository::new(pool_auth.clone()));
+        Arc::new(UserRepository::new(pool_auth.clone(), enc_key));
 
     let auth_repo_port: Arc<dyn AuthRepositoryPort> =
         Arc::new(AuthRepository::new(pool_auth.clone()));
 
-    let mfa_repo_port: Arc<dyn MfaRepositoryPort> = Arc::new(MfaRepository::new(pool_auth.clone()));
+    let mfa_repo_port: Arc<dyn MfaRepositoryPort> =
+        Arc::new(MfaRepository::new(pool_auth.clone(), enc_key));
 
     let auth_service = Arc::new(AuthService::new(
         user_repo_port.clone(),
@@ -339,6 +350,20 @@ pub fn build_application_state(
         vehicle_fine_status_history_repo,
     ));
 
+    // Invoice repositories and service
+    let invoice_repo: Arc<dyn InvoiceRepositoryPort> =
+        Arc::new(InvoiceRepository::new(pool_auth.clone()));
+    let invoice_item_repo: Arc<dyn InvoiceItemRepositoryPort> =
+        Arc::new(InvoiceItemRepository::new(pool_auth.clone()));
+    let invoice_service = Arc::new(InvoiceService::new(invoice_repo, invoice_item_repo));
+
+    // Warehouse repositories and service
+    let warehouse_repo: Arc<dyn WarehouseRepositoryPort> =
+        Arc::new(WarehouseRepository::new(pool_auth.clone()));
+    let stock_repo: Arc<dyn WarehouseStockRepositoryPort> =
+        Arc::new(WarehouseStockRepository::new(pool_auth.clone()));
+    let warehouse_service = Arc::new(WarehouseService::new(warehouse_repo, stock_repo));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -373,7 +398,10 @@ pub fn build_application_state(
         driver_service,
         fueling_service,
         vehicle_fine_service,
+        invoice_service,
+        warehouse_service,
         config,
+        field_encryption_key: enc_key,
 
         site_repository: site_repo_port,
         building_repository: building_repo_port,

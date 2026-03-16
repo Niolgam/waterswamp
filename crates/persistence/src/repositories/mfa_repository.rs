@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use core_services::field_encryption;
 use domain::errors::RepositoryError;
 use domain::ports::MfaRepositoryPort;
 use sqlx::PgPool;
@@ -10,11 +11,25 @@ use crate::db_utils::map_db_error;
 #[derive(Clone)]
 pub struct MfaRepository {
     pool: PgPool,
+    encryption_key: [u8; 32],
 }
 
 impl MfaRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: PgPool, encryption_key: [u8; 32]) -> Self {
+        Self {
+            pool,
+            encryption_key,
+        }
+    }
+
+    fn encrypt(&self, plaintext: &str) -> Result<String, RepositoryError> {
+        field_encryption::encrypt_field(plaintext, &self.encryption_key)
+            .map_err(|e| RepositoryError::InvalidData(e.to_string()))
+    }
+
+    fn decrypt(&self, ciphertext: &str) -> Result<String, RepositoryError> {
+        field_encryption::decrypt_field(ciphertext, &self.encryption_key)
+            .map_err(|e| RepositoryError::InvalidData(e.to_string()))
     }
 }
 
@@ -27,6 +42,8 @@ impl MfaRepositoryPort for MfaRepository {
         token_hash: &str,
         expires_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
+        let secret_encrypted = self.encrypt(secret)?;
+
         sqlx::query(
             r#"
             INSERT INTO mfa_setup_tokens (user_id, secret, token_hash, expires_at)
@@ -34,7 +51,7 @@ impl MfaRepositoryPort for MfaRepository {
             "#,
         )
         .bind(user_id)
-        .bind(secret)
+        .bind(secret_encrypted)
         .bind(token_hash)
         .bind(expires_at)
         .execute(&self.pool)
@@ -60,7 +77,13 @@ impl MfaRepositoryPort for MfaRepository {
         .await
         .map_err(map_db_error)?;
 
-        Ok(result)
+        match result {
+            None => Ok(None),
+            Some((user_id, secret_encrypted)) => {
+                let secret = self.decrypt(&secret_encrypted)?;
+                Ok(Some((user_id, secret)))
+            }
+        }
     }
 
     async fn delete_setup_token(&self, token_hash: &str) -> Result<(), RepositoryError> {
@@ -73,17 +96,16 @@ impl MfaRepositoryPort for MfaRepository {
     }
 
     async fn enable_mfa(&self, user_id: Uuid, secret: &str) -> Result<(), RepositoryError> {
+        let secret_encrypted = self.encrypt(secret)?;
         let mut tx = self.pool.begin().await.map_err(map_db_error)?;
 
-        // 1. Salvar segredo no usuário e ativar flag
         sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $1 WHERE id = $2")
-            .bind(secret)
+            .bind(secret_encrypted)
             .bind(user_id)
             .execute(&mut *tx)
             .await
             .map_err(map_db_error)?;
 
-        // 2. Limpar tokens de setup pendentes deste usuário
         sqlx::query("DELETE FROM mfa_setup_tokens WHERE user_id = $1")
             .bind(user_id)
             .execute(&mut *tx)
@@ -97,14 +119,12 @@ impl MfaRepositoryPort for MfaRepository {
     async fn disable_mfa(&self, user_id: Uuid) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(map_db_error)?;
 
-        // Desativar no usuário
         sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
             .bind(user_id)
             .execute(&mut *tx)
             .await
             .map_err(map_db_error)?;
 
-        // Limpar códigos de backup
         sqlx::query("DELETE FROM mfa_backup_codes WHERE user_id = $1")
             .bind(user_id)
             .execute(&mut *tx)
@@ -122,18 +142,13 @@ impl MfaRepositoryPort for MfaRepository {
     ) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await.map_err(map_db_error)?;
 
-        // Limpar antigos
         sqlx::query("DELETE FROM mfa_backup_codes WHERE user_id = $1")
             .bind(user_id)
             .execute(&mut *tx)
             .await
             .map_err(map_db_error)?;
 
-        // Inserir novos
         for code in codes {
-            // Em produção, backup codes devem ser hasheados!
-            // Assumindo que 'code' aqui já vem hasheado ou estamos usando plain por enquanto.
-            // Para segurança máxima: hash aqui ou no service. Vamos assumir que o Service hasheia.
             sqlx::query("INSERT INTO mfa_backup_codes (user_id, code_hash) VALUES ($1, $2)")
                 .bind(user_id)
                 .bind(code)
@@ -163,9 +178,9 @@ impl MfaRepositoryPort for MfaRepository {
         user_id: Uuid,
         code_hash: &str,
     ) -> Result<bool, RepositoryError> {
-        // Verifica se existe um código não usado com esse hash
         let result = sqlx::query(
-            "UPDATE mfa_backup_codes SET used = TRUE, used_at = NOW() WHERE user_id = $1 AND code_hash = $2 AND used = FALSE"
+            "UPDATE mfa_backup_codes SET used = TRUE, used_at = NOW() \
+             WHERE user_id = $1 AND code_hash = $2 AND used = FALSE",
         )
         .bind(user_id)
         .bind(code_hash)
@@ -177,11 +192,17 @@ impl MfaRepositoryPort for MfaRepository {
     }
 
     async fn get_mfa_secret(&self, user_id: Uuid) -> Result<Option<String>, RepositoryError> {
-        sqlx::query_scalar("SELECT mfa_secret FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_db_error)
+        let raw: Option<String> =
+            sqlx::query_scalar("SELECT mfa_secret FROM users WHERE id = $1")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(map_db_error)?;
+
+        match raw {
+            None => Ok(None),
+            Some(encrypted) => Ok(Some(self.decrypt(&encrypted)?)),
+        }
     }
 
     async fn is_mfa_enabled(&self, user_id: Uuid) -> Result<bool, RepositoryError> {

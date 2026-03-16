@@ -68,8 +68,10 @@ async fn test_mfa_setup_already_enabled() {
         .await
         .unwrap();
 
-    sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = 'TEST123' WHERE id = $1")
+    let encrypted_test123 = app.encrypt_field("TEST123");
+    sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
         .bind(user_id)
+        .bind(&encrypted_test123)
         .execute(&app.db_auth)
         .await
         .unwrap();
@@ -176,9 +178,10 @@ async fn test_mfa_verify_with_totp() {
         .await
         .unwrap();
 
+    let encrypted_secret = app.encrypt_field(TEST_SECRET);
     sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
         .bind(user_id)
-        .bind(TEST_SECRET)
+        .bind(&encrypted_secret)
         .execute(&app.db_auth)
         .await
         .unwrap();
@@ -215,9 +218,10 @@ async fn test_mfa_verify_with_backup_code() {
     let backup_code_hashed = hash_backup_code(backup_code_plain);
 
     // Setup MFA secret
+    let encrypted_secret = app.encrypt_field(TEST_SECRET);
     sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
         .bind(user_id)
-        .bind(TEST_SECRET)
+        .bind(&encrypted_secret)
         .execute(&app.db_auth)
         .await
         .unwrap();
@@ -264,9 +268,10 @@ async fn test_mfa_status_with_backup_codes() {
         .await
         .unwrap();
 
+    let encrypted_secret = app.encrypt_field(TEST_SECRET);
     sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
         .bind(user_id)
-        .bind(TEST_SECRET)
+        .bind(&encrypted_secret)
         .execute(&app.db_auth)
         .await
         .unwrap();
@@ -305,9 +310,10 @@ async fn test_mfa_regenerate_backup_codes() {
         .await
         .unwrap();
 
+    let encrypted_secret = app.encrypt_field(TEST_SECRET);
     sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
         .bind(user_id)
-        .bind(TEST_SECRET)
+        .bind(&encrypted_secret)
         .execute(&app.db_auth)
         .await
         .unwrap();

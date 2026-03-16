@@ -537,6 +537,7 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
             group_code: r.get("group_code"),
             code: r.get("code"),
             description: r.get("description"),
+            material_classification: r.get("material_classification"),
             is_active: r.get("is_active"),
             verification_status: r.get("verification_status"),
             item_count: r.get("item_count"),
@@ -572,13 +573,14 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
         Ok(count > 0)
     }
 
-    async fn create(&self, class_id: Uuid, code: &str, description: &str, is_active: bool, verification_status: &str) -> Result<CatmatPdmDto, RepositoryError> {
+    async fn create(&self, class_id: Uuid, code: &str, description: &str, material_classification: MaterialClassification, is_active: bool, verification_status: &str) -> Result<CatmatPdmDto, RepositoryError> {
         sqlx::query_as::<_, CatmatPdmDto>(
-            "INSERT INTO catmat_pdms (class_id, code, description, is_active, verification_status) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+            "INSERT INTO catmat_pdms (class_id, code, description, material_classification, is_active, verification_status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
         )
         .bind(class_id)
         .bind(code)
         .bind(description)
+        .bind(material_classification)
         .bind(is_active)
         .bind(verification_status)
         .fetch_one(&self.pool)
@@ -586,7 +588,7 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
         .map_err(map_db_error)
     }
 
-    async fn update(&self, id: Uuid, class_id: Option<Uuid>, code: Option<&str>, description: Option<&str>, is_active: Option<bool>) -> Result<CatmatPdmDto, RepositoryError> {
+    async fn update(&self, id: Uuid, class_id: Option<Uuid>, code: Option<&str>, description: Option<&str>, material_classification: Option<MaterialClassification>, is_active: Option<bool>) -> Result<CatmatPdmDto, RepositoryError> {
         let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new("UPDATE catmat_pdms SET ");
         let mut separated = builder.separated(", ");
 
@@ -601,6 +603,10 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
         if let Some(v) = description {
             separated.push("description = ");
             separated.push_bind_unseparated(v.to_string());
+        }
+        if let Some(v) = material_classification {
+            separated.push("material_classification = ");
+            separated.push_bind_unseparated(v);
         }
         if let Some(v) = is_active {
             separated.push("is_active = ");
@@ -681,6 +687,7 @@ impl CatmatPdmRepositoryPort for CatmatPdmRepository {
             group_code: r.get("group_code"),
             code: r.get("code"),
             description: r.get("description"),
+            material_classification: r.get("material_classification"),
             is_active: r.get("is_active"),
             verification_status: r.get("verification_status"),
             item_count: r.get("item_count"),
@@ -732,6 +739,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
     async fn find_with_details_by_id(&self, id: Uuid) -> Result<Option<CatmatItemWithDetailsDto>, RepositoryError> {
         let result = sqlx::query(
             r#"SELECT i.*, p.description AS pdm_description, p.code AS pdm_code,
+                p.material_classification AS pdm_material_classification,
                 cc.id AS class_id, cc.name AS class_name, cc.code AS class_code,
                 cg.id AS group_id, cg.name AS group_name, cg.code AS group_code,
                 u.name AS unit_name, u.symbol AS unit_symbol,
@@ -754,6 +762,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             pdm_id: r.get("pdm_id"),
             pdm_description: r.get("pdm_description"),
             pdm_code: r.get("pdm_code"),
+            pdm_material_classification: r.get("pdm_material_classification"),
             class_id: r.get("class_id"),
             class_name: r.get("class_name"),
             class_code: r.get("class_code"),
@@ -909,6 +918,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
         let search_pattern = search.map(|s| format!("%{}%", s));
         let records = sqlx::query(
             r#"SELECT i.*, p.description AS pdm_description, p.code AS pdm_code,
+                p.material_classification AS pdm_material_classification,
                 cc.id AS class_id, cc.name AS class_name, cc.code AS class_code,
                 cg.id AS group_id, cg.name AS group_name, cg.code AS group_code,
                 u.name AS unit_name, u.symbol AS unit_symbol,
@@ -940,6 +950,7 @@ impl CatmatItemRepositoryPort for CatmatItemRepository {
             pdm_id: r.get("pdm_id"),
             pdm_description: r.get("pdm_description"),
             pdm_code: r.get("pdm_code"),
+            pdm_material_classification: r.get("pdm_material_classification"),
             class_id: r.get("class_id"),
             class_name: r.get("class_name"),
             class_code: r.get("class_code"),

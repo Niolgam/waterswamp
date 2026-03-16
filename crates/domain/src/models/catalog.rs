@@ -4,6 +4,24 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 // ============================
+// PDM Classification Enum
+// ============================
+
+/// Classificação de material do PDM — determina o comportamento ao postar uma NF.
+///
+/// - `STOCKABLE`  → item entra no estoque (gera ENTRY em stock_movements)
+/// - `PERMANENT`  → bem permanente (patrimônio) — sem impacto no estoque
+/// - `DIRECT_USE` → consumo/uso direto — sem impacto no estoque
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
+#[sqlx(type_name = "material_classification_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum MaterialClassification {
+    Stockable,
+    Permanent,
+    DirectUse,
+}
+
+// ============================
 // Unit of Measure DTOs
 // ============================
 
@@ -166,6 +184,8 @@ pub struct CatmatPdmDto {
     pub class_id: Uuid,
     pub code: String,
     pub description: String,
+    /// Classificação do material: STOCKABLE, PERMANENT ou DIRECT_USE
+    pub material_classification: MaterialClassification,
     pub is_active: bool,
     pub verification_status: String,
     pub created_at: DateTime<Utc>,
@@ -183,6 +203,7 @@ pub struct CatmatPdmWithDetailsDto {
     pub group_code: String,
     pub code: String,
     pub description: String,
+    pub material_classification: MaterialClassification,
     pub is_active: bool,
     pub verification_status: String,
     pub item_count: i64,
@@ -195,6 +216,8 @@ pub struct CreateCatmatPdmPayload {
     pub class_id: Uuid,
     pub code: String,
     pub description: String,
+    /// Default: STOCKABLE — itens entram no estoque por padrão
+    pub material_classification: Option<MaterialClassification>,
     pub is_active: bool,
 }
 
@@ -203,6 +226,7 @@ pub struct UpdateCatmatPdmPayload {
     pub class_id: Option<Uuid>,
     pub code: Option<String>,
     pub description: Option<String>,
+    pub material_classification: Option<MaterialClassification>,
     pub is_active: Option<bool>,
 }
 
@@ -230,6 +254,8 @@ pub struct CatmatItemWithDetailsDto {
     pub pdm_id: Uuid,
     pub pdm_description: String,
     pub pdm_code: String,
+    /// Classificação herdada do PDM: STOCKABLE, PERMANENT ou DIRECT_USE
+    pub pdm_material_classification: MaterialClassification,
     pub class_id: Uuid,
     pub class_name: String,
     pub class_code: String,
