@@ -325,30 +325,42 @@ async fn test_resend_verification_nonexistent_email() {
 async fn test_resend_verification_already_verified() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+    let unique_username = format!("already_{}", uuid::Uuid::new_v4().simple());
+    let unique_email = format!("{}@example.com", unique_username);
+
+    // 1. Criar um novo utilizador
+    let register_response = app
+        .api
+        .post("/register")
+        .json(&json!({
+            "username": unique_username,
+            "email": unique_email,
+            "password": "S3nh@Forte123!"
+        }))
+        .await;
+
+    assert_eq!(register_response.status_code(), 201);
+
+    // 2. Obter o ID do utilizador recém-criado
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&unique_username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
 
-    let email: String = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
-        .bind(user_id)
-        .fetch_one(&app.db_auth)
-        .await
-        .unwrap();
-
-    // Mark as verified
+    // 3. Marcar como verificado diretamente no banco
     sqlx::query("UPDATE users SET email_verified = TRUE WHERE id = $1")
         .bind(user_id)
         .execute(&app.db_auth)
         .await
         .unwrap();
 
-    // Try to resend
+    // 4. Tentar reenviar a verificação usando o email em texto plano
     let resend_response = app
         .api
         .post("/resend-verification")
         .json(&json!({
-            "email": email
+            "email": unique_email
         }))
         .await;
 

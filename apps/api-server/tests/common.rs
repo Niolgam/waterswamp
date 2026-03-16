@@ -76,9 +76,13 @@ pub async fn spawn_app() -> TestApp {
     let email_service_legacy: Arc<dyn EmailSender + Send + Sync> = email_service.clone();
     let email_service_port: Arc<dyn EmailServicePort> = email_service.clone();
 
+    // Parse the encryption key BEFORE moving `config`
+    let field_encryption_key = field_encryption::parse_key(&config.field_encryption_key)
+        .expect("WS_FIELD_ENCRYPTION_KEY must be a valid 64-char hex string");
+
     // --- WIRING COM FACTORY ---
     let app_state = build_application_state(
-        Arc::new(config),
+        Arc::new(config), // `config` is moved here, which is fine now
         pool_auth.clone(),
         pool_logs.clone(),
         enforcer,
@@ -101,9 +105,6 @@ pub async fn spawn_app() -> TestApp {
         .fetch_one(&pool_auth)
         .await
         .expect("Usuário 'bob' não encontrado.");
-
-    let field_encryption_key = field_encryption::parse_key(&config.field_encryption_key)
-        .expect("WS_FIELD_ENCRYPTION_KEY must be a valid 64-char hex string");
 
     TestApp {
         api,
