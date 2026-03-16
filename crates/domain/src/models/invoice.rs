@@ -1,3 +1,4 @@
+use crate::models::catalog::MaterialClassification;
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -145,10 +146,8 @@ pub struct InvoiceItemWithDetailsDto {
     pub unit_raw_name: Option<String>,
     pub unit_raw_symbol: Option<String>,
 
-    /// Herdado do PDM: item entrará no estoque ao postar a NF
-    pub is_stockable: bool,
-    /// Herdado do PDM: item é bem permanente (patrimônio) — não entra no estoque
-    pub is_permanent: bool,
+    /// Classificação herdada do PDM: STOCKABLE, PERMANENT ou DIRECT_USE
+    pub material_classification: MaterialClassification,
 
     pub quantity_raw: Decimal,
     pub unit_value_raw: Decimal,

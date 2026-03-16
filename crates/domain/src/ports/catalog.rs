@@ -128,8 +128,8 @@ pub trait CatmatPdmRepositoryPort: Send + Sync {
     async fn find_by_code(&self, code: &str) -> Result<Option<CatmatPdmDto>, RepositoryError>;
     async fn exists_by_code(&self, code: &str) -> Result<bool, RepositoryError>;
     async fn exists_by_code_excluding(&self, code: &str, exclude_id: Uuid) -> Result<bool, RepositoryError>;
-    async fn create(&self, class_id: Uuid, code: &str, description: &str, is_stockable: bool, is_permanent: bool, is_active: bool, verification_status: &str) -> Result<CatmatPdmDto, RepositoryError>;
-    async fn update(&self, id: Uuid, class_id: Option<Uuid>, code: Option<&str>, description: Option<&str>, is_stockable: Option<bool>, is_permanent: Option<bool>, is_active: Option<bool>) -> Result<CatmatPdmDto, RepositoryError>;
+    async fn create(&self, class_id: Uuid, code: &str, description: &str, material_classification: MaterialClassification, is_active: bool, verification_status: &str) -> Result<CatmatPdmDto, RepositoryError>;
+    async fn update(&self, id: Uuid, class_id: Option<Uuid>, code: Option<&str>, description: Option<&str>, material_classification: Option<MaterialClassification>, is_active: Option<bool>) -> Result<CatmatPdmDto, RepositoryError>;
     async fn update_verification_status(&self, id: Uuid, verification_status: &str) -> Result<(), RepositoryError>;
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
     async fn has_items(&self, id: Uuid) -> Result<bool, RepositoryError>;
