@@ -199,7 +199,14 @@ impl CatalogService {
             return Err(ServiceError::Conflict(format!("PDM CATMAT com código '{}' já existe", payload.code)));
         }
         let _ = self.catmat_class_repo.find_by_id(payload.class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
-        self.catmat_pdm_repo.create(payload.class_id, &payload.code, &payload.description, payload.is_active, "pending").await.map_err(ServiceError::from)
+        let is_stockable = payload.is_stockable.unwrap_or(true);
+        let is_permanent = payload.is_permanent.unwrap_or(false);
+        if is_stockable && is_permanent {
+            return Err(ServiceError::BadRequest(
+                "Um PDM não pode ser ao mesmo tempo estocável (is_stockable) e permanente (is_permanent)".to_string(),
+            ));
+        }
+        self.catmat_pdm_repo.create(payload.class_id, &payload.code, &payload.description, is_stockable, is_permanent, payload.is_active, "pending").await.map_err(ServiceError::from)
     }
 
     pub async fn get_catmat_pdm(&self, id: Uuid) -> Result<CatmatPdmWithDetailsDto, ServiceError> {
@@ -220,7 +227,15 @@ impl CatalogService {
         if let Some(class_id) = payload.class_id {
             let _ = self.catmat_class_repo.find_by_id(class_id).await?.ok_or(ServiceError::NotFound("Classe CATMAT não encontrada".to_string()))?;
         }
-        self.catmat_pdm_repo.update(id, payload.class_id, payload.code.as_deref(), payload.description.as_deref(), payload.is_active).await?;
+        // Validate mutual exclusion when both classification fields are being changed
+        let new_stockable = payload.is_stockable;
+        let new_permanent = payload.is_permanent;
+        if matches!((new_stockable, new_permanent), (Some(true), Some(true))) {
+            return Err(ServiceError::BadRequest(
+                "Um PDM não pode ser ao mesmo tempo estocável (is_stockable) e permanente (is_permanent)".to_string(),
+            ));
+        }
+        self.catmat_pdm_repo.update(id, payload.class_id, payload.code.as_deref(), payload.description.as_deref(), payload.is_stockable, payload.is_permanent, payload.is_active).await?;
         self.get_catmat_pdm(id).await
     }
 

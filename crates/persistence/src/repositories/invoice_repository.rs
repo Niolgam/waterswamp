@@ -434,6 +434,8 @@ impl InvoiceItemRepositoryPort for InvoiceItemRepository {
                       ii.catalog_item_id, ci.name AS catalog_item_name,
                       ii.unit_conversion_id,
                       ii.unit_raw_id, u.name AS unit_raw_name, u.symbol AS unit_raw_symbol,
+                      COALESCE(pdm.is_stockable, TRUE)  AS is_stockable,
+                      COALESCE(pdm.is_permanent, FALSE) AS is_permanent,
                       ii.quantity_raw, ii.unit_value_raw, ii.total_value,
                       ii.conversion_factor, ii.quantity_base, ii.unit_value_base,
                       ii.ncm, ii.cfop, ii.cest,
@@ -441,6 +443,7 @@ impl InvoiceItemRepositoryPort for InvoiceItemRepository {
                       ii.created_at
                FROM invoice_items ii
                LEFT JOIN catmat_items ci ON ci.id = ii.catalog_item_id
+               LEFT JOIN catmat_pdms pdm ON pdm.id = ci.pdm_id
                LEFT JOIN units_of_measure u ON u.id = ii.unit_raw_id
                WHERE ii.invoice_id = $1
                ORDER BY ii.created_at ASC"#,

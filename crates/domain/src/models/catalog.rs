@@ -166,6 +166,10 @@ pub struct CatmatPdmDto {
     pub class_id: Uuid,
     pub code: String,
     pub description: String,
+    /// Itens deste PDM entram no estoque ao serem lançados em NF
+    pub is_stockable: bool,
+    /// Itens são bens permanentes (patrimônio) — mutuamente exclusivo com is_stockable
+    pub is_permanent: bool,
     pub is_active: bool,
     pub verification_status: String,
     pub created_at: DateTime<Utc>,
@@ -183,6 +187,8 @@ pub struct CatmatPdmWithDetailsDto {
     pub group_code: String,
     pub code: String,
     pub description: String,
+    pub is_stockable: bool,
+    pub is_permanent: bool,
     pub is_active: bool,
     pub verification_status: String,
     pub item_count: i64,
@@ -195,6 +201,10 @@ pub struct CreateCatmatPdmPayload {
     pub class_id: Uuid,
     pub code: String,
     pub description: String,
+    /// Default: true — itens entram no estoque por padrão
+    pub is_stockable: Option<bool>,
+    /// Default: false — marcar apenas bens permanentes (patrimônio)
+    pub is_permanent: Option<bool>,
     pub is_active: bool,
 }
 
@@ -203,6 +213,8 @@ pub struct UpdateCatmatPdmPayload {
     pub class_id: Option<Uuid>,
     pub code: Option<String>,
     pub description: Option<String>,
+    pub is_stockable: Option<bool>,
+    pub is_permanent: Option<bool>,
     pub is_active: Option<bool>,
 }
 
@@ -230,6 +242,10 @@ pub struct CatmatItemWithDetailsDto {
     pub pdm_id: Uuid,
     pub pdm_description: String,
     pub pdm_code: String,
+    /// Classificação herdada do PDM: item entra no estoque quando lançado em NF
+    pub pdm_is_stockable: bool,
+    /// Classificação herdada do PDM: item é bem permanente (patrimônio)
+    pub pdm_is_permanent: bool,
     pub class_id: Uuid,
     pub class_name: String,
     pub class_code: String,

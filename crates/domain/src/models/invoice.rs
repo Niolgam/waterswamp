@@ -133,7 +133,7 @@ pub struct InvoiceItemDto {
     pub created_at: DateTime<Utc>,
 }
 
-/// Invoice item with catalog item and unit names joined
+/// Invoice item with catalog item, unit names and PDM classification joined
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct InvoiceItemWithDetailsDto {
     pub id: Uuid,
@@ -144,6 +144,11 @@ pub struct InvoiceItemWithDetailsDto {
     pub unit_raw_id: Uuid,
     pub unit_raw_name: Option<String>,
     pub unit_raw_symbol: Option<String>,
+
+    /// Herdado do PDM: item entrará no estoque ao postar a NF
+    pub is_stockable: bool,
+    /// Herdado do PDM: item é bem permanente (patrimônio) — não entra no estoque
+    pub is_permanent: bool,
 
     pub quantity_raw: Decimal,
     pub unit_value_raw: Decimal,
