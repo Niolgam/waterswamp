@@ -366,6 +366,7 @@ waterswamp/
 | `UserService` | CRUD de usuários, roles, banimento, reset de senha |
 | `VehicleService` | Gestão de frota (veículos, documentos, histórico) |
 | `VehicleFineService` | Infrações de trânsito e histórico de status |
+| `InvoiceService` | Notas fiscais: CRUD + máquina de estados (PENDING→CHECKING→CHECKED→POSTED / REJECTED / CANCELLED) |
 
 ### 5.2 Background Jobs
 
@@ -398,6 +399,7 @@ waterswamp/
 | `user.rs` | `User`, `UserExtended`, `Role`, `UserStatus` |
 | `vehicle.rs` | `Vehicle`, `VehicleDocument`, `VehicleStatusHistory`, `VehicleMake`, `VehicleModel` |
 | `vehicle_fine.rs` | `VehicleFine`, `VehicleFineType`, `VehicleFineStatusHistory` |
+| `invoice.rs` | `InvoiceDto`, `InvoiceWithDetailsDto`, `InvoiceItemDto`, `InvoiceItemWithDetailsDto`, `InvoiceStatus`, payloads de CRUD e transições |
 
 ### 5.4 Repository Ports (domain::ports) — 53 traits
 
@@ -411,10 +413,11 @@ Agrupados por domínio:
 - **Procurement:** `SupplierRepositoryPort`, `RequisitionRepositoryPort`, `RequisitionItemRepositoryPort`
 - **Fleet:** `DriverRepositoryPort`, `VehicleRepositoryPort`, `VehicleDocumentRepositoryPort`, `VehicleStatusHistoryRepositoryPort`, `VehicleCategoryRepositoryPort`, `VehicleMakeRepositoryPort`, `VehicleModelRepositoryPort`, `VehicleColorRepositoryPort`, `VehicleFuelTypeRepositoryPort`, `VehicleTransmissionTypeRepositoryPort`, `FuelingRepositoryPort`, `VehicleFineRepositoryPort`, `VehicleFineTypeRepositoryPort`, `VehicleFineStatusHistoryRepositoryPort`
 - **External:** `EmailServicePort`
+- **Invoice:** `InvoiceRepositoryPort`, `InvoiceItemRepositoryPort`
 
 ---
 
-## 6. Os 12 Obstáculos Comuns (Common Hurdles)
+## 6. Os 15 Obstáculos Comuns (Common Hurdles)
 
 ### H-01: Ambiguidade de trait `new_from_slice` no HMAC
 
@@ -596,6 +599,56 @@ WS_FIELD_ENCRYPTION_KEY=abc123...
 
 # ✅ Campo aninhado (ex: Config { db: DbConfig { url: ... } })
 WS_DB__URL=postgres://...
+```
+
+---
+
+### H-13: `InvoiceStatus` precisa de `sqlx::Type` com `rename_all = "SCREAMING_SNAKE_CASE"`
+
+**Sintoma:** `error decoding column "status"` ou pânico ao ler `invoice_status_enum` do PostgreSQL.
+
+**Causa:** O enum Rust precisa corresponder exatamente ao tipo `invoice_status_enum` no PostgreSQL. O SQLx exige o atributo `type_name` e `rename_all` para mapeamento automático.
+
+**Solução (padrão correto em `models/invoice.rs`):**
+```rust
+#[derive(sqlx::Type)]
+#[sqlx(type_name = "invoice_status_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InvoiceStatus {
+    Pending,   // mapeia para 'PENDING'
+    Checking,  // mapeia para 'CHECKING'
+    // ...
+}
+```
+
+---
+
+### H-14: Trigger `fn_auto_post_invoice()` exige `posted_by NOT NULL` ao transicionar para `POSTED`
+
+**Sintoma:** `ERROR: É obrigatório informar o usuário responsável pelo lançamento (posted_by)` — SQLSTATE 45000.
+
+**Causa:** O trigger PostgreSQL valida `IF NEW.posted_by IS NULL THEN RAISE EXCEPTION`. O campo deve ser preenchido antes de `UPDATE ... SET status = 'POSTED'`.
+
+**Solução:** A query de transição para POSTED deve incluir `posted_by = $2` na mesma UPDATE:
+```sql
+UPDATE invoices SET status = 'POSTED', posted_at = NOW(), posted_by = $2 WHERE id = $1
+```
+O serviço passa `user_id` (do token JWT) como `posted_by`. Nunca chame `transition_to_posted` sem um `Uuid` de usuário válido.
+
+---
+
+### H-15: `catmat_items` nos testes de invoice precisam de cadeia completa group→class→pdm→item
+
+**Sintoma:** `ERROR: insert or update on table "catmat_items" violates foreign key constraint` ao criar item diretamente.
+
+**Causa:** `catmat_items.pdm_id` referencia `catmat_pdm`, que referencia `catmat_classes`, que referencia `catmat_groups`. Inserção direta sem toda a cadeia viola FK.
+
+**Solução:** Usar o helper `create_test_catmat_item(pool, unit_id)` dos testes de invoice, que cria toda a hierarquia com `ON CONFLICT ... DO UPDATE` para ser idempotente:
+```rust
+// ✅ Correto — cria group → class → pdm → item
+let catalog_item_id = create_test_catmat_item(&app.db_auth, unit_id).await;
+
+// ❌ Errado — FK violation
+sqlx::query("INSERT INTO catmat_items (pdm_id, ...) VALUES (uuid_generate_v4(), ...)").execute(&pool).await?;
 ```
 
 ---
@@ -837,6 +890,6 @@ Use este checklist após qualquer nova feature, bugfix ou refactoring antes de c
 
 ---
 
-> **Última atualização:** 2026-03-15
+> **Última atualização:** 2026-03-16
 > **Versão Rust:** stable (testado com 1.85+)
 > **Versão PostgreSQL:** 16 (mínimo: 14)
