@@ -22,6 +22,7 @@ use application::services::{
     driver_service::DriverService,
     fueling_service::FuelingService,
     vehicle_fine_service::VehicleFineService,
+    invoice_service::InvoiceService,
     user_service::UserService,
     vehicle_service::VehicleService,
 };
@@ -45,6 +46,7 @@ use domain::ports::{
     DriverRepositoryPort,
     FuelingRepositoryPort,
     VehicleFineTypeRepositoryPort, VehicleFineRepositoryPort, VehicleFineStatusHistoryRepositoryPort,
+    InvoiceRepositoryPort, InvoiceItemRepositoryPort,
     VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
 use persistence::repositories::{
@@ -72,6 +74,7 @@ use persistence::repositories::{
     driver_repository::DriverRepository,
     fueling_repository::FuelingRepository,
     vehicle_fine_repository::{VehicleFineTypeRepository, VehicleFineRepository, VehicleFineStatusHistoryRepository},
+    invoice_repository::{InvoiceRepository, InvoiceItemRepository},
     vehicle_repository::{
         VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
         VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
@@ -344,6 +347,13 @@ pub fn build_application_state(
         vehicle_fine_status_history_repo,
     ));
 
+    // Invoice repositories and service
+    let invoice_repo: Arc<dyn InvoiceRepositoryPort> =
+        Arc::new(InvoiceRepository::new(pool_auth.clone()));
+    let invoice_item_repo: Arc<dyn InvoiceItemRepositoryPort> =
+        Arc::new(InvoiceItemRepository::new(pool_auth.clone()));
+    let invoice_service = Arc::new(InvoiceService::new(invoice_repo, invoice_item_repo));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -378,6 +388,7 @@ pub fn build_application_state(
         driver_service,
         fueling_service,
         vehicle_fine_service,
+        invoice_service,
         config,
         field_encryption_key: enc_key,
 
