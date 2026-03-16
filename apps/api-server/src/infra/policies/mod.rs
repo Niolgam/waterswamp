@@ -15,6 +15,7 @@ mod drivers;
 mod fleet;
 mod fuelings;
 mod geo_regions;
+mod invoices;
 mod locations;
 mod organizational;
 mod requisitions;
@@ -75,5 +76,6 @@ pub async fn seed_all_policies(enforcer: &mut Enforcer) -> Result<()> {
     drivers::seed(enforcer).await?;
     fuelings::seed(enforcer).await?;
     vehicle_fines::seed(enforcer).await?;
+    invoices::seed(enforcer).await?;
     Ok(())
 }
