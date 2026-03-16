@@ -44,17 +44,34 @@ async fn create_test_supplier(pool: &PgPool) -> Uuid {
         d[8] = (d[0] + 1) % 10;
     }
     let s1: u32 = d.iter().enumerate().map(|(i, v)| v * (10 - i as u32)).sum();
-    let c1 = { let r = (s1 * 10) % 11; if r >= 10 { 0 } else { r } };
+    let c1 = {
+        let r = (s1 * 10) % 11;
+        if r >= 10 {
+            0
+        } else {
+            r
+        }
+    };
     d.push(c1);
     let s2: u32 = d.iter().enumerate().map(|(i, v)| v * (11 - i as u32)).sum();
-    let c2 = { let r = (s2 * 10) % 11; if r >= 10 { 0 } else { r } };
+    let c2 = {
+        let r = (s2 * 10) % 11;
+        if r >= 10 {
+            0
+        } else {
+            r
+        }
+    };
     d.push(c2);
     let cpf: String = d.iter().map(|v| v.to_string()).collect();
 
     sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO suppliers (legal_name, document_number) VALUES ($1, $2) RETURNING id",
     )
-    .bind(format!("Test Supplier {}", &Uuid::new_v4().to_string()[..8]))
+    .bind(format!(
+        "Test Supplier {}",
+        &Uuid::new_v4().to_string()[..8]
+    ))
     .bind(cpf)
     .fetch_one(pool)
     .await
@@ -118,12 +135,10 @@ async fn create_test_warehouse(pool: &PgPool) -> Uuid {
 
 /// Returns the id of the seeded 'UNIDADE' unit of measure
 async fn get_unit_id(pool: &PgPool) -> Uuid {
-    sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM units_of_measure WHERE symbol = 'UNID' LIMIT 1",
-    )
-    .fetch_one(pool)
-    .await
-    .expect("Unit UNID not found — ensure migrations_main have been applied")
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM units_of_measure WHERE symbol = 'UNID' LIMIT 1")
+        .fetch_one(pool)
+        .await
+        .expect("Unit UNID not found — ensure migrations_main have been applied")
 }
 
 /// Creates a minimal catmat item (group → class → pdm → item) and returns item id
@@ -155,9 +170,9 @@ async fn create_test_catmat_item(pool: &PgPool, unit_id: Uuid) -> Uuid {
     .expect("catmat_class");
 
     let pdm_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO catmat_pdm (class_id, code, name)
+        "INSERT INTO catmat_pdms (class_id, code, description)
          VALUES ($1, $2, $3)
-         ON CONFLICT (code) DO UPDATE SET name = catmat_pdm.name
+         ON CONFLICT (code) DO UPDATE SET description = catmat_pdms.description
          RETURNING id",
     )
     .bind(class_id)
@@ -168,9 +183,9 @@ async fn create_test_catmat_item(pool: &PgPool, unit_id: Uuid) -> Uuid {
     .expect("catmat_pdm");
 
     sqlx::query_scalar(
-        "INSERT INTO catmat_items (pdm_id, code, name, unit_id, is_active)
+        "INSERT INTO catmat_items (pdm_id, code, description, unit_of_measure_id, is_active)
          VALUES ($1, $2, $3, $4, true)
-         ON CONFLICT (code) DO UPDATE SET name = catmat_items.name
+         ON CONFLICT (code) DO UPDATE SET description = catmat_items.description
          RETURNING id",
     )
     .bind(pdm_id)
@@ -183,7 +198,12 @@ async fn create_test_catmat_item(pool: &PgPool, unit_id: Uuid) -> Uuid {
 }
 
 /// Builds the invoice creation JSON payload
-fn invoice_payload(supplier_id: Uuid, warehouse_id: Uuid, catalog_item_id: Uuid, unit_id: Uuid) -> Value {
+fn invoice_payload(
+    supplier_id: Uuid,
+    warehouse_id: Uuid,
+    catalog_item_id: Uuid,
+    unit_id: Uuid,
+) -> Value {
     json!({
         "invoice_number": format!("NF{}", &Uuid::new_v4().simple().to_string()[..8]),
         "series": "1",
@@ -220,7 +240,12 @@ async fn test_create_invoice() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await;
 
     assert_eq!(
@@ -247,7 +272,12 @@ async fn test_get_invoice() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -276,7 +306,12 @@ async fn test_get_invoice_items() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -306,7 +341,12 @@ async fn test_update_invoice_pending() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -321,7 +361,12 @@ async fn test_update_invoice_pending() {
         }))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::OK, "body: {}", response.text());
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "body: {}",
+        response.text()
+    );
     let body: Value = response.json();
     assert_eq!(body["notes"], "Nota atualizada nos testes");
     assert_eq!(body["commitment_number"], "2026NE000001");
@@ -339,7 +384,12 @@ async fn test_delete_pending_invoice() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -371,7 +421,12 @@ async fn test_list_invoices() {
         app.api
             .post("/api/admin/invoices")
             .add_header("Authorization", format!("Bearer {}", app.admin_token))
-            .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+            .json(&invoice_payload(
+                supplier_id,
+                warehouse_id,
+                catalog_item_id,
+                unit_id,
+            ))
             .await;
     }
 
@@ -398,7 +453,12 @@ async fn test_list_invoices_filter_by_status() {
     app.api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await;
 
     let response = app
@@ -432,7 +492,12 @@ async fn test_full_workflow_pending_to_posted() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -445,7 +510,12 @@ async fn test_full_workflow_pending_to_posted() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({}))
         .await;
-    assert_eq!(response.status_code(), StatusCode::OK, "start-checking: {}", response.text());
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "start-checking: {}",
+        response.text()
+    );
     let body: Value = response.json();
     assert_eq!(body["status"], "CHECKING");
     assert!(body["received_at"].as_str().is_some());
@@ -457,7 +527,12 @@ async fn test_full_workflow_pending_to_posted() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({}))
         .await;
-    assert_eq!(response.status_code(), StatusCode::OK, "finish-checking: {}", response.text());
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "finish-checking: {}",
+        response.text()
+    );
     let body: Value = response.json();
     assert_eq!(body["status"], "CHECKED");
 
@@ -468,7 +543,12 @@ async fn test_full_workflow_pending_to_posted() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({}))
         .await;
-    assert_eq!(response.status_code(), StatusCode::OK, "post: {}", response.text());
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "post: {}",
+        response.text()
+    );
     let body: Value = response.json();
     assert_eq!(body["status"], "POSTED");
     assert!(body["posted_at"].as_str().is_some());
@@ -487,7 +567,12 @@ async fn test_workflow_reject_from_checking() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -505,7 +590,12 @@ async fn test_workflow_reject_from_checking() {
         .json(&json!({ "rejection_reason": "Divergência nos itens recebidos" }))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::OK, "reject: {}", response.text());
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "reject: {}",
+        response.text()
+    );
     let body: Value = response.json();
     assert_eq!(body["status"], "REJECTED");
     assert_eq!(body["rejection_reason"], "Divergência nos itens recebidos");
@@ -523,7 +613,12 @@ async fn test_workflow_cancel_pending_invoice() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -535,7 +630,12 @@ async fn test_workflow_cancel_pending_invoice() {
         .json(&json!({}))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::OK, "cancel: {}", response.text());
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "cancel: {}",
+        response.text()
+    );
     let body: Value = response.json();
     assert_eq!(body["status"], "CANCELLED");
 }
@@ -556,7 +656,12 @@ async fn test_cannot_edit_non_pending_invoice() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -591,7 +696,12 @@ async fn test_cannot_post_non_checked_invoice() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -619,7 +729,12 @@ async fn test_cannot_start_checking_from_checking() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -652,7 +767,12 @@ async fn test_cannot_delete_posted_invoice() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -695,7 +815,12 @@ async fn test_cannot_cancel_already_cancelled_invoice() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -728,7 +853,12 @@ async fn test_reject_requires_reason() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -898,7 +1028,12 @@ async fn test_list_invoices_pagination() {
         app.api
             .post("/api/admin/invoices")
             .add_header("Authorization", format!("Bearer {}", app.admin_token))
-            .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+            .json(&invoice_payload(
+                supplier_id,
+                warehouse_id,
+                catalog_item_id,
+                unit_id,
+            ))
             .await;
     }
 

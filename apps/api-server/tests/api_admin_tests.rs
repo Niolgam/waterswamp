@@ -250,20 +250,39 @@ async fn test_admin_create_user_conflict() {
 async fn test_admin_create_user_email_conflict() {
     let app = common::spawn_app().await;
 
-    // 'bob@temp.example.com' foi criado na migração
+    let conflict_email = format!("conflict_{}@example.com", uuid::Uuid::new_v4());
+
+    // 1. Cria o primeiro utilizador via API para garantir que o email e o email_index
+    // sejam gerados e guardados corretamente com a chave de encriptação atual.
+    let r1 = app
+        .api
+        .post("/api/admin/users")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "username": format!("first_user_{}", uuid::Uuid::new_v4().simple()),
+            "email": conflict_email.clone(),
+            "password": "SenhaSegura123!",
+            "role": "user"
+        }))
+        .await;
+
+    r1.assert_status_ok(); // Garante que o primeiro foi criado (retorna 200)
+
+    // 2. Tenta criar um segundo utilizador com o MESMO email
     let response = app
         .api
         .post("/api/admin/users")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "username": "new_bob",
-            "email": "bob@temp.example.com",
+            "email": conflict_email,
             "password": "OutraSenha123!",
             "role": "user"
         }))
         .await;
 
-    assert_eq!(response.status_code(), StatusCode::CONFLICT); // 409
+    // Agora sim, a API vai conseguir validar o email_index e retornar 409
+    assert_eq!(response.status_code(), StatusCode::CONFLICT);
 }
 
 /// (Subtarefa 4.1) Testa listagem, paginação e busca

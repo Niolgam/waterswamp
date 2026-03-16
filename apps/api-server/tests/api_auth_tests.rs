@@ -98,9 +98,10 @@ async fn test_api_auth_login_success() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create test user using existing helper (1 argument)
-    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
+    let (username, _email, password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
 
     // Attempt login
     let response = server
@@ -200,9 +201,10 @@ async fn test_api_auth_login_with_mfa_enabled() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create user
-    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
+    let (username, _email, password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
 
     // Enable MFA for user - Runtime query
     sqlx::query("UPDATE users SET mfa_enabled = true WHERE username = $1")
@@ -302,7 +304,13 @@ async fn test_api_auth_register_success() {
         .unwrap();
 
     assert_eq!(row.get::<String, _>("username"), username);
-    assert_eq!(row.get::<String, _>("email"), email);
+    let encrypted_email = row.get::<String, _>("email");
+    let decrypted_email = core_services::field_encryption::decrypt_field(
+        &encrypted_email,
+        &state.field_encryption_key,
+    )
+    .unwrap();
+    assert_eq!(decrypted_email, email);
 
     cleanup_test_users(&state.db_pool_auth).await.ok();
     println!("✅ test_api_auth_register_success: PASSED");
@@ -316,9 +324,10 @@ async fn test_api_auth_register_duplicate_username() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create first user
-    let (username, _email, _password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
+    let (username, _email, _password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
 
     // Attempt to register with same username
     let response = server
@@ -351,18 +360,10 @@ async fn test_api_auth_register_duplicate_email() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create first user
-    let (username, _email, _password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
-
-    // Get email of created user - Runtime query
-    let row = sqlx::query("SELECT email FROM users WHERE username = $1")
-        .bind(&username)
-        .fetch_one(&state.db_pool_auth)
-        .await
-        .unwrap();
-
-    let user_email: String = row.get("email");
+    let (username, user_email, _password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
 
     // Attempt to register with same email
     let response = server
@@ -525,9 +526,10 @@ async fn test_api_auth_refresh_token_success() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create and login user
-    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
+    let (username, _email, password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
     let (_, refresh_token) = login_user(&server, &username, &password).await;
 
     // Refresh token
@@ -561,9 +563,10 @@ async fn test_api_auth_refresh_token_reuse_detection() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create and login user
-    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
+    let (username, _email, password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
     let (_, refresh_token) = login_user(&server, &username, &password).await;
 
     // Use refresh token first time (should succeed)
@@ -632,9 +635,10 @@ async fn test_api_auth_logout_success() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create and login user
-    let (username, _email, password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
+    let (username, _email, password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
     let (_, refresh_token) = login_user(&server, &username, &password).await;
 
     // Logout
@@ -676,16 +680,11 @@ async fn test_api_auth_forgot_password_existing_email() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create user
-    let (username, _email, _password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
 
-    let row = sqlx::query("SELECT email FROM users WHERE username = $1")
-        .bind(&username)
-        .fetch_one(&state.db_pool_auth)
-        .await
-        .unwrap();
-    let user_email: String = row.get("email");
+    let (username, user_email, _password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
 
     state.email_service.clear_sent_emails().await;
 
@@ -757,9 +756,10 @@ async fn test_api_auth_reset_password_success() {
     let server = create_api_auth_test_server(state.clone()).await;
 
     // Create user
-    let (username, _email, old_password) = create_test_user(&state.db_pool_auth, &state.field_encryption_key)
-        .await
-        .expect("Failed to create test user");
+    let (username, user_email, old_password) =
+        create_test_user(&state.db_pool_auth, &state.field_encryption_key)
+            .await
+            .expect("Failed to create test user");
 
     // Get user info - Runtime query
     let row = sqlx::query("SELECT id, email FROM users WHERE username = $1")
@@ -768,12 +768,11 @@ async fn test_api_auth_reset_password_success() {
         .await
         .unwrap();
     let user_id: Uuid = row.get("id");
-    let user_email: String = row.get("email");
 
     // Request password reset (trigger flow)
     server
         .post("/auth/forgot-password")
-        .json(&json!({"email": user_email}))
+        .json(&json!({"email": user_email})) // user_email extraído do helper
         .await;
 
     // Generate valid JWT for reset (using the same service as the app)
