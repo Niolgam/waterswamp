@@ -170,9 +170,9 @@ async fn create_test_catmat_item(pool: &PgPool, unit_id: Uuid) -> Uuid {
     .expect("catmat_class");
 
     let pdm_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO catmat_pdm (class_id, code, name, material_classification)
+        "INSERT INTO catmat_pdms (class_id, code, name, material_classification)
          VALUES ($1, $2, $3, 'STOCKABLE')
-         ON CONFLICT (code) DO UPDATE SET name = catmat_pdm.name
+         ON CONFLICT (code) DO UPDATE SET name = catmat_pdms.name
          RETURNING id",
     )
     .bind(class_id)
