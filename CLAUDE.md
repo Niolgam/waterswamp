@@ -367,6 +367,7 @@ waterswamp/
 | `VehicleService` | Gestão de frota (veículos, documentos, histórico) |
 | `VehicleFineService` | Infrações de trânsito e histórico de status |
 | `InvoiceService` | Notas fiscais: CRUD + máquina de estados (PENDING→CHECKING→CHECKED→POSTED / REJECTED / CANCELLED) |
+| `WarehouseService` | Almoxarifados (CRUD + dedup de código) e estoques (listagem, parâmetros, bloqueio/desbloqueio) |
 
 ### 5.2 Background Jobs
 
@@ -400,6 +401,7 @@ waterswamp/
 | `vehicle.rs` | `Vehicle`, `VehicleDocument`, `VehicleStatusHistory`, `VehicleMake`, `VehicleModel` |
 | `vehicle_fine.rs` | `VehicleFine`, `VehicleFineType`, `VehicleFineStatusHistory` |
 | `invoice.rs` | `InvoiceDto`, `InvoiceWithDetailsDto`, `InvoiceItemDto`, `InvoiceItemWithDetailsDto`, `InvoiceStatus`, payloads de CRUD e transições |
+| `warehouse.rs` | `WarehouseDto`, `WarehouseWithDetailsDto`, `WarehouseStockDto`, `WarehouseStockWithDetailsDto`, `WarehouseType`, payloads de CRUD, `UpdateStockParamsPayload`, `BlockStockPayload` |
 
 ### 5.4 Repository Ports (domain::ports) — 53 traits
 
@@ -414,10 +416,11 @@ Agrupados por domínio:
 - **Fleet:** `DriverRepositoryPort`, `VehicleRepositoryPort`, `VehicleDocumentRepositoryPort`, `VehicleStatusHistoryRepositoryPort`, `VehicleCategoryRepositoryPort`, `VehicleMakeRepositoryPort`, `VehicleModelRepositoryPort`, `VehicleColorRepositoryPort`, `VehicleFuelTypeRepositoryPort`, `VehicleTransmissionTypeRepositoryPort`, `FuelingRepositoryPort`, `VehicleFineRepositoryPort`, `VehicleFineTypeRepositoryPort`, `VehicleFineStatusHistoryRepositoryPort`
 - **External:** `EmailServicePort`
 - **Invoice:** `InvoiceRepositoryPort`, `InvoiceItemRepositoryPort`
+- **Warehouse:** `WarehouseRepositoryPort`, `WarehouseStockRepositoryPort`
 
 ---
 
-## 6. Os 15 Obstáculos Comuns (Common Hurdles)
+## 6. Os 16 Obstáculos Comuns (Common Hurdles)
 
 ### H-01: Ambiguidade de trait `new_from_slice` no HMAC
 
@@ -650,6 +653,19 @@ let catalog_item_id = create_test_catmat_item(&app.db_auth, unit_id).await;
 // ❌ Errado — FK violation
 sqlx::query("INSERT INTO catmat_items (pdm_id, ...) VALUES (uuid_generate_v4(), ...)").execute(&pool).await?;
 ```
+
+---
+
+### H-16: `warehouse_stocks` é gerenciado por trigger — nunca faça INSERT/DELETE manual via API
+
+**Sintoma:** Tentativa de criar uma rota `POST /warehouses/{id}/stocks` não faz sentido arquiteturalmente; entradas de estoque devem ser criadas apenas como efeito colateral de movimentações.
+
+**Causa:** A tabela `warehouse_stocks` é preenchida e atualizada automaticamente pelo trigger `fn_process_stock_movement()` quando há um registro em `stock_movements`. A trigger faz upsert na linha correspondente ao `(warehouse_id, catalog_item_id)`, atualiza quantidades e recalcula o preço médio ponderado (WAC).
+
+**Regra:**
+- Não expor `POST /warehouse_stocks` — o estoque nasce quando uma `invoice` é postada (trigger `fn_auto_post_invoice()`).
+- O módulo de warehouse **só** expõe: listagem, detalhe, atualização de parâmetros de controle (min/max/reorder) e bloqueio administrativo.
+- Inserções diretas de `warehouse_stocks` são permitidas apenas em **testes de integração** via SQL, para simular estado pré-existente.
 
 ---
 

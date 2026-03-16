@@ -23,6 +23,7 @@ use application::services::{
     fueling_service::FuelingService,
     vehicle_fine_service::VehicleFineService,
     invoice_service::InvoiceService,
+    warehouse_service::WarehouseService,
     user_service::UserService,
     vehicle_service::VehicleService,
 };
@@ -47,6 +48,7 @@ use domain::ports::{
     FuelingRepositoryPort,
     VehicleFineTypeRepositoryPort, VehicleFineRepositoryPort, VehicleFineStatusHistoryRepositoryPort,
     InvoiceRepositoryPort, InvoiceItemRepositoryPort,
+    WarehouseRepositoryPort, WarehouseStockRepositoryPort,
     VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
 use persistence::repositories::{
@@ -75,6 +77,7 @@ use persistence::repositories::{
     fueling_repository::FuelingRepository,
     vehicle_fine_repository::{VehicleFineTypeRepository, VehicleFineRepository, VehicleFineStatusHistoryRepository},
     invoice_repository::{InvoiceRepository, InvoiceItemRepository},
+    warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
     vehicle_repository::{
         VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
         VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
@@ -354,6 +357,13 @@ pub fn build_application_state(
         Arc::new(InvoiceItemRepository::new(pool_auth.clone()));
     let invoice_service = Arc::new(InvoiceService::new(invoice_repo, invoice_item_repo));
 
+    // Warehouse repositories and service
+    let warehouse_repo: Arc<dyn WarehouseRepositoryPort> =
+        Arc::new(WarehouseRepository::new(pool_auth.clone()));
+    let stock_repo: Arc<dyn WarehouseStockRepositoryPort> =
+        Arc::new(WarehouseStockRepository::new(pool_auth.clone()));
+    let warehouse_service = Arc::new(WarehouseService::new(warehouse_repo, stock_repo));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -389,6 +399,7 @@ pub fn build_application_state(
         fueling_service,
         vehicle_fine_service,
         invoice_service,
+        warehouse_service,
         config,
         field_encryption_key: enc_key,
 

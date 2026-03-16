@@ -4,6 +4,7 @@ pub mod requisitions;
 pub mod users;
 
 pub mod invoices;
+pub mod warehouses;
 
 use crate::{
     api::{budget_classifications, catalog, drivers, fleet, fuelings, geo_regions, organizational, suppliers, vehicle_fines},
@@ -30,5 +31,6 @@ pub fn router() -> Router<AppState> {
         .nest("/fuelings", fuelings::router())
         .nest("/vehicle-fines", vehicle_fines::router())
         .nest("/invoices", invoices::router())
+        .nest("/warehouses", warehouses::router())
         .layer(admin_rate_limiter())
 }
