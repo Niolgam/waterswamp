@@ -161,6 +161,13 @@ interface InvoiceItemWithDetailsDto {
   unit_raw_name: string | null;       // joined, e.g. "CAIXA"
   unit_raw_symbol: string | null;     // joined, e.g. "CX"
 
+  // Classificação do material — herdada do PDM (Padrão Descritivo de Material)
+  // Determina o que acontece com o item ao postar a NF:
+  //   STOCKABLE  → gera movimentação de ENTRY no estoque do almoxarifado
+  //   PERMANENT  → bem permanente (patrimônio) — sem impacto no estoque
+  //   DIRECT_USE → consumo/uso direto — sem impacto no estoque
+  material_classification: 'STOCKABLE' | 'PERMANENT' | 'DIRECT_USE';
+
   quantity_raw: string;               // decimal — quantity as on the paper invoice
   unit_value_raw: string;             // decimal — price per raw unit
   total_value: string;                // decimal — quantity_raw × unit_value_raw
@@ -695,9 +702,33 @@ The following fields are **set by the database** and must not be sent in request
 | `created_at`     | DB default `NOW()`                |
 | `updated_at`     | DB trigger `set_timestamp_invoices`|
 
-### Stock movements
+### Stock movements and PDM classification
 
-When an invoice is posted (`status → POSTED`), the database trigger `fn_auto_post_invoice()` creates one `ENTRY` stock movement per invoice item. When the invoice is subsequently cancelled, the same trigger creates corresponding `ADJUSTMENT_SUB` movements. **The frontend does not need to make any separate request** to update inventory.
+When an invoice is posted (`status → POSTED`), the database trigger `fn_auto_post_invoice()` processes each item according to its `material_classification` (inherited from the PDM):
+
+| `material_classification` | Effect on posting                                  |
+|---------------------------|----------------------------------------------------|
+| `STOCKABLE`               | Creates `ENTRY` movement → updates `warehouse_stocks` (WAC recalculated) |
+| `PERMANENT`               | No stock movement (future: patrimônio module)       |
+| `DIRECT_USE`              | No stock movement                                   |
+
+When the invoice is subsequently cancelled (`POSTED → CANCELLED`), the trigger creates `ADJUSTMENT_SUB` movements only for items that previously generated an `ENTRY` (i.e., `STOCKABLE` items). **The frontend does not need to make any separate request** to update inventory.
+
+**UX recommendation — pre-flight posting summary:** Before the user clicks "Confirmar Lançamento", display a breakdown using `material_classification`:
+
+```typescript
+const items = await fetchInvoiceItems(invoiceId);
+
+const summary = {
+  stockable:  items.filter(i => i.material_classification === 'STOCKABLE'),
+  permanent:  items.filter(i => i.material_classification === 'PERMANENT'),
+  directUse:  items.filter(i => i.material_classification === 'DIRECT_USE'),
+};
+
+// Example message:
+// "Ao confirmar: 5 itens entrarão no estoque, 2 serão registrados como patrimônio,
+//  1 item é de uso direto e não gerará movimentação."
+```
 
 ### Access key (`access_key`)
 

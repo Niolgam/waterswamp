@@ -385,7 +385,7 @@ waterswamp/
 | `audit.rs` | `AuditLog`, `AuditEntry` |
 | `auth.rs` | `Claims`, `TokenType`, `RefreshToken` |
 | `budget_classifications.rs` | `BudgetClassification` |
-| `catalog.rs` | `ComprasGovGrupoMaterial`, `ComprasGovItemMaterial`, `ComprasGovResponse`, etc. |
+| `catalog.rs` | `ComprasGovGrupoMaterial`, `ComprasGovItemMaterial`, `ComprasGovResponse`, `MaterialClassification` (enum: `STOCKABLE`/`PERMANENT`/`DIRECT_USE`), `CatmatPdmDto`, `CatmatPdmWithDetailsDto`, `CatmatItemWithDetailsDto`, `CreateCatmatPdmPayload`, `UpdateCatmatPdmPayload` e demais DTOs do catálogo |
 | `driver.rs` | `Driver`, `DriverStatus` |
 | `email.rs` | `EmailVerificationToken` |
 | `facilities.rs` | `Site`, `Building`, `Floor`, `Space`, `BuildingType`, `SpaceType` |
@@ -400,7 +400,7 @@ waterswamp/
 | `user.rs` | `User`, `UserExtended`, `Role`, `UserStatus` |
 | `vehicle.rs` | `Vehicle`, `VehicleDocument`, `VehicleStatusHistory`, `VehicleMake`, `VehicleModel` |
 | `vehicle_fine.rs` | `VehicleFine`, `VehicleFineType`, `VehicleFineStatusHistory` |
-| `invoice.rs` | `InvoiceDto`, `InvoiceWithDetailsDto`, `InvoiceItemDto`, `InvoiceItemWithDetailsDto`, `InvoiceStatus`, payloads de CRUD e transições |
+| `invoice.rs` | `InvoiceDto`, `InvoiceWithDetailsDto`, `InvoiceItemDto`, `InvoiceItemWithDetailsDto` (inclui `material_classification: MaterialClassification` herdado do PDM), `InvoiceStatus`, payloads de CRUD e transições |
 | `warehouse.rs` | `WarehouseDto`, `WarehouseWithDetailsDto`, `WarehouseStockDto`, `WarehouseStockWithDetailsDto`, `WarehouseType`, payloads de CRUD, `UpdateStockParamsPayload`, `BlockStockPayload` |
 
 ### 5.4 Repository Ports (domain::ports) — 53 traits
@@ -420,7 +420,7 @@ Agrupados por domínio:
 
 ---
 
-## 6. Os 16 Obstáculos Comuns (Common Hurdles)
+## 6. Os 17 Obstáculos Comuns (Common Hurdles)
 
 ### H-01: Ambiguidade de trait `new_from_slice` no HMAC
 
@@ -669,6 +669,43 @@ sqlx::query("INSERT INTO catmat_items (pdm_id, ...) VALUES (uuid_generate_v4(), 
 
 ---
 
+### H-17: `MaterialClassification` enum — padrão para campos com estados mutuamente exclusivos
+
+**Sintoma:** Dois booleanos mutuamente exclusivos (ex: `is_stockable` + `is_permanent`) exigem uma constraint `CHECK (NOT (a AND b))` e criam um quarto estado inválido invisível. A interface do usuário fica confusa.
+
+**Causa/Regra:** Sempre que um campo de domínio tem exatamente N estados mutuamente exclusivos, use um tipo `ENUM` no PostgreSQL em vez de N booleanos.
+
+**Padrão aplicado em `catmat_pdms.material_classification`:**
+```sql
+-- ✅ Correto: enum no banco
+CREATE TYPE material_classification_enum AS ENUM ('STOCKABLE', 'PERMANENT', 'DIRECT_USE');
+ALTER TABLE catmat_pdms ADD COLUMN material_classification material_classification_enum NOT NULL DEFAULT 'STOCKABLE';
+```
+
+```rust
+// ✅ Correto: enum Rust com sqlx::Type
+#[derive(sqlx::Type)]
+#[sqlx(type_name = "material_classification_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum MaterialClassification {
+    Stockable,   // 'STOCKABLE'
+    Permanent,   // 'PERMANENT'
+    DirectUse,   // 'DIRECT_USE'
+}
+```
+
+**Comportamento do sistema por classificação:**
+
+| Classificação | Ao postar NF | Módulo futuro |
+|---|---|---|
+| `STOCKABLE`  | Gera `ENTRY` em `stock_movements` → atualiza `warehouse_stocks` | — |
+| `PERMANENT`  | Nenhuma movimentação de estoque | Módulo de patrimônio |
+| `DIRECT_USE` | Nenhuma movimentação de estoque | — |
+
+**Regra de migração:** Quando substituir booleanos por enum em coluna existente, usar `GENERATED ALWAYS AS (...) STORED` para migrar os dados automaticamente, depois converter para coluna normal com `ALTER COLUMN ... DROP EXPRESSION`.
+
+---
+
 ### H-12: `cargo check --workspace` antes de qualquer commit
 
 O repositório usa features que só são verificadas com `--workspace`. Um `cargo check` em um único crate pode não revelar quebras em dependentes.
@@ -682,7 +719,7 @@ cargo fmt --all -- --check
 
 ---
 
-## 7. Os 14 Design Patterns do Projeto
+## 7. Os 15 Design Patterns do Projeto
 
 ### P-01: Arquitetura Hexagonal (Ports & Adapters)
 
@@ -906,6 +943,6 @@ Use este checklist após qualquer nova feature, bugfix ou refactoring antes de c
 
 ---
 
-> **Última atualização:** 2026-03-16
+> **Última atualização:** 2026-03-16 (adicionado H-17: enum `MaterialClassification`)
 > **Versão Rust:** stable (testado com 1.85+)
 > **Versão PostgreSQL:** 16 (mínimo: 14)

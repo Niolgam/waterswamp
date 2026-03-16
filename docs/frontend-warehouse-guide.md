@@ -1,6 +1,6 @@
 # Guia Frontend — Módulo Warehouse (Almoxarifados e Estoques)
 
-> **Versão:** 2026-03-16
+> **Versão:** 2026-03-16 (rev. 2 — adicionado MaterialClassification)
 > **Base URL:** `/api/admin/warehouses`
 > **Autenticação:** Bearer JWT (admin obrigatório em todos os endpoints)
 
@@ -637,6 +637,66 @@ const { warehouses, total }: WarehousesListResponse = await list.json();
 
 ## Relação com o Módulo de Invoice
 
-O `warehouse_id` de uma invoice referencia um almoxarifado deste módulo. Ao postar uma invoice, o estoque do almoxarifado correspondente é atualizado automaticamente.
+O `warehouse_id` de uma invoice referencia um almoxarifado deste módulo. Ao postar uma invoice, o estoque do almoxarifado correspondente é atualizado automaticamente — **mas apenas para itens cujo PDM tem `material_classification = 'STOCKABLE'`**.
 
 Consulte também: [`docs/frontend-invoice-guide.md`](./frontend-invoice-guide.md) — para entender o fluxo completo de entrada de materiais.
+
+---
+
+## Classificação de Materiais (PDM) e o Estoque
+
+Cada item de catálogo herda uma classificação do seu PDM (Padrão Descritivo de Material). Essa classificação determina se o item entra no estoque ao ser lançado em NF:
+
+```typescript
+export type MaterialClassification = 'STOCKABLE' | 'PERMANENT' | 'DIRECT_USE';
+```
+
+| Classificação  | Descrição                                    | Entra no estoque? |
+|----------------|----------------------------------------------|-------------------|
+| `STOCKABLE`    | Material consumível — entra no almoxarifado  | ✅ Sim             |
+| `PERMANENT`    | Bem permanente (patrimônio)                  | ❌ Não             |
+| `DIRECT_USE`   | Consumo/uso direto — não transita pelo almox | ❌ Não             |
+
+**Implicação prática:** Itens com `PERMANENT` ou `DIRECT_USE` **nunca aparecerão** em `warehouse_stocks`, mesmo que estejam em invoices postadas. Isso é esperado e correto.
+
+### Verificar a classificação de um item de estoque
+
+O `WarehouseStockWithDetailsDto` não inclui `material_classification` diretamente — por definição, todo item presente no estoque é `STOCKABLE`. Mas ao montar telas de catálogo ou invoice, use o campo dos DTOs de catálogo:
+
+```typescript
+// No CatmatItemWithDetailsDto (listagem de catálogo):
+interface CatmatItemWithDetailsDto {
+  // ...
+  pdm_material_classification: MaterialClassification;
+  // ...
+}
+
+// No InvoiceItemWithDetailsDto (itens de uma NF):
+interface InvoiceItemWithDetailsDto {
+  // ...
+  material_classification: MaterialClassification;
+  // ...
+}
+```
+
+### Filtrar itens estocáveis antes de exibir ao usuário
+
+Ao montar um formulário de criação de invoice, você pode usar `pdm_material_classification` para informar o usuário sobre o que cada item irá gerar:
+
+```typescript
+function getClassificationLabel(c: MaterialClassification): string {
+  switch (c) {
+    case 'STOCKABLE':   return 'Estocável — entrará no almoxarifado';
+    case 'PERMANENT':   return 'Patrimônio — não entra no estoque';
+    case 'DIRECT_USE':  return 'Uso direto — sem movimentação de estoque';
+  }
+}
+
+function getClassificationBadgeColor(c: MaterialClassification): string {
+  switch (c) {
+    case 'STOCKABLE':   return 'green';
+    case 'PERMANENT':   return 'blue';
+    case 'DIRECT_USE':  return 'gray';
+  }
+}
+```
