@@ -105,9 +105,10 @@ DECLARE
     v_price_diff_percent DECIMAL(15, 4);
 BEGIN
     -- 1. VERIFICAÇÃO: Item é estocável?
-    SELECT is_stockable INTO v_is_stockable 
-    FROM catmat_items 
-    WHERE id = NEW.catalog_item_id;
+    SELECT (pdm.material_classification::TEXT = 'STOCKABLE') INTO v_is_stockable
+    FROM catmat_items ci
+    LEFT JOIN catmat_pdms pdm ON pdm.id = ci.pdm_id
+    WHERE ci.id = NEW.catalog_item_id;
 
     -- Se não for estocável (Serviço), não afeta saldo físico
     IF v_is_stockable = FALSE THEN

@@ -105,7 +105,7 @@ BEGIN
             CASE NEW.status::TEXT
                 WHEN 'CANCELLED' THEN 
                     v_operation := 'CANCELLATION';
-                    v_reason := NEW.rejection_reason;
+                    v_reason := COALESCE(NEW.rejection_reason, 'Cancelamento da nota fiscal');
                 WHEN 'POSTED' THEN 
                     v_operation := 'APPROVAL'; -- Posted é como "aprovação" da NF
                 ELSE 
@@ -121,7 +121,7 @@ BEGIN
         v_operation := 'DELETE';
         v_data_before := to_jsonb(OLD);
         v_status_before := OLD.status::TEXT;
-        v_reason := current_setting('audit.delete_reason', TRUE);
+        v_reason := COALESCE(current_setting('audit.delete_reason', TRUE), 'Exclusão do registro');
     END IF;
     
     INSERT INTO invoice_history (
@@ -229,7 +229,7 @@ DECLARE
 BEGIN
     v_user_id := fn_get_audit_user_id();
     
-    SELECT name INTO v_catalog_name 
+    SELECT description INTO v_catalog_name 
     FROM catmat_items 
     WHERE id = COALESCE(NEW.catalog_item_id, OLD.catalog_item_id);
     
