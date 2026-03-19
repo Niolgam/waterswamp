@@ -16,9 +16,10 @@ DECLARE
     v_threshold DECIMAL;
 BEGIN
     -- 1. VERIFICATION: Is item stockable?
-    SELECT is_stockable INTO v_is_stockable
-    FROM catmat_items
-    WHERE id = NEW.catalog_item_id;
+    SELECT (pdm.material_classification::TEXT = 'STOCKABLE') INTO v_is_stockable 
+    FROM catmat_items ci
+    LEFT JOIN catmat_pdms pdm ON pdm.id = ci.pdm_id
+    WHERE ci.id = NEW.catalog_item_id;
 
     -- If not stockable (Service), doesn't affect physical balance
     IF v_is_stockable = FALSE THEN

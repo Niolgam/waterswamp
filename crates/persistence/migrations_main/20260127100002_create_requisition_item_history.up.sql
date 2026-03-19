@@ -107,7 +107,7 @@ BEGIN
     v_user_id := fn_get_audit_user_id();
     
     -- Buscar nome do item do catálogo
-    SELECT name INTO v_catalog_name 
+    SELECT description INTO v_catalog_name 
     FROM catmat_items 
     WHERE id = COALESCE(NEW.catalog_item_id, OLD.catalog_item_id);
     

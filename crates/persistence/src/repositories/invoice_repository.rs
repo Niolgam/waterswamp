@@ -1,10 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
-use domain::{
-    errors::RepositoryError,
-    models::invoice::*,
-    ports::invoice::*,
-};
+use domain::{errors::RepositoryError, models::invoice::*, ports::invoice::*};
 use rust_decimal::Decimal;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -59,13 +55,12 @@ impl InvoiceRepositoryPort for InvoiceRepository {
     }
 
     async fn exists_by_access_key(&self, access_key: &str) -> Result<bool, RepositoryError> {
-        let row = sqlx::query(
-            "SELECT EXISTS(SELECT 1 FROM invoices WHERE access_key = $1) AS exists",
-        )
-        .bind(access_key)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(map_db_error)?;
+        let row =
+            sqlx::query("SELECT EXISTS(SELECT 1 FROM invoices WHERE access_key = $1) AS exists")
+                .bind(access_key)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(map_db_error)?;
         Ok(row.get::<bool, _>("exists"))
     }
 
@@ -359,7 +354,9 @@ impl InvoiceRepositoryPort for InvoiceRepository {
                {}
                ORDER BY i.issue_date DESC
                LIMIT ${} OFFSET ${}"#,
-            where_sql, param_index, param_index + 1
+            where_sql,
+            param_index,
+            param_index + 1
         );
 
         let mut count_query = sqlx::query(&count_sql);
@@ -431,7 +428,7 @@ impl InvoiceItemRepositoryPort for InvoiceItemRepository {
     ) -> Result<Vec<InvoiceItemWithDetailsDto>, RepositoryError> {
         sqlx::query_as::<_, InvoiceItemWithDetailsDto>(
             r#"SELECT ii.id, ii.invoice_id,
-                      ii.catalog_item_id, ci.name AS catalog_item_name,
+                      ii.catalog_item_id, ci.description AS catalog_item_name,
                       ii.unit_conversion_id,
                       ii.unit_raw_id, u.name AS unit_raw_name, u.symbol AS unit_raw_symbol,
                       COALESCE(pdm.material_classification, 'STOCKABLE'::material_classification_enum) AS material_classification,
