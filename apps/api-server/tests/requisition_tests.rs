@@ -636,3 +636,170 @@ async fn test_audit_captures_request_metadata() {
 
     assert_eq!(history_response.status_code(), StatusCode::OK);
 }
+
+// ============================================================================
+// ADD ITEM TO REQUISITION TESTS (replaces fn_capture_requisition_item_value)
+// ============================================================================
+
+/// Creates a minimal catmat item hierarchy and returns catalog_item_id
+async fn create_test_catalog_item_for_req(pool: &sqlx::PgPool) -> uuid::Uuid {
+    let unit_id: uuid::Uuid =
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM units_of_measure WHERE symbol = 'UNID' LIMIT 1")
+            .fetch_one(pool)
+            .await
+            .expect("Unit UNID not found");
+
+    let uid = uuid::Uuid::new_v4().simple().to_string();
+
+    let group_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO catmat_groups (code, name) VALUES ($1, $2)
+         ON CONFLICT (code) DO UPDATE SET name = catmat_groups.name RETURNING id",
+    )
+    .bind(format!("RG{}", &uid[..5]))
+    .bind(format!("Req Group {}", &uid[..5]))
+    .fetch_one(pool)
+    .await
+    .expect("catmat_group");
+
+    let class_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO catmat_classes (group_id, code, name) VALUES ($1, $2, $3)
+         ON CONFLICT (code) DO UPDATE SET name = catmat_classes.name RETURNING id",
+    )
+    .bind(group_id)
+    .bind(format!("RC{}", &uid[..5]))
+    .bind(format!("Req Class {}", &uid[..5]))
+    .fetch_one(pool)
+    .await
+    .expect("catmat_class");
+
+    let pdm_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO catmat_pdms (class_id, code, description, material_classification)
+         VALUES ($1, $2, $3, 'STOCKABLE')
+         ON CONFLICT (code) DO UPDATE SET description = catmat_pdms.description RETURNING id",
+    )
+    .bind(class_id)
+    .bind(format!("RP{}", &uid[..5]))
+    .bind(format!("Req PDM {}", &uid[..5]))
+    .fetch_one(pool)
+    .await
+    .expect("catmat_pdm");
+
+    sqlx::query_scalar(
+        "INSERT INTO catmat_items (pdm_id, code, description, unit_of_measure_id, is_active)
+         VALUES ($1, $2, $3, $4, true)
+         ON CONFLICT (code) DO UPDATE SET description = catmat_items.description RETURNING id",
+    )
+    .bind(pdm_id)
+    .bind(format!("RI{}", &uid[..7]))
+    .bind(format!("Req Item {}", &uid[..7]))
+    .bind(unit_id)
+    .fetch_one(pool)
+    .await
+    .expect("catmat_item")
+}
+
+#[tokio::test]
+async fn test_add_item_to_draft_requisition() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "DRAFT").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/items", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&serde_json::json!({
+            "catalog_item_id": catalog_item_id,
+            "requested_quantity": "3.0000",
+            "justification": "Reposição de estoque"
+        }))
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        axum::http::StatusCode::CREATED,
+        "body: {}",
+        response.text()
+    );
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["catalog_item_id"], catalog_item_id.to_string());
+    assert_eq!(body["requested_quantity"], "3.0000");
+    assert_eq!(body["justification"], "Reposição de estoque");
+    // unit_value comes from warehouse_stocks or falls back to 0
+    assert!(body["unit_value"].is_string() || body["unit_value"].is_number());
+}
+
+#[tokio::test]
+async fn test_add_item_to_pending_requisition() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PENDING").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/items", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&serde_json::json!({
+            "catalog_item_id": catalog_item_id,
+            "requested_quantity": "1.0000"
+        }))
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        axum::http::StatusCode::CREATED,
+        "body: {}",
+        response.text()
+    );
+}
+
+#[tokio::test]
+async fn test_cannot_add_item_to_approved_requisition() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id =
+        create_test_requisition(&app.db_auth, warehouse_id, admin_id, "APPROVED").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/items", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&serde_json::json!({
+            "catalog_item_id": catalog_item_id,
+            "requested_quantity": "1.0000"
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), axum::http::StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_add_item_requires_catalog_item_id() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "DRAFT").await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/items", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&serde_json::json!({
+            "requested_quantity": "1.0000"
+        }))
+        .await;
+
+    // Missing required field — should be 422 or 400
+    assert!(
+        response.status_code() == axum::http::StatusCode::UNPROCESSABLE_ENTITY
+            || response.status_code() == axum::http::StatusCode::BAD_REQUEST,
+        "expected 400/422 got {}",
+        response.status_code()
+    );
+}
