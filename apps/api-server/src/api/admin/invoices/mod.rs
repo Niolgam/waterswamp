@@ -19,4 +19,9 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/post", axum::routing::post(handlers::post_invoice))
         .route("/{id}/reject", axum::routing::post(handlers::reject_invoice))
         .route("/{id}/cancel", axum::routing::post(handlers::cancel_invoice))
+        .route(
+            "/{id}/adjustments",
+            get(handlers::list_invoice_adjustments)
+                .post(handlers::create_invoice_adjustment),
+        )
 }

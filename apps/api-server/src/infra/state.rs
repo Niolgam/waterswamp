@@ -17,6 +17,8 @@ use application::services::driver_service::DriverService;
 use application::services::fueling_service::FuelingService;
 use application::services::vehicle_fine_service::VehicleFineService;
 use application::services::invoice_service::InvoiceService;
+use application::services::invoice_adjustment_service::InvoiceAdjustmentService;
+use application::services::stock_movement_service::StockMovementService;
 use application::services::warehouse_service::WarehouseService;
 use application::external::SiorgSyncService;
 use casbin::Enforcer;
@@ -65,6 +67,8 @@ pub struct AppState {
     pub fueling_service: Arc<FuelingService>,
     pub vehicle_fine_service: Arc<VehicleFineService>,
     pub invoice_service: Arc<InvoiceService>,
+    pub invoice_adjustment_service: Arc<InvoiceAdjustmentService>,
+    pub stock_movement_service: Arc<StockMovementService>,
     pub warehouse_service: Arc<WarehouseService>,
     pub config: Arc<Config>,
     /// AES-256-GCM key for field-level encryption (email, MFA secrets).

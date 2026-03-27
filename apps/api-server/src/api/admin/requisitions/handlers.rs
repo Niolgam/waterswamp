@@ -9,8 +9,8 @@ use axum::{
     Json,
 };
 use domain::models::requisition::{
-    ApproveRequisitionPayload, AuditContext, CancelRequisitionPayload, RejectRequisitionPayload,
-    RollbackPayload,
+    ApproveRequisitionPayload, AuditContext, CancelRequisitionPayload, CreateRequisitionItemPayload,
+    RejectRequisitionPayload, RollbackPayload,
 };
 use uuid::Uuid;
 
@@ -291,4 +291,21 @@ pub async fn restore_requisition_item(
         .await?;
 
     Ok(Json(item.into()))
+}
+
+/// POST /api/admin/requisitions/{id}/items
+pub async fn add_requisition_item(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateRequisitionItemPayload>,
+) -> Result<(axum::http::StatusCode, Json<RequisitionItemResponse>), AppError> {
+    let _ctx = create_audit_context(&user, &headers);
+    let item = state
+        .requisition_service
+        .add_item_to_requisition(id, payload, user.id)
+        .await?;
+
+    Ok((axum::http::StatusCode::CREATED, Json(item.into())))
 }

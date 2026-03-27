@@ -1,6 +1,7 @@
 use crate::errors::RepositoryError;
 use crate::models::requisition::*;
 use async_trait::async_trait;
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
 // ============================================================================
@@ -95,6 +96,17 @@ pub trait RequisitionItemRepositoryPort: Send + Sync {
         &self,
         requisition_id: Uuid,
     ) -> Result<Vec<RequisitionItemDto>, RepositoryError>;
+
+    /// Create a new requisition item (unit_value and total_value are pre-calculated by the service)
+    async fn create_item(
+        &self,
+        requisition_id: Uuid,
+        catalog_item_id: Uuid,
+        requested_quantity: Decimal,
+        unit_value: Decimal,
+        total_value: Decimal,
+        justification: Option<&str>,
+    ) -> Result<RequisitionItemDto, RepositoryError>;
 
     /// Soft delete an item
     async fn soft_delete(

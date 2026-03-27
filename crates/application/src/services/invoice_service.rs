@@ -1,25 +1,33 @@
 use crate::errors::ServiceError;
+use crate::services::stock_movement_service::StockMovementService;
 use domain::{
     models::invoice::*,
     ports::invoice::*,
 };
 use rust_decimal::Decimal;
+use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct InvoiceService {
+    pool: PgPool,
     invoice_repo: Arc<dyn InvoiceRepositoryPort>,
     invoice_item_repo: Arc<dyn InvoiceItemRepositoryPort>,
+    stock_movement_service: Arc<StockMovementService>,
 }
 
 impl InvoiceService {
     pub fn new(
+        pool: PgPool,
         invoice_repo: Arc<dyn InvoiceRepositoryPort>,
         invoice_item_repo: Arc<dyn InvoiceItemRepositoryPort>,
+        stock_movement_service: Arc<StockMovementService>,
     ) -> Self {
         Self {
+            pool,
             invoice_repo,
             invoice_item_repo,
+            stock_movement_service,
         }
     }
 
@@ -39,7 +47,6 @@ impl InvoiceService {
             ));
         }
 
-        // Deduplicate access_key
         if let Some(ref key) = payload.access_key {
             if !key.is_empty()
                 && self
@@ -80,7 +87,8 @@ impl InvoiceService {
             .await
             .map_err(ServiceError::from)?;
 
-        // Insert items — the DB trigger fn_update_invoice_totals() recalculates totals
+        // Insert items and compute totals in Rust (replaces trg_update_invoice_totals)
+        let mut total_products = Decimal::ZERO;
         for item in &payload.items {
             if item.quantity_raw <= Decimal::ZERO {
                 return Err(ServiceError::BadRequest(
@@ -106,7 +114,14 @@ impl InvoiceService {
                 )
                 .await
                 .map_err(ServiceError::from)?;
+            total_products += item.quantity_raw * item.unit_value_raw;
         }
+
+        let total_value = total_products + total_freight - total_discount;
+        self.invoice_repo
+            .recalculate_totals(invoice.id, total_products, total_value)
+            .await
+            .map_err(ServiceError::from)?;
 
         self.invoice_repo
             .find_with_details_by_id(invoice.id)
@@ -129,7 +144,6 @@ impl InvoiceService {
         &self,
         invoice_id: Uuid,
     ) -> Result<Vec<InvoiceItemWithDetailsDto>, ServiceError> {
-        // Ensure the invoice exists
         let _ = self
             .invoice_repo
             .find_by_id(invoice_id)
@@ -156,14 +170,12 @@ impl InvoiceService {
             .map_err(ServiceError::from)?
             .ok_or(ServiceError::NotFound("Nota fiscal não encontrada".to_string()))?;
 
-        // Only allow edits on PENDING invoices
         if current.status != InvoiceStatus::Pending {
             return Err(ServiceError::BadRequest(
                 "Apenas notas fiscais com status PENDING podem ser editadas".to_string(),
             ));
         }
 
-        // Deduplicate access_key if changing it
         if let Some(ref key) = payload.access_key {
             if !key.is_empty()
                 && self
@@ -271,6 +283,9 @@ impl InvoiceService {
             .ok_or(ServiceError::Internal("Falha ao buscar nota fiscal".to_string()))
     }
 
+    /// Posts an invoice to stock. Atomically:
+    /// 1. Updates invoice status to POSTED
+    /// 2. Creates ENTRY stock movements for all STOCKABLE items (replaces fn_auto_post_invoice)
     pub async fn post_invoice(
         &self,
         id: Uuid,
@@ -289,11 +304,39 @@ impl InvoiceService {
             ));
         }
 
-        // The DB trigger fn_auto_post_invoice() handles stock movements automatically
-        self.invoice_repo
-            .transition_to_posted(id, user_id)
+        let mut tx = self
+            .pool
+            .begin()
             .await
-            .map_err(ServiceError::from)?;
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        sqlx::query(
+            r#"UPDATE invoices SET
+                status = 'POSTED',
+                posted_at = NOW(),
+                posted_by = $2,
+                updated_at = NOW()
+               WHERE id = $1"#,
+        )
+        .bind(id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        self.stock_movement_service
+            .process_invoice_entry(
+                &mut tx,
+                id,
+                current.warehouse_id,
+                &current.invoice_number,
+                user_id,
+            )
+            .await?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         self.invoice_repo
             .find_with_details_by_id(id)
@@ -342,6 +385,7 @@ impl InvoiceService {
             .ok_or(ServiceError::Internal("Falha ao buscar nota fiscal".to_string()))
     }
 
+    /// Cancels an invoice. If POSTED, atomically reverses stock movements first.
     pub async fn cancel_invoice(
         &self,
         id: Uuid,
@@ -360,11 +404,35 @@ impl InvoiceService {
             ));
         }
 
-        // If POSTED, the DB trigger fn_auto_post_invoice() reverses stock movements automatically
-        self.invoice_repo
-            .transition_to_cancelled(id, user_id)
+        if current.status == InvoiceStatus::Posted {
+            // Must reverse stock movements atomically
+            let mut tx = self
+                .pool
+                .begin()
+                .await
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+            self.stock_movement_service
+                .reverse_invoice_entry(&mut tx, id, &current.invoice_number, user_id)
+                .await?;
+
+            sqlx::query(
+                "UPDATE invoices SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1",
+            )
+            .bind(id)
+            .execute(&mut *tx)
             .await
-            .map_err(ServiceError::from)?;
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+            tx.commit()
+                .await
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
+        } else {
+            self.invoice_repo
+                .transition_to_cancelled(id, user_id)
+                .await
+                .map_err(ServiceError::from)?;
+        }
 
         self.invoice_repo
             .find_with_details_by_id(id)

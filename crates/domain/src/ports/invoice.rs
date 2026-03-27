@@ -91,6 +91,14 @@ pub trait InvoiceRepositoryPort: Send + Sync {
 
     async fn delete(&self, id: Uuid) -> Result<bool, RepositoryError>;
 
+    /// Recalculates total_products and total_value (replaces trg_update_invoice_totals)
+    async fn recalculate_totals(
+        &self,
+        id: Uuid,
+        total_products: Decimal,
+        total_value: Decimal,
+    ) -> Result<(), RepositoryError>;
+
     async fn list(
         &self,
         limit: i64,

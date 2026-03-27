@@ -23,6 +23,8 @@ use application::services::{
     fueling_service::FuelingService,
     vehicle_fine_service::VehicleFineService,
     invoice_service::InvoiceService,
+    invoice_adjustment_service::InvoiceAdjustmentService,
+    stock_movement_service::StockMovementService,
     warehouse_service::WarehouseService,
     user_service::UserService,
     vehicle_service::VehicleService,
@@ -47,7 +49,7 @@ use domain::ports::{
     DriverRepositoryPort,
     FuelingRepositoryPort,
     VehicleFineTypeRepositoryPort, VehicleFineRepositoryPort, VehicleFineStatusHistoryRepositoryPort,
-    InvoiceRepositoryPort, InvoiceItemRepositoryPort,
+    InvoiceRepositoryPort, InvoiceItemRepositoryPort, InvoiceAdjustmentRepositoryPort,
     WarehouseRepositoryPort, WarehouseStockRepositoryPort,
     VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
 };
@@ -77,6 +79,7 @@ use persistence::repositories::{
     fueling_repository::FuelingRepository,
     vehicle_fine_repository::{VehicleFineTypeRepository, VehicleFineRepository, VehicleFineStatusHistoryRepository},
     invoice_repository::{InvoiceRepository, InvoiceItemRepository},
+    invoice_adjustment_repository::InvoiceAdjustmentRepository,
     warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
     vehicle_repository::{
         VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
@@ -286,6 +289,7 @@ pub fn build_application_state(
         Arc::new(RequisitionItemRepository::new(pool_auth.clone()));
 
     let requisition_service = Arc::new(RequisitionService::new(
+        pool_auth.clone(),
         requisition_repo_port,
         requisition_item_repo_port,
     ));
@@ -350,12 +354,28 @@ pub fn build_application_state(
         vehicle_fine_status_history_repo,
     ));
 
+    // Stock movement service (needed by invoice and adjustment services)
+    let stock_movement_service = Arc::new(StockMovementService::new(pool_auth.clone()));
+
     // Invoice repositories and service
     let invoice_repo: Arc<dyn InvoiceRepositoryPort> =
         Arc::new(InvoiceRepository::new(pool_auth.clone()));
     let invoice_item_repo: Arc<dyn InvoiceItemRepositoryPort> =
         Arc::new(InvoiceItemRepository::new(pool_auth.clone()));
-    let invoice_service = Arc::new(InvoiceService::new(invoice_repo, invoice_item_repo));
+    let invoice_adjustment_repo: Arc<dyn InvoiceAdjustmentRepositoryPort> =
+        Arc::new(InvoiceAdjustmentRepository::new(pool_auth.clone()));
+    let invoice_service = Arc::new(InvoiceService::new(
+        pool_auth.clone(),
+        invoice_repo.clone(),
+        invoice_item_repo,
+        stock_movement_service.clone(),
+    ));
+    let invoice_adjustment_service = Arc::new(InvoiceAdjustmentService::new(
+        pool_auth.clone(),
+        invoice_repo,
+        invoice_adjustment_repo,
+        stock_movement_service.clone(),
+    ));
 
     // Warehouse repositories and service
     let warehouse_repo: Arc<dyn WarehouseRepositoryPort> =
@@ -399,6 +419,8 @@ pub fn build_application_state(
         fueling_service,
         vehicle_fine_service,
         invoice_service,
+        invoice_adjustment_service,
+        stock_movement_service,
         warehouse_service,
         config,
         field_encryption_key: enc_key,

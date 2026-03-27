@@ -6,6 +6,9 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use domain::models::invoice_adjustment::{
+    CreateInvoiceAdjustmentPayload, InvoiceAdjustmentWithItemsDto,
+};
 use serde::Deserialize;
 use utoipa::IntoParams;
 use uuid::Uuid;
@@ -186,5 +189,34 @@ pub async fn list_invoices(
                 offset: query.offset,
             })
         })
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+// ── Invoice Adjustments (Glosas) ────────────────────────────────────────────
+
+pub async fn list_invoice_adjustments(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<InvoiceAdjustmentWithItemsDto>>, (StatusCode, String)> {
+    state
+        .invoice_adjustment_service
+        .list_adjustments(id)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+pub async fn create_invoice_adjustment(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<CreateInvoiceAdjustmentPayload>,
+) -> Result<(StatusCode, Json<InvoiceAdjustmentWithItemsDto>), (StatusCode, String)> {
+    state
+        .invoice_adjustment_service
+        .create_adjustment(id, payload, user.id)
+        .await
+        .map(|a| (StatusCode::CREATED, Json(a)))
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }

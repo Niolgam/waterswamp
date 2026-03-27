@@ -292,6 +292,28 @@ impl InvoiceRepositoryPort for InvoiceRepository {
         Ok(result.rows_affected() > 0)
     }
 
+    async fn recalculate_totals(
+        &self,
+        id: Uuid,
+        total_products: Decimal,
+        total_value: Decimal,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"UPDATE invoices SET
+                total_products = $2,
+                total_value = $3,
+                updated_at = NOW()
+               WHERE id = $1"#,
+        )
+        .bind(id)
+        .bind(total_products)
+        .bind(total_value)
+        .execute(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+        Ok(())
+    }
+
     async fn list(
         &self,
         limit: i64,
@@ -426,7 +448,7 @@ impl InvoiceItemRepositoryPort for InvoiceItemRepository {
         &self,
         invoice_id: Uuid,
     ) -> Result<Vec<InvoiceItemWithDetailsDto>, RepositoryError> {
-        sqlx::query_as::<_, InvoiceItemWithDetailsDto>(
+        let rows = sqlx::query_as::<_, InvoiceItemWithDetailsRow>(
             r#"SELECT ii.id, ii.invoice_id,
                       ii.catalog_item_id, ci.description AS catalog_item_name,
                       ii.unit_conversion_id,
@@ -436,18 +458,31 @@ impl InvoiceItemRepositoryPort for InvoiceItemRepository {
                       ii.conversion_factor, ii.quantity_base, ii.unit_value_base,
                       ii.ncm, ii.cfop, ii.cest,
                       ii.batch_number, ii.manufacturing_date, ii.expiration_date,
-                      ii.created_at
+                      ii.created_at,
+                      COALESCE(adj.adjusted_quantity, 0) AS adjusted_quantity,
+                      COALESCE(adj.adjusted_value, 0) AS adjusted_value
                FROM invoice_items ii
                LEFT JOIN catmat_items ci ON ci.id = ii.catalog_item_id
                LEFT JOIN catmat_pdms pdm ON pdm.id = ci.pdm_id
                LEFT JOIN units_of_measure u ON u.id = ii.unit_raw_id
+               LEFT JOIN (
+                   SELECT iai.invoice_item_id,
+                          SUM(iai.adjusted_quantity) AS adjusted_quantity,
+                          SUM(iai.adjusted_value) AS adjusted_value
+                   FROM invoice_adjustment_items iai
+                   INNER JOIN invoice_adjustments ia ON ia.id = iai.adjustment_id
+                   WHERE ia.invoice_id = $1
+                   GROUP BY iai.invoice_item_id
+               ) adj ON adj.invoice_item_id = ii.id
                WHERE ii.invoice_id = $1
                ORDER BY ii.created_at ASC"#,
         )
         .bind(invoice_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(map_db_error)
+        .map_err(map_db_error)?;
+
+        Ok(rows.into_iter().map(InvoiceItemWithDetailsDto::from).collect())
     }
 
     async fn create(

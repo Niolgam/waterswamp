@@ -1,4 +1,5 @@
 use crate::models::catalog::MaterialClassification;
+use crate::models::invoice_adjustment::AdjustmentItemStatus;
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -134,8 +135,8 @@ pub struct InvoiceItemDto {
     pub created_at: DateTime<Utc>,
 }
 
-/// Invoice item with catalog item, unit names and PDM classification joined
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+/// Invoice item with catalog item, unit names, PDM classification and adjustment totals joined
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct InvoiceItemWithDetailsDto {
     pub id: Uuid,
     pub invoice_id: Uuid,
@@ -165,6 +166,77 @@ pub struct InvoiceItemWithDetailsDto {
     pub expiration_date: Option<NaiveDate>,
 
     pub created_at: DateTime<Utc>,
+
+    // ── Campos calculados via LEFT JOIN com invoice_adjustment_items ──────────
+    /// Quantidade total ajustada (soma de todos os ajustes para este item)
+    pub adjusted_quantity: Decimal,
+    /// Valor total ajustado (soma de todos os ajustes para este item)
+    pub adjusted_value: Decimal,
+    /// Status calculado: REGULAR, PARTIAL_ADJUSTMENT ou TOTAL_ADJUSTMENT
+    pub adjustment_status: AdjustmentItemStatus,
+}
+
+/// Struct intermediária para FromRow — campos brutos antes do cálculo do adjustment_status
+#[derive(Debug, sqlx::FromRow)]
+pub struct InvoiceItemWithDetailsRow {
+    pub id: Uuid,
+    pub invoice_id: Uuid,
+    pub catalog_item_id: Uuid,
+    pub catalog_item_name: Option<String>,
+    pub unit_conversion_id: Option<Uuid>,
+    pub unit_raw_id: Uuid,
+    pub unit_raw_name: Option<String>,
+    pub unit_raw_symbol: Option<String>,
+    pub material_classification: MaterialClassification,
+    pub quantity_raw: Decimal,
+    pub unit_value_raw: Decimal,
+    pub total_value: Decimal,
+    pub conversion_factor: Decimal,
+    pub quantity_base: Decimal,
+    pub unit_value_base: Decimal,
+    pub ncm: Option<String>,
+    pub cfop: Option<String>,
+    pub cest: Option<String>,
+    pub batch_number: Option<String>,
+    pub manufacturing_date: Option<NaiveDate>,
+    pub expiration_date: Option<NaiveDate>,
+    pub created_at: DateTime<Utc>,
+    pub adjusted_quantity: Decimal,
+    pub adjusted_value: Decimal,
+}
+
+impl From<InvoiceItemWithDetailsRow> for InvoiceItemWithDetailsDto {
+    fn from(row: InvoiceItemWithDetailsRow) -> Self {
+        let adjustment_status =
+            AdjustmentItemStatus::calculate(row.adjusted_quantity, row.quantity_base);
+        InvoiceItemWithDetailsDto {
+            id: row.id,
+            invoice_id: row.invoice_id,
+            catalog_item_id: row.catalog_item_id,
+            catalog_item_name: row.catalog_item_name,
+            unit_conversion_id: row.unit_conversion_id,
+            unit_raw_id: row.unit_raw_id,
+            unit_raw_name: row.unit_raw_name,
+            unit_raw_symbol: row.unit_raw_symbol,
+            material_classification: row.material_classification,
+            quantity_raw: row.quantity_raw,
+            unit_value_raw: row.unit_value_raw,
+            total_value: row.total_value,
+            conversion_factor: row.conversion_factor,
+            quantity_base: row.quantity_base,
+            unit_value_base: row.unit_value_base,
+            ncm: row.ncm,
+            cfop: row.cfop,
+            cest: row.cest,
+            batch_number: row.batch_number,
+            manufacturing_date: row.manufacturing_date,
+            expiration_date: row.expiration_date,
+            created_at: row.created_at,
+            adjusted_quantity: row.adjusted_quantity,
+            adjusted_value: row.adjusted_value,
+            adjustment_status,
+        }
+    }
 }
 
 // ============================

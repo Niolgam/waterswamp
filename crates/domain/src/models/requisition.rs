@@ -82,13 +82,12 @@ pub struct RequisitionDto {
 pub struct RequisitionItemDto {
     pub id: Uuid,
     pub requisition_id: Uuid,
-    pub catmat_item_id: Option<Uuid>,
-    pub catser_item_id: Option<Uuid>,
+    pub catalog_item_id: Uuid,
     pub requested_quantity: Decimal,
     pub approved_quantity: Option<Decimal>,
-    pub fulfilled_quantity: Option<Decimal>,
-    pub unit_value: Option<Decimal>,
-    pub total_value: Option<Decimal>,
+    pub fulfilled_quantity: Decimal,
+    pub unit_value: Decimal,
+    pub total_value: Decimal,
     pub justification: Option<String>,
     pub cut_reason: Option<String>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -173,6 +172,14 @@ pub struct ApproveRequisitionPayload {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RejectRequisitionPayload {
     pub reason: String,
+}
+
+/// Payload para adicionar um item a uma requisição (preço capturado do estoque em Rust)
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateRequisitionItemPayload {
+    pub catalog_item_id: Uuid,
+    pub requested_quantity: Decimal,
+    pub justification: Option<String>,
 }
 
 // ============================================================================

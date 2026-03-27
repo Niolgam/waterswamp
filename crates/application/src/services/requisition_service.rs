@@ -3,6 +3,8 @@ use domain::{
     models::requisition::*,
     ports::requisition::*,
 };
+use rust_decimal::Decimal;
+use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -11,16 +13,19 @@ use uuid::Uuid;
 // ============================================================================
 
 pub struct RequisitionService {
+    pool: PgPool,
     requisition_repo: Arc<dyn RequisitionRepositoryPort>,
     item_repo: Arc<dyn RequisitionItemRepositoryPort>,
 }
 
 impl RequisitionService {
     pub fn new(
+        pool: PgPool,
         requisition_repo: Arc<dyn RequisitionRepositoryPort>,
         item_repo: Arc<dyn RequisitionItemRepositoryPort>,
     ) -> Self {
         Self {
+            pool,
             requisition_repo,
             item_repo,
         }
@@ -66,14 +71,16 @@ impl RequisitionService {
             .ok_or(ServiceError::NotFound("Requisição não encontrada".to_string()))
     }
 
-    /// Approve a requisition
+    /// Approve a requisition. Atomically:
+    /// 1. Updates status to APPROVED
+    /// 2. Inserts stock_reservations per item (replaces fn_manage_stock_reservation)
+    /// 3. Updates warehouse_stocks.reserved_quantity
     pub async fn approve_requisition(
         &self,
         id: Uuid,
         ctx: &AuditContext,
         payload: ApproveRequisitionPayload,
     ) -> Result<RequisitionDto, ServiceError> {
-        // Verify requisition exists and is in pending status
         let requisition = self.get_requisition(id).await?;
 
         if requisition.status != RequisitionStatus::Pending {
@@ -83,14 +90,92 @@ impl RequisitionService {
             )));
         }
 
-        // Set audit context
-        self.set_audit_context(ctx).await?;
-
-        // Approve
-        self.requisition_repo
-            .approve(id, ctx.user_id, payload.notes.as_deref())
+        let mut tx = self
+            .pool
+            .begin()
             .await
-            .map_err(ServiceError::from)
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // Set audit context on the same connection as the transaction
+        sqlx::query("SELECT fn_set_audit_context($1, $2, $3)")
+            .bind(ctx.user_id)
+            .bind(ctx.ip_address.as_deref())
+            .bind(ctx.user_agent.as_deref())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let approved = sqlx::query_as::<_, RequisitionDto>(
+            r#"UPDATE requisitions SET
+                status = 'APPROVED',
+                approved_by = $2,
+                approved_at = NOW(),
+                internal_notes = COALESCE($3, internal_notes),
+                updated_at = NOW()
+               WHERE id = $1
+               RETURNING *"#,
+        )
+        .bind(id)
+        .bind(ctx.user_id)
+        .bind(payload.notes.as_deref())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // Create stock reservations and update warehouse_stocks.reserved_quantity
+        #[derive(sqlx::FromRow)]
+        struct ItemRow {
+            id: Uuid,
+            catalog_item_id: Uuid,
+            requested_quantity: Decimal,
+            approved_quantity: Option<Decimal>,
+        }
+
+        let items = sqlx::query_as::<_, ItemRow>(
+            r#"SELECT id, catalog_item_id, requested_quantity, approved_quantity
+               FROM requisition_items
+               WHERE requisition_id = $1 AND deleted_at IS NULL"#,
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        for item in &items {
+            let qty = item.approved_quantity.unwrap_or(item.requested_quantity);
+
+            sqlx::query(
+                r#"INSERT INTO stock_reservations
+                   (requisition_id, requisition_item_id, catalog_item_id, warehouse_id, quantity)
+                   VALUES ($1, $2, $3, $4, $5)"#,
+            )
+            .bind(id)
+            .bind(item.id)
+            .bind(item.catalog_item_id)
+            .bind(requisition.warehouse_id)
+            .bind(qty)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+            sqlx::query(
+                r#"UPDATE warehouse_stocks
+                   SET reserved_quantity = reserved_quantity + $1, updated_at = NOW()
+                   WHERE warehouse_id = $2 AND catalog_item_id = $3"#,
+            )
+            .bind(qty)
+            .bind(requisition.warehouse_id)
+            .bind(item.catalog_item_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(approved)
     }
 
     /// Reject a requisition
@@ -127,35 +212,135 @@ impl RequisitionService {
             .map_err(ServiceError::from)
     }
 
-    /// Cancel a requisition using the database function with built-in validations
+    /// Cancel a requisition. Atomically (replaces fn_cancel_requisition):
+    /// 1. Validates status allows cancellation and no stock movements exist
+    /// 2. Releases active stock reservations
+    /// 3. Updates warehouse_stocks.reserved_quantity
+    /// 4. Sets status to CANCELLED
     pub async fn cancel_requisition(
         &self,
         id: Uuid,
         ctx: &AuditContext,
         payload: CancelRequisitionPayload,
     ) -> Result<serde_json::Value, ServiceError> {
-        // Validate reason
         if payload.reason.trim().is_empty() {
             return Err(ServiceError::BadRequest(
                 "Justificativa é obrigatória para cancelamento".to_string(),
             ));
         }
 
-        // The database function will handle all validations:
-        // - Check if requisition exists
-        // - Check if status allows cancellation
-        // - Check if there are stock movements
-        // - Release reserves if any
-        self.requisition_repo
-            .cancel(id, &payload.reason, ctx.user_id)
+        let requisition = self.get_requisition(id).await?;
+
+        let cancellable = matches!(
+            requisition.status,
+            RequisitionStatus::Draft
+                | RequisitionStatus::Pending
+                | RequisitionStatus::Approved
+        );
+        if !cancellable {
+            return Err(ServiceError::BadRequest(format!(
+                "Requisição não pode ser cancelada: status atual é {:?}",
+                requisition.status
+            )));
+        }
+
+        // Check for stock movements (block cancellation if any exist)
+        let has_movements: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM stock_movements WHERE requisition_id = $1)",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        if has_movements {
+            return Err(ServiceError::BadRequest(
+                "Não é possível cancelar: existem movimentações de estoque vinculadas a esta requisição".to_string(),
+            ));
+        }
+
+        let previous_status = format!("{:?}", requisition.status).to_uppercase();
+
+        let mut tx = self
+            .pool
+            .begin()
             .await
-            .map_err(|e| {
-                // Map database errors to friendly messages
-                if let domain::errors::RepositoryError::Database(ref msg) = e {
-                    return ServiceError::BadRequest(msg.clone());
-                }
-                ServiceError::from(e)
-            })
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // Set audit context
+        sqlx::query("SELECT fn_set_audit_context($1, $2, $3)")
+            .bind(ctx.user_id)
+            .bind(ctx.ip_address.as_deref())
+            .bind(ctx.user_agent.as_deref())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        sqlx::query(
+            r#"UPDATE requisitions SET
+                status = 'CANCELLED',
+                cancellation_reason = $2,
+                updated_at = NOW()
+               WHERE id = $1"#,
+        )
+        .bind(id)
+        .bind(&payload.reason)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // Release active stock reservations
+        #[derive(sqlx::FromRow)]
+        struct ReservationRow {
+            id: Uuid,
+            catalog_item_id: Uuid,
+            quantity: Decimal,
+        }
+
+        let reservations = sqlx::query_as::<_, ReservationRow>(
+            "SELECT id, catalog_item_id, quantity FROM stock_reservations WHERE requisition_id = $1 AND is_active = TRUE",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        for res in &reservations {
+            sqlx::query(
+                r#"UPDATE warehouse_stocks
+                   SET reserved_quantity = GREATEST(0, reserved_quantity - $1), updated_at = NOW()
+                   WHERE warehouse_id = $2 AND catalog_item_id = $3"#,
+            )
+            .bind(res.quantity)
+            .bind(requisition.warehouse_id)
+            .bind(res.catalog_item_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+        }
+
+        sqlx::query(
+            r#"UPDATE stock_reservations
+               SET is_active = FALSE, released_at = NOW(), release_reason = $2
+               WHERE requisition_id = $1 AND is_active = TRUE"#,
+        )
+        .bind(id)
+        .bind(&payload.reason)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(serde_json::json!({
+            "success": true,
+            "requisition_id": id,
+            "previous_status": previous_status,
+            "new_status": "CANCELLED",
+            "reason": payload.reason
+        }))
     }
 
     /// Rollback a requisition to a previous state
@@ -240,6 +425,95 @@ impl RequisitionService {
     // ========================================================================
     // REQUISITION ITEM OPERATIONS
     // ========================================================================
+
+    /// Add an item to a requisition. Atomically:
+    /// 1. Looks up average_unit_value from warehouse_stocks (replaces fn_capture_requisition_item_value)
+    /// 2. Creates the item with correct unit/total values
+    /// 3. Recalculates requisition total_value (replaces trg_update_requisition_total)
+    pub async fn add_item_to_requisition(
+        &self,
+        requisition_id: Uuid,
+        payload: CreateRequisitionItemPayload,
+        _user_id: Uuid,
+    ) -> Result<RequisitionItemDto, ServiceError> {
+        if payload.requested_quantity <= Decimal::ZERO {
+            return Err(ServiceError::BadRequest(
+                "Quantidade deve ser maior que zero".to_string(),
+            ));
+        }
+
+        let requisition = self.get_requisition(requisition_id).await?;
+
+        if !matches!(
+            requisition.status,
+            RequisitionStatus::Draft | RequisitionStatus::Pending
+        ) {
+            return Err(ServiceError::BadRequest(
+                "Itens só podem ser adicionados a requisições com status DRAFT ou PENDING"
+                    .to_string(),
+            ));
+        }
+
+        // Look up unit_value from warehouse_stocks (or estimated_value as fallback)
+        let unit_value: Decimal = sqlx::query_scalar(
+            r#"SELECT COALESCE(ws.average_unit_value, ci.estimated_value, 0)
+               FROM catmat_items ci
+               LEFT JOIN warehouse_stocks ws
+                   ON ws.catalog_item_id = ci.id AND ws.warehouse_id = $1
+               WHERE ci.id = $2"#,
+        )
+        .bind(requisition.warehouse_id)
+        .bind(payload.catalog_item_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?
+        .unwrap_or(Decimal::ZERO);
+
+        let total_value = payload.requested_quantity * unit_value;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let item = sqlx::query_as::<_, RequisitionItemDto>(
+            r#"INSERT INTO requisition_items (
+                requisition_id, catalog_item_id,
+                requested_quantity, unit_value, total_value, justification
+               ) VALUES ($1, $2, $3, $4, $5, $6)
+               RETURNING *"#,
+        )
+        .bind(requisition_id)
+        .bind(payload.catalog_item_id)
+        .bind(payload.requested_quantity)
+        .bind(unit_value)
+        .bind(total_value)
+        .bind(payload.justification.as_deref())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // Recalculate requisition total
+        sqlx::query(
+            r#"UPDATE requisitions
+               SET total_value = COALESCE(
+                   (SELECT SUM(total_value) FROM requisition_items
+                    WHERE requisition_id = $1 AND deleted_at IS NULL), 0),
+                   updated_at = NOW()
+               WHERE id = $1"#,
+        )
+        .bind(requisition_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(item)
+    }
 
     /// Get items for a requisition
     pub async fn get_requisition_items(
@@ -369,13 +643,12 @@ mod tests {
         RequisitionItemDto {
             id: Uuid::new_v4(),
             requisition_id: Uuid::new_v4(),
-            catmat_item_id: Some(Uuid::new_v4()),
-            catser_item_id: None,
+            catalog_item_id: Uuid::new_v4(),
             requested_quantity: Decimal::new(10, 0),
             approved_quantity: None,
-            fulfilled_quantity: None,
-            unit_value: Some(Decimal::new(100, 2)),
-            total_value: Some(Decimal::new(1000, 2)),
+            fulfilled_quantity: Decimal::ZERO,
+            unit_value: Decimal::new(100, 2),
+            total_value: Decimal::new(1000, 2),
             justification: Some("Test item".to_string()),
             cut_reason: None,
             deleted_at: if deleted { Some(Utc::now()) } else { None },
