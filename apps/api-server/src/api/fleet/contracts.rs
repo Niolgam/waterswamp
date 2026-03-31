@@ -20,7 +20,7 @@ pub use domain::models::vehicle::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct VehicleCategoriesListResponse {
-    pub categories: Vec<VehicleCategoryDto>,
+    pub data: Vec<VehicleCategoryDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -28,7 +28,7 @@ pub struct VehicleCategoriesListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct VehicleMakesListResponse {
-    pub makes: Vec<VehicleMakeDto>,
+    pub data: Vec<VehicleMakeDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -36,7 +36,7 @@ pub struct VehicleMakesListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct VehicleModelsListResponse {
-    pub models: Vec<VehicleModelWithDetailsDto>,
+    pub data: Vec<VehicleModelWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

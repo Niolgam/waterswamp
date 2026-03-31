@@ -107,7 +107,7 @@ pub async fn list_warehouses(
         .await
         .map(|(warehouses, total)| {
             Json(WarehousesListResponse {
-                warehouses,
+                data: warehouses,
                 total,
                 limit: query.limit,
                 offset: query.offset,

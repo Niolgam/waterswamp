@@ -6,12 +6,11 @@ use utoipa::ToSchema;
 pub use domain::models::organizational::{
     ActivityArea, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
     CreateOrganizationalUnitPayload, CreateOrganizationalUnitTypePayload,
-    CreateSystemSettingPayload, InternalUnitType, OrganizationDto,
-    OrganizationalUnitCategoryDto, OrganizationalUnitDto, OrganizationalUnitTreeNode,
-    OrganizationalUnitTypeDto, OrganizationalUnitWithDetailsDto, SystemSettingDto,
-    UpdateOrganizationPayload, UpdateOrganizationalUnitCategoryPayload,
-    UpdateOrganizationalUnitPayload, UpdateOrganizationalUnitTypePayload,
-    UpdateSystemSettingPayload,
+    CreateSystemSettingPayload, InternalUnitType, OrganizationDto, OrganizationalUnitCategoryDto,
+    OrganizationalUnitDto, OrganizationalUnitTreeNode, OrganizationalUnitTypeDto,
+    OrganizationalUnitWithDetailsDto, SystemSettingDto, UpdateOrganizationPayload,
+    UpdateOrganizationalUnitCategoryPayload, UpdateOrganizationalUnitPayload,
+    UpdateOrganizationalUnitTypePayload, UpdateSystemSettingPayload,
 };
 
 // ============================
@@ -20,7 +19,7 @@ pub use domain::models::organizational::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SystemSettingsListResponse {
-    pub settings: Vec<SystemSettingDto>,
+    pub data: Vec<SystemSettingDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -28,7 +27,7 @@ pub struct SystemSettingsListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrganizationsListResponse {
-    pub organizations: Vec<OrganizationDto>,
+    pub data: Vec<OrganizationDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -36,7 +35,7 @@ pub struct OrganizationsListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrganizationalUnitCategoriesListResponse {
-    pub categories: Vec<OrganizationalUnitCategoryDto>,
+    pub data: Vec<OrganizationalUnitCategoryDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -44,7 +43,7 @@ pub struct OrganizationalUnitCategoriesListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrganizationalUnitTypesListResponse {
-    pub types: Vec<OrganizationalUnitTypeDto>,
+    pub data: Vec<OrganizationalUnitTypeDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -52,7 +51,7 @@ pub struct OrganizationalUnitTypesListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrganizationalUnitsListResponse {
-    pub units: Vec<OrganizationalUnitWithDetailsDto>,
+    pub data: Vec<OrganizationalUnitWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

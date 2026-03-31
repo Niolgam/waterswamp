@@ -12,7 +12,7 @@
 
 mod common;
 
-use axum::http::{header, StatusCode};
+use axum::http::StatusCode;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -112,8 +112,9 @@ async fn create_warehouse_with_stock(pool: &PgPool) -> (Uuid, Uuid) {
     .expect("catmat_class");
 
     let pdm_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO catmat_pdm (class_id, code, name) VALUES ($1, $2, $3)
-         ON CONFLICT (code) DO UPDATE SET name = catmat_pdm.name
+        "INSERT INTO catmat_pdms (class_id, code, description, material_classification) 
+         VALUES ($1, $2, $3, 'STOCKABLE')
+         ON CONFLICT (code) DO UPDATE SET description = catmat_pdms.description
          RETURNING id",
     )
     .bind(class_id)
@@ -124,9 +125,9 @@ async fn create_warehouse_with_stock(pool: &PgPool) -> (Uuid, Uuid) {
     .expect("catmat_pdm");
 
     let item_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO catmat_items (pdm_id, code, name, unit_id, is_active)
+        "INSERT INTO catmat_items (pdm_id, code, description, unit_of_measure_id, is_active)
          VALUES ($1, $2, $3, $4, true)
-         ON CONFLICT (code) DO UPDATE SET name = catmat_items.name
+         ON CONFLICT (code) DO UPDATE SET description = catmat_items.description
          RETURNING id",
     )
     .bind(pdm_id)
@@ -181,7 +182,7 @@ async fn test_create_warehouse() {
     let response = app
         .api
         .post("/api/admin/warehouses")
-        .add_header(header::AUTHORIZATION, format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&warehouse_payload(city_id))
         .await;
 
@@ -200,6 +201,7 @@ async fn test_get_warehouse() {
     let response = app
         .api
         .get(&format!("/api/admin/warehouses/{}", warehouse_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
@@ -214,6 +216,7 @@ async fn test_get_warehouse_not_found() {
     let response = app
         .api
         .get(&format!("/api/admin/warehouses/{}", Uuid::new_v4()))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
@@ -227,6 +230,7 @@ async fn test_update_warehouse() {
     let response = app
         .api
         .put(&format!("/api/admin/warehouses/{}", warehouse_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": "Updated Warehouse Name",
             "allows_transfers": false
@@ -247,6 +251,7 @@ async fn test_delete_warehouse() {
     let response = app
         .api
         .delete(&format!("/api/admin/warehouses/{}", warehouse_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::NO_CONTENT);
@@ -255,6 +260,7 @@ async fn test_delete_warehouse() {
     let response = app
         .api
         .get(&format!("/api/admin/warehouses/{}", warehouse_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 }
@@ -265,7 +271,11 @@ async fn test_list_warehouses() {
     let _ = create_test_warehouse_db(&app.db_auth).await;
     let _ = create_test_warehouse_db(&app.db_auth).await;
 
-    let response = app.api.get("/api/admin/warehouses?limit=50&offset=0").await;
+    let response = app
+        .api
+        .get("/api/admin/warehouses?limit=50&offset=0")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
@@ -293,6 +303,7 @@ async fn test_list_warehouses_filter_type() {
     let response = app
         .api
         .get("/api/admin/warehouses?warehouse_type=CENTRAL&limit=50")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
@@ -312,11 +323,21 @@ async fn test_create_warehouse_duplicate_code() {
     let payload = warehouse_payload(city_id);
 
     // First creation
-    let r1 = app.api.post("/api/admin/warehouses").json(&payload).await;
+    let r1 = app
+        .api
+        .post("/api/admin/warehouses")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&payload)
+        .await;
     assert_eq!(r1.status_code(), StatusCode::CREATED);
 
     // Second creation with same code → 409
-    let r2 = app.api.post("/api/admin/warehouses").json(&payload).await;
+    let r2 = app
+        .api
+        .post("/api/admin/warehouses")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&payload)
+        .await;
     assert_eq!(r2.status_code(), StatusCode::CONFLICT);
 }
 
@@ -330,9 +351,19 @@ async fn test_update_warehouse_duplicate_code() {
     let p2 = warehouse_payload(city_id);
     let code_of_first = p1["code"].as_str().unwrap().to_string();
 
-    app.api.post("/api/admin/warehouses").json(&p1).await;
+    app.api
+        .post("/api/admin/warehouses")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&p1)
+        .await;
 
-    let r2 = app.api.post("/api/admin/warehouses").json(&p2).await;
+    let r2 = app
+        .api
+        .post("/api/admin/warehouses")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&p2)
+        .await;
+    
     let id2: Value = r2.json();
     let id2 = id2["id"].as_str().unwrap().to_string();
 
@@ -340,6 +371,7 @@ async fn test_update_warehouse_duplicate_code() {
     let response = app
         .api
         .put(&format!("/api/admin/warehouses/{}", id2))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "code": code_of_first }))
         .await;
 
@@ -361,6 +393,7 @@ async fn test_list_warehouse_stocks() {
             "/api/admin/warehouses/{}/stocks?limit=50",
             warehouse_id
         ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
@@ -382,6 +415,7 @@ async fn test_get_stock_by_id() {
     let response = app
         .api
         .get(&format!("/api/admin/warehouses/stocks/{}", stock_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
@@ -399,6 +433,7 @@ async fn test_get_stock_not_found() {
     let response = app
         .api
         .get(&format!("/api/admin/warehouses/stocks/{}", Uuid::new_v4()))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
@@ -412,6 +447,7 @@ async fn test_update_stock_params() {
     let response = app
         .api
         .patch(&format!("/api/admin/warehouses/stocks/{}", stock_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "min_stock": "10.0",
             "max_stock": "200.0",
@@ -441,6 +477,7 @@ async fn test_block_and_unblock_stock() {
     let response = app
         .api
         .post(&format!("/api/admin/warehouses/stocks/{}/block", stock_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "block_reason": "Produto em quarentena" }))
         .await;
 
@@ -459,6 +496,7 @@ async fn test_block_and_unblock_stock() {
             "/api/admin/warehouses/stocks/{}/unblock",
             stock_id
         ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
@@ -475,6 +513,7 @@ async fn test_block_already_blocked_stock() {
     // Block first time
     app.api
         .post(&format!("/api/admin/warehouses/stocks/{}/block", stock_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "block_reason": "First block" }))
         .await;
 
@@ -482,6 +521,7 @@ async fn test_block_already_blocked_stock() {
     let response = app
         .api
         .post(&format!("/api/admin/warehouses/stocks/{}/block", stock_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "block_reason": "Second block attempt" }))
         .await;
 
@@ -500,6 +540,7 @@ async fn test_unblock_non_blocked_stock() {
             "/api/admin/warehouses/stocks/{}/unblock",
             stock_id
         ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
@@ -513,6 +554,7 @@ async fn test_block_requires_reason() {
     let response = app
         .api
         .post(&format!("/api/admin/warehouses/stocks/{}/block", stock_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "block_reason": "   " }))
         .await;
 
@@ -531,6 +573,7 @@ async fn test_list_stocks_filter_blocked() {
     // Block the stock
     app.api
         .post(&format!("/api/admin/warehouses/stocks/{}/block", stock_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "block_reason": "Testing filter" }))
         .await;
 
@@ -541,6 +584,7 @@ async fn test_list_stocks_filter_blocked() {
             "/api/admin/warehouses/{}/stocks?is_blocked=true",
             warehouse_id
         ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
@@ -554,6 +598,7 @@ async fn test_list_stocks_filter_blocked() {
             "/api/admin/warehouses/{}/stocks?is_blocked=false",
             warehouse_id
         ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
     assert_eq!(response.status_code(), StatusCode::OK);
@@ -569,6 +614,7 @@ async fn test_list_stocks_filter_blocked() {
 async fn test_warehouse_requires_auth() {
     let app = common::spawn_app().await;
 
+    // AQUI NÃO VAI TOKEN. Tem que dar 401.
     let response = app.api.get("/api/admin/warehouses").await;
 
     assert_eq!(response.status_code(), StatusCode::UNAUTHORIZED);
@@ -578,7 +624,12 @@ async fn test_warehouse_requires_auth() {
 async fn test_warehouse_requires_admin_role() {
     let app = common::spawn_app().await;
 
-    let response = app.api.get("/api/admin/warehouses").await;
+    // Aqui vai token de USUÁRIO COMUM (user_token). Tem que dar 403.
+    let response = app
+        .api
+        .get("/api/admin/warehouses")
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
+        .await;
 
     assert_eq!(response.status_code(), StatusCode::FORBIDDEN);
 }
@@ -588,9 +639,11 @@ async fn test_create_warehouse_requires_admin_role() {
     let app = common::spawn_app().await;
     let city_id = create_test_city(&app.db_auth).await;
 
+    // Aqui vai token de USUÁRIO COMUM (user_token). Tem que dar 403.
     let response = app
         .api
         .post("/api/admin/warehouses")
+        .add_header("Authorization", format!("Bearer {}", app.user_token))
         .json(&warehouse_payload(city_id))
         .await;
 

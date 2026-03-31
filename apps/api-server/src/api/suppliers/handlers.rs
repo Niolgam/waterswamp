@@ -86,9 +86,9 @@ pub async fn list_suppliers(
         .supplier_service
         .list_suppliers(query.limit, query.offset, query.search, query.is_active)
         .await
-        .map(|(suppliers, total)| {
+        .map(|(data, total)| {
             Json(SuppliersListResponse {
-                suppliers,
+                data,
                 total,
                 limit: query.limit,
                 offset: query.offset,

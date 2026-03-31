@@ -311,7 +311,7 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
     ) -> Result<Option<WarehouseStockWithDetailsDto>, RepositoryError> {
         sqlx::query_as::<_, WarehouseStockWithDetailsDto>(
             r#"SELECT ws.id, ws.warehouse_id, w.name AS warehouse_name,
-                      ws.catalog_item_id, ci.name AS catalog_item_name,
+                      ws.catalog_item_id, ci.description AS catalog_item_name,
                       ci.code AS catalog_item_code,
                       u.symbol AS unit_symbol, u.name AS unit_name,
                       ws.quantity, ws.reserved_quantity,
@@ -328,7 +328,7 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
                FROM warehouse_stocks ws
                JOIN warehouses w ON w.id = ws.warehouse_id
                JOIN catmat_items ci ON ci.id = ws.catalog_item_id
-               LEFT JOIN units_of_measure u ON u.id = ci.unit_id
+               LEFT JOIN units_of_measure u ON u.id = ci.unit_of_measure_id
                WHERE ws.id = $1"#,
         )
         .bind(id)
@@ -365,7 +365,7 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
 
         if search.is_some() {
             where_clauses.push(format!(
-                "(ci.name ILIKE ${p} OR ci.code ILIKE ${p} OR ws.location ILIKE ${p})",
+                "(ci.description ILIKE ${p} OR ci.code ILIKE ${p} OR ws.location ILIKE ${p})",
                 p = param_index
             ));
             param_index += 1;
@@ -385,7 +385,7 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
         );
         let list_sql = format!(
             r#"SELECT ws.id, ws.warehouse_id, w.name AS warehouse_name,
-                      ws.catalog_item_id, ci.name AS catalog_item_name,
+                      ws.catalog_item_id, ci.description AS catalog_item_name,
                       ci.code AS catalog_item_code,
                       u.symbol AS unit_symbol, u.name AS unit_name,
                       ws.quantity, ws.reserved_quantity,
@@ -402,9 +402,9 @@ impl WarehouseStockRepositoryPort for WarehouseStockRepository {
                FROM warehouse_stocks ws
                JOIN warehouses w ON w.id = ws.warehouse_id
                JOIN catmat_items ci ON ci.id = ws.catalog_item_id
-               LEFT JOIN units_of_measure u ON u.id = ci.unit_id
+               LEFT JOIN units_of_measure u ON u.id = ci.unit_of_measure_id
                {}
-               ORDER BY ci.name ASC
+               ORDER BY ci.description ASC
                LIMIT ${} OFFSET ${}"#,
             where_sql, param_index, param_index + 1
         );

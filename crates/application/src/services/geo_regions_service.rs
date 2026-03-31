@@ -142,9 +142,9 @@ impl GeoRegionsService {
         offset: i64,
         search: Option<String>,
     ) -> Result<Paginated<CountryDto>, ServiceError> {
-        let (items, total) = self.country_repo.list(limit, offset, search).await?;
+        let (data, total) = self.country_repo.list(limit, offset, search).await?;
 
-        Ok(Paginated::new(items, total, limit, offset))
+        Ok(Paginated::new(data, total, limit, offset))
     }
 
     // ============================
@@ -312,12 +312,12 @@ impl GeoRegionsService {
         let limit = limit.unwrap_or(50).min(100);
         let offset = offset.unwrap_or(0);
 
-        let (items, total) = self
+        let (data, total) = self
             .state_repo
             .list(limit, offset, search, country_id)
             .await?;
 
-        Ok(Paginated::new(items, total, limit, offset))
+        Ok(Paginated::new(data, total, limit, offset))
     }
 
     // ============================
@@ -423,8 +423,8 @@ impl GeoRegionsService {
         let limit = limit.unwrap_or(50).min(100);
         let offset = offset.unwrap_or(0);
 
-        let (items, total) = self.city_repo.list(limit, offset, search, state_id).await?;
+        let (data, total) = self.city_repo.list(limit, offset, search, state_id).await?;
 
-        Ok(Paginated::new(items, total, limit, offset))
+        Ok(Paginated::new(data, total, limit, offset))
     }
 }

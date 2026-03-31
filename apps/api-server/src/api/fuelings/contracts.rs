@@ -7,7 +7,7 @@ pub use domain::models::fueling::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct FuelingsListResponse {
-    pub fuelings: Vec<FuelingWithDetailsDto>,
+    pub data: Vec<FuelingWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

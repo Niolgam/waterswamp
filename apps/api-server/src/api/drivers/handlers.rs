@@ -85,11 +85,17 @@ pub async fn list_drivers(
 ) -> Result<Json<DriversListResponse>, (StatusCode, String)> {
     state
         .driver_service
-        .list_drivers(query.limit, query.offset, query.search, query.driver_type, query.is_active)
+        .list_drivers(
+            query.limit,
+            query.offset,
+            query.search,
+            query.driver_type,
+            query.is_active,
+        )
         .await
-        .map(|(drivers, total)| {
+        .map(|(data, total)| {
             Json(DriversListResponse {
-                drivers,
+                data,
                 total,
                 limit: query.limit,
                 offset: query.offset,

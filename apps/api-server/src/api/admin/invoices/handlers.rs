@@ -178,9 +178,9 @@ pub async fn list_invoices(
             query.warehouse_id,
         )
         .await
-        .map(|(invoices, total)| {
+        .map(|(data, total)| {
             Json(InvoicesListResponse {
-                invoices,
+                data,
                 total,
                 limit: query.limit,
                 offset: query.offset,

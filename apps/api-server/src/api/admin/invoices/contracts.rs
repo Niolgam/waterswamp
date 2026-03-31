@@ -9,7 +9,7 @@ pub use domain::models::invoice::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct InvoicesListResponse {
-    pub invoices: Vec<InvoiceWithDetailsDto>,
+    pub data: Vec<InvoiceWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

@@ -13,6 +13,8 @@ const X_REQUESTED_WITH: HeaderName = HeaderName::from_static("x-requested-with")
 const X_REQUEST_NONCE: HeaderName = HeaderName::from_static("x-request-nonce");
 const X_REQUEST_TIMESTAMP: HeaderName = HeaderName::from_static("x-request-timestamp");
 const X_REQUEST_SIGNATURE: HeaderName = HeaderName::from_static("x-request-signature");
+
+const X_BROWSER_FINGERPRINT: HeaderName = HeaderName::from_static("x-browser-fingerprint");
 /// Configuração de CORS para produção
 pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
     let origins: Vec<HeaderValue> = allowed_origins
@@ -35,11 +37,14 @@ pub fn cors_production(allowed_origins: Vec<String>) -> CorsLayer {
             header::CONTENT_TYPE,
             header::ACCEPT,
             header::X_CONTENT_TYPE_OPTIONS,
+            header::CACHE_CONTROL, // ← adicionar
+            header::PRAGMA,        // ← adicionar
             X_CSRF_TOKEN,
             X_REQUESTED_WITH,
             X_REQUEST_NONCE,
             X_REQUEST_TIMESTAMP,
             X_REQUEST_SIGNATURE,
+            X_BROWSER_FINGERPRINT,
         ])
         .allow_credentials(true)
         .max_age(Duration::from_secs(3600))
@@ -79,12 +84,15 @@ pub fn cors_development() -> CorsLayer {
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
             header::ACCEPT,
+            header::CACHE_CONTROL, // ← adicionar
+            header::PRAGMA,        // ← adicionar
             header::X_CONTENT_TYPE_OPTIONS,
             X_CSRF_TOKEN,
             X_REQUESTED_WITH,
             X_REQUEST_NONCE,
             X_REQUEST_TIMESTAMP,
             X_REQUEST_SIGNATURE,
+            X_BROWSER_FINGERPRINT,
         ])
         .allow_credentials(true)
 }

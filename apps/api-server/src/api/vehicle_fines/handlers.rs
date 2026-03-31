@@ -89,11 +89,17 @@ pub async fn list_fine_types(
 ) -> Result<Json<VehicleFineTypesListResponse>, (StatusCode, String)> {
     state
         .vehicle_fine_service
-        .list_fine_types(query.limit, query.offset, query.search, query.severity, query.is_active)
+        .list_fine_types(
+            query.limit,
+            query.offset,
+            query.search,
+            query.severity,
+            query.is_active,
+        )
         .await
-        .map(|(fine_types, total)| {
+        .map(|(data, total)| {
             Json(VehicleFineTypesListResponse {
-                fine_types,
+                data,
                 total,
                 limit: query.limit,
                 offset: query.offset,
@@ -234,9 +240,9 @@ pub async fn list_fines(
             query.include_deleted,
         )
         .await
-        .map(|(fines, total)| {
+        .map(|(data, total)| {
             Json(VehicleFinesListResponse {
-                fines,
+                data,
                 total,
                 limit: query.limit,
                 offset: query.offset,

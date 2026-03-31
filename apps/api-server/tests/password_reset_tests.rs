@@ -41,25 +41,28 @@ async fn test_forgot_password_flow_and_email_mocking() {
     let app = common::spawn_app().await;
     let client = &app.api;
 
-    // "bob" existe no seed, o email dele é "bob@temp.example.com"
+    // Em vez de usar o "bob" do seed (que está sem email_index no banco devido às migrations cruas),
+    // criamos um usuário fresco que passa pela lógica de criptografia e ganha o email_index correto.
+    let (test_user, test_email, _) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+
     let payload = ForgotPasswordPayload {
-        email: "bob@temp.example.com".try_into().unwrap(), // Ajuste para Email type
+        email: test_email.clone().try_into().unwrap(),
     };
 
     // 1. Cenário: Email Existe
     let res = client.post("/forgot-password").json(&payload).await;
 
     assert_eq!(res.status_code(), 200);
-    // CORREÇÃO: Mensagem atualizada conforme contracts.rs
     assert!(res.text().contains("Se o email existir"));
 
     // Verifica se o MockEmailService "enviou" o email
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    // [FIX] Removed .await, added .unwrap()
     let messages = app.email_service.messages.lock().unwrap();
     assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].to, "bob@temp.example.com");
+    assert_eq!(messages[0].to, test_email);
     assert_eq!(messages[0].subject, "Redefina sua senha do Waterswamp");
     assert_eq!(messages[0].template, "reset_password.html");
     assert_eq!(
@@ -69,12 +72,11 @@ async fn test_forgot_password_flow_and_email_mocking() {
             .unwrap()
             .as_str()
             .unwrap(),
-        "bob"
+        test_user
     );
 
     // Limpa a caixa de entrada
     drop(messages); // Libera o lock
-                    // [FIX] Removed .await, added .unwrap()
     app.email_service.messages.lock().unwrap().clear();
 
     // 2. Cenário: Email Não Existe
@@ -88,11 +90,9 @@ async fn test_forgot_password_flow_and_email_mocking() {
 
     // Assert: Deve retornar a MESMA resposta de sucesso para evitar enumeração
     assert_eq!(res_nao_existe.status_code(), 200);
-    // CORREÇÃO: Mensagem atualizada
     assert!(res_nao_existe.text().contains("Se o email existir"));
 
     // Assert: Nenhum email novo foi enviado
-    // [FIX] Removed .await, added .unwrap()
     let messages_final = app.email_service.messages.lock().unwrap();
     assert_eq!(messages_final.len(), 0);
 }

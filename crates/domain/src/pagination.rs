@@ -26,7 +26,7 @@ use utoipa::ToSchema;
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Paginated<T> {
     /// The items in this page
-    pub items: Vec<T>,
+    pub data: Vec<T>,
     /// Total number of items across all pages
     pub total: i64,
     /// Maximum number of items per page
@@ -37,9 +37,9 @@ pub struct Paginated<T> {
 
 impl<T> Paginated<T> {
     /// Creates a new paginated response.
-    pub fn new(items: Vec<T>, total: i64, limit: i64, offset: i64) -> Self {
+    pub fn new(data: Vec<T>, total: i64, limit: i64, offset: i64) -> Self {
         Self {
-            items,
+            data,
             total,
             limit,
             offset,
@@ -49,7 +49,7 @@ impl<T> Paginated<T> {
     /// Creates an empty paginated response.
     pub fn empty(limit: i64, offset: i64) -> Self {
         Self {
-            items: Vec::new(),
+            data: Vec::new(),
             total: 0,
             limit,
             offset,
@@ -90,7 +90,7 @@ impl<T> Paginated<T> {
         F: FnMut(T) -> U,
     {
         Paginated {
-            items: self.items.into_iter().map(f).collect(),
+            data: self.data.into_iter().map(f).collect(),
             total: self.total,
             limit: self.limit,
             offset: self.offset,

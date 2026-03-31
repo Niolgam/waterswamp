@@ -13,8 +13,8 @@ use axum::{
 use domain::models::organizational::{ActivityArea, InternalUnitType};
 use serde::Deserialize;
 use serde_json::json;
-use utoipa::ToSchema;
 use std::sync::Arc;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 // ============================
@@ -149,13 +149,13 @@ pub async fn list_system_settings(
 ) -> Result<Json<SystemSettingsListResponse>, (StatusCode, String)> {
     let service = get_settings_service(&state);
 
-    let (settings, total) = service
+    let (data, total) = service
         .list(query.category.as_deref(), query.limit, query.offset)
         .await
         .map_err(|e| (e.status_code(), e.to_string()))?;
 
     Ok(Json(SystemSettingsListResponse {
-        settings,
+        data,
         total,
         limit: query.limit,
         offset: query.offset,
@@ -290,13 +290,13 @@ pub async fn list_organizations(
 ) -> Result<Json<OrganizationsListResponse>, (StatusCode, String)> {
     let service = get_organization_service(&state);
 
-    let (organizations, total) = service
+    let (data, total) = service
         .list(query.is_active, query.limit, query.offset)
         .await
         .map_err(|e| (e.status_code(), e.to_string()))?;
 
     Ok(Json(OrganizationsListResponse {
-        organizations,
+        data,
         total,
         limit: query.limit,
         offset: query.offset,
@@ -432,13 +432,18 @@ pub async fn list_unit_categories(
 ) -> Result<Json<OrganizationalUnitCategoriesListResponse>, (StatusCode, String)> {
     let service = get_unit_category_service(&state);
 
-    let (categories, total) = service
-        .list(query.is_active, query.is_siorg_managed, query.limit, query.offset)
+    let (data, total) = service
+        .list(
+            query.is_active,
+            query.is_siorg_managed,
+            query.limit,
+            query.offset,
+        )
         .await
         .map_err(|e| (e.status_code(), e.to_string()))?;
 
     Ok(Json(OrganizationalUnitCategoriesListResponse {
-        categories,
+        data,
         total,
         limit: query.limit,
         offset: query.offset,
@@ -574,13 +579,18 @@ pub async fn list_unit_types(
 ) -> Result<Json<OrganizationalUnitTypesListResponse>, (StatusCode, String)> {
     let service = get_unit_type_service(&state);
 
-    let (types, total) = service
-        .list(query.is_active, query.is_siorg_managed, query.limit, query.offset)
+    let (data, total) = service
+        .list(
+            query.is_active,
+            query.is_siorg_managed,
+            query.limit,
+            query.offset,
+        )
         .await
         .map_err(|e| (e.status_code(), e.to_string()))?;
 
     Ok(Json(OrganizationalUnitTypesListResponse {
-        types,
+        data,
         total,
         limit: query.limit,
         offset: query.offset,
@@ -724,7 +734,7 @@ pub async fn list_organizational_units(
 ) -> Result<Json<OrganizationalUnitsListResponse>, (StatusCode, String)> {
     let service = get_unit_service(&state);
 
-    let (units, total) = service
+    let (data, total) = service
         .list(
             query.organization_id,
             query.parent_id,
@@ -742,7 +752,7 @@ pub async fn list_organizational_units(
         .map_err(|e| (e.status_code(), e.to_string()))?;
 
     Ok(Json(OrganizationalUnitsListResponse {
-        units,
+        data,
         total,
         limit: query.limit,
         offset: query.offset,
@@ -1161,10 +1171,7 @@ pub async fn check_siorg_health(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let sync_service = state.siorg_sync_service.clone();
 
-    let is_healthy = sync_service
-        .check_health()
-        .await
-        .unwrap_or(false);
+    let is_healthy = sync_service.check_health().await.unwrap_or(false);
 
     if is_healthy {
         Ok(Json(json!({

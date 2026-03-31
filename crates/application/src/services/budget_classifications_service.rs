@@ -146,16 +146,16 @@ impl BudgetClassificationsService {
         let limit = limit.unwrap_or(50).min(100);
         let offset = offset.unwrap_or(0);
 
-        let (items, total) = self
+        let (data, total) = self
             .repo
             .list(limit, offset, search, parent_id, level, is_active)
             .await?;
 
-        Ok(Paginated::new(items, total, limit, offset))
+        Ok(Paginated::new(data, total, limit, offset))
     }
 
     pub async fn get_tree(&self) -> Result<Vec<BudgetClassificationTreeNode>, ServiceError> {
-        // Get all root items (level 1)
+        // Get all root data (level 1)
         let roots = self.repo.find_by_level(1).await?;
 
         let mut tree = Vec::new();
@@ -167,11 +167,20 @@ impl BudgetClassificationsService {
         Ok(tree)
     }
 
-    pub async fn get_children(&self, parent_id: Option<Uuid>) -> Result<Vec<BudgetClassificationDto>, ServiceError> {
-        self.repo.find_children(parent_id).await.map_err(|e| e.into())
+    pub async fn get_children(
+        &self,
+        parent_id: Option<Uuid>,
+    ) -> Result<Vec<BudgetClassificationDto>, ServiceError> {
+        self.repo
+            .find_children(parent_id)
+            .await
+            .map_err(|e| e.into())
     }
 
-    pub async fn get_by_level(&self, level: i32) -> Result<Vec<BudgetClassificationDto>, ServiceError> {
+    pub async fn get_by_level(
+        &self,
+        level: i32,
+    ) -> Result<Vec<BudgetClassificationDto>, ServiceError> {
         if level < 1 || level > 5 {
             return Err(ServiceError::BadRequest(
                 "Level must be between 1 and 5".to_string(),
@@ -185,7 +194,13 @@ impl BudgetClassificationsService {
     fn build_tree_node<'a>(
         &'a self,
         item: BudgetClassificationDto,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<BudgetClassificationTreeNode, ServiceError>> + 'a + Send>> {
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<BudgetClassificationTreeNode, ServiceError>>
+                + 'a
+                + Send,
+        >,
+    > {
         Box::pin(async move {
             let children_data = self.repo.find_children(Some(item.id)).await?;
 

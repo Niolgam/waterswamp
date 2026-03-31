@@ -891,9 +891,13 @@ async fn test_duplicate_access_key_is_rejected() {
     let warehouse_id = create_test_warehouse(&app.db_auth).await;
     let unit_id = get_unit_id(&app.db_auth).await;
     let catalog_item_id = create_test_catmat_item(&app.db_auth, unit_id).await;
-
-    // 44-digit valid access key
-    let access_key = "35260300000000000000550010000000011000000019";
+    let mut digits: String = Uuid::new_v4().simple().to_string().chars().filter(|c| c.is_ascii_digit()).collect();
+    while digits.len() < 12 {
+        digits.push_str("0");
+    }
+    
+    // Concatena com um prefixo padrão para formar os 44 dígitos numéricos
+    let access_key = format!("35260300000000000000550010000000{}", &digits[..12]);
 
     let payload = json!({
         "invoice_number": "NF0001",

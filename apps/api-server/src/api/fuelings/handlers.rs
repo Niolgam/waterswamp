@@ -85,11 +85,17 @@ pub async fn list_fuelings(
 ) -> Result<Json<FuelingsListResponse>, (StatusCode, String)> {
     state
         .fueling_service
-        .list_fuelings(query.limit, query.offset, query.vehicle_id, query.driver_id, query.supplier_id)
+        .list_fuelings(
+            query.limit,
+            query.offset,
+            query.vehicle_id,
+            query.driver_id,
+            query.supplier_id,
+        )
         .await
-        .map(|(fuelings, total)| {
+        .map(|(data, total)| {
             Json(FuelingsListResponse {
-                fuelings,
+                data,
                 total,
                 limit: query.limit,
                 offset: query.offset,

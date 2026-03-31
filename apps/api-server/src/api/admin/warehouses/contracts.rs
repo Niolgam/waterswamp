@@ -8,7 +8,7 @@ pub use domain::models::warehouse::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct WarehousesListResponse {
-    pub warehouses: Vec<WarehouseWithDetailsDto>,
+    pub data: Vec<WarehouseWithDetailsDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

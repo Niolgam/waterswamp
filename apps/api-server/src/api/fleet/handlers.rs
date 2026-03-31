@@ -99,13 +99,13 @@ pub async fn list_vehicle_categories(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<VehicleCategoriesListResponse>, (StatusCode, String)> {
-    let (categories, total) = state
+    let (data, total) = state
         .vehicle_service
         .list_vehicle_categories(query.limit, query.offset, query.search)
         .await
         .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
     Ok(Json(VehicleCategoriesListResponse {
-        categories,
+        data,
         total,
         limit: query.limit,
         offset: query.offset,
@@ -174,13 +174,13 @@ pub async fn list_vehicle_makes(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<VehicleMakesListResponse>, (StatusCode, String)> {
-    let (makes, total) = state
+    let (data, total) = state
         .vehicle_service
         .list_vehicle_makes(query.limit, query.offset, query.search)
         .await
         .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
     Ok(Json(VehicleMakesListResponse {
-        makes,
+        data,
         total,
         limit: query.limit,
         offset: query.offset,
@@ -249,13 +249,13 @@ pub async fn list_vehicle_models(
     State(state): State<AppState>,
     Query(query): Query<ModelListQuery>,
 ) -> Result<Json<VehicleModelsListResponse>, (StatusCode, String)> {
-    let (models, total) = state
+    let (data, total) = state
         .vehicle_service
         .list_vehicle_models(query.limit, query.offset, query.search, query.make_id)
         .await
         .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
     Ok(Json(VehicleModelsListResponse {
-        models,
+        data,
         total,
         limit: query.limit,
         offset: query.offset,
@@ -661,11 +661,17 @@ pub async fn upload_vehicle_document(
 ) -> Result<(StatusCode, Json<VehicleDocumentDto>), (StatusCode, String)> {
     // Max 50MB check
     if payload.file_size > 50 * 1024 * 1024 {
-        return Err((StatusCode::BAD_REQUEST, "Arquivo excede o tamanho máximo de 50MB".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Arquivo excede o tamanho máximo de 50MB".to_string(),
+        ));
     }
 
     if payload.file_name.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "Nome do arquivo é obrigatório".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Nome do arquivo é obrigatório".to_string(),
+        ));
     }
 
     // Generate the storage path

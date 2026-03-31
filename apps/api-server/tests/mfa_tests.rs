@@ -34,7 +34,7 @@ const TEST_SECRET: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
 async fn test_mfa_setup_initiation() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'vinicius'")
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
@@ -63,7 +63,7 @@ async fn test_mfa_setup_initiation() {
 async fn test_mfa_setup_already_enabled() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'vinicius'")
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
@@ -89,7 +89,7 @@ async fn test_mfa_setup_already_enabled() {
 async fn test_mfa_verify_setup_success() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'vinicius'")
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
@@ -112,7 +112,7 @@ async fn test_mfa_verify_setup_success() {
     let setup_token = setup_body["setup_token"].as_str().unwrap();
 
     // 2. Generate code
-    let totp_code = generate_totp_code(secret, "vinicius");
+    let totp_code = generate_totp_code(secret, "alice");
 
     // 3. Verify
     let verify_response = app
@@ -135,7 +135,7 @@ async fn test_mfa_verify_setup_success() {
 async fn test_mfa_verify_setup_invalid_code() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'vinicius'")
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
@@ -263,7 +263,7 @@ async fn test_mfa_verify_with_backup_code() {
 #[tokio::test]
 async fn test_mfa_status_with_backup_codes() {
     let app = common::spawn_app().await;
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'vinicius'")
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
@@ -305,7 +305,7 @@ async fn test_mfa_status_with_backup_codes() {
 #[tokio::test]
 async fn test_mfa_regenerate_backup_codes() {
     let app = common::spawn_app().await;
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'vinicius'")
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
@@ -318,7 +318,7 @@ async fn test_mfa_regenerate_backup_codes() {
         .await
         .unwrap();
 
-    let totp_code = generate_totp_code(TEST_SECRET, "vinicius");
+    let totp_code = generate_totp_code(TEST_SECRET, "alice");
 
     let regen_response = app
         .api
