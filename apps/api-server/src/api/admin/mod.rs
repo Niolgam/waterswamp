@@ -7,7 +7,10 @@ pub mod invoices;
 pub mod warehouses;
 
 use crate::{
-    api::{budget_classifications, catalog, drivers, fleet, fuelings, geo_regions, organizational, suppliers, vehicle_fines},
+    api::{
+        budget_classifications, catalog, drivers, fleet, fuelings, geo_regions, organizational,
+        suppliers, vehicle_fines,
+    },
     infra::state::AppState,
     middleware::rate_limit::admin_rate_limiter, // Certifique-se que existe ou use api_rate_limiter
 };
@@ -22,7 +25,10 @@ pub fn router() -> Router<AppState> {
         .merge(audit::router())
         .merge(requisitions::router())
         .nest("/geo_regions", geo_regions::router())
-        .nest("/budget-classifications", budget_classifications::router())
+        .nest(
+            "/catalog/budget-classifications",
+            budget_classifications::router(),
+        )
         .nest("/catalog", catalog::router())
         .nest("/organizational", organizational::router())
         .nest("/fleet", fleet::router())
