@@ -21,7 +21,10 @@ pub fn router() -> Router<AppState> {
         .route("/requisitions/{id}/rollback-points", get(handlers::get_rollback_points))
         .route("/requisitions/{id}/rollback", post(handlers::rollback_requisition))
         // Item routes
-        .route("/requisitions/{id}/items", get(handlers::get_requisition_items))
+        .route(
+            "/requisitions/{id}/items",
+            get(handlers::get_requisition_items).post(handlers::add_requisition_item),
+        )
         .route(
             "/requisitions/{req_id}/items/{item_id}/delete",
             post(handlers::delete_requisition_item),

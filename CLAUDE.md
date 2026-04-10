@@ -245,6 +245,7 @@ waterswamp/
 │   │   │   ├── budget_classifications_tests.rs
 │   │   │   ├── audit_log_tests.rs
 │   │   │   ├── catalog_tests.rs
+│   │   │   ├── invoice_adjustment_tests.rs
 │   │   │   └── integration_tests.rs
 │   │   └── src/
 │   │       ├── main.rs              # TcpListener · serve()
@@ -366,7 +367,9 @@ waterswamp/
 | `UserService` | CRUD de usuários, roles, banimento, reset de senha |
 | `VehicleService` | Gestão de frota (veículos, documentos, histórico) |
 | `VehicleFineService` | Infrações de trânsito e histórico de status |
-| `InvoiceService` | Notas fiscais: CRUD + máquina de estados (PENDING→CHECKING→CHECKED→POSTED / REJECTED / CANCELLED) |
+| `InvoiceService` | Notas fiscais: CRUD + máquina de estados (PENDING→CHECKING→CHECKED→POSTED / REJECTED / CANCELLED); lança movimentações de estoque via `StockMovementService` na mesma transação |
+| `InvoiceAdjustmentService` | Glosas (ajustes) de NF: cria `invoice_adjustments` + `invoice_adjustment_items`; para itens STOCKABLE com qty > 0 gera `ADJUSTMENT_SUB` via `StockMovementService` |
+| `StockMovementService` | Processa movimentações de estoque com lock pessimista, custo médio ponderado (CMP) e validação de divergência de preço; substitui os triggers `fn_process_stock_movement` e `fn_auto_post_invoice` |
 | `WarehouseService` | Almoxarifados (CRUD + dedup de código) e estoques (listagem, parâmetros, bloqueio/desbloqueio) |
 
 ### 5.2 Background Jobs
@@ -400,7 +403,8 @@ waterswamp/
 | `user.rs` | `User`, `UserExtended`, `Role`, `UserStatus` |
 | `vehicle.rs` | `Vehicle`, `VehicleDocument`, `VehicleStatusHistory`, `VehicleMake`, `VehicleModel` |
 | `vehicle_fine.rs` | `VehicleFine`, `VehicleFineType`, `VehicleFineStatusHistory` |
-| `invoice.rs` | `InvoiceDto`, `InvoiceWithDetailsDto`, `InvoiceItemDto`, `InvoiceItemWithDetailsDto` (inclui `material_classification: MaterialClassification` herdado do PDM), `InvoiceStatus`, payloads de CRUD e transições |
+| `invoice.rs` | `InvoiceDto`, `InvoiceWithDetailsDto`, `InvoiceItemDto`, `InvoiceItemWithDetailsDto` (inclui `material_classification: MaterialClassification` herdado do PDM; campos `adjusted_quantity`, `adjusted_value`, `adjustment_status` via LEFT JOIN em glosas), `InvoiceStatus`, payloads de CRUD e transições |
+| `invoice_adjustment.rs` | `InvoiceAdjustmentDto`, `InvoiceAdjustmentItemDto`, `InvoiceAdjustmentItemDetailDto`, `InvoiceAdjustmentWithItemsDto`, `CreateInvoiceAdjustmentPayload`, `CreateInvoiceAdjustmentItemPayload` |
 | `warehouse.rs` | `WarehouseDto`, `WarehouseWithDetailsDto`, `WarehouseStockDto`, `WarehouseStockWithDetailsDto`, `WarehouseType`, payloads de CRUD, `UpdateStockParamsPayload`, `BlockStockPayload` |
 
 ### 5.4 Repository Ports (domain::ports) — 53 traits
@@ -415,7 +419,7 @@ Agrupados por domínio:
 - **Procurement:** `SupplierRepositoryPort`, `RequisitionRepositoryPort`, `RequisitionItemRepositoryPort`
 - **Fleet:** `DriverRepositoryPort`, `VehicleRepositoryPort`, `VehicleDocumentRepositoryPort`, `VehicleStatusHistoryRepositoryPort`, `VehicleCategoryRepositoryPort`, `VehicleMakeRepositoryPort`, `VehicleModelRepositoryPort`, `VehicleColorRepositoryPort`, `VehicleFuelTypeRepositoryPort`, `VehicleTransmissionTypeRepositoryPort`, `FuelingRepositoryPort`, `VehicleFineRepositoryPort`, `VehicleFineTypeRepositoryPort`, `VehicleFineStatusHistoryRepositoryPort`
 - **External:** `EmailServicePort`
-- **Invoice:** `InvoiceRepositoryPort`, `InvoiceItemRepositoryPort`
+- **Invoice:** `InvoiceRepositoryPort`, `InvoiceItemRepositoryPort`, `InvoiceAdjustmentRepositoryPort`
 - **Warehouse:** `WarehouseRepositoryPort`, `WarehouseStockRepositoryPort`
 
 ---
@@ -706,6 +710,46 @@ pub enum MaterialClassification {
 
 ---
 
+### H-18: `InvoiceItemWithDetailsDto` não deriva `sqlx::FromRow` — use `InvoiceItemWithDetailsRow`
+
+**Sintoma:** `error[E0277]: the trait bound InvoiceItemWithDetailsDto: FromRow is not satisfied` ao tentar usar `sqlx::query_as::<_, InvoiceItemWithDetailsDto>(...)`.
+
+**Causa:** `InvoiceItemWithDetailsDto` contém campos calculados via LEFT JOIN (`adjusted_quantity`, `adjusted_value`, `adjustment_status`) que são opcionais e não mapeáveis diretamente pelo derive padrão. A struct intermediária `InvoiceItemWithDetailsRow` é usada para o `sqlx::FromRow` e depois convertida via `From`.
+
+**Solução:**
+```rust
+// ✅ Correto
+#[derive(sqlx::FromRow)]
+struct InvoiceItemWithDetailsRow { ... }  // todos os campos Option<T>
+
+impl From<InvoiceItemWithDetailsRow> for InvoiceItemWithDetailsDto { ... }
+
+let rows = sqlx::query_as::<_, InvoiceItemWithDetailsRow>("SELECT ... LEFT JOIN adj ON ...")
+    .fetch_all(&self.pool).await?;
+rows.into_iter().map(InvoiceItemWithDetailsDto::from).collect()
+```
+
+---
+
+### H-19: `StockMovementService` substitui triggers — não chame funções SQL diretas
+
+**Sintoma:** `fn_process_stock_movement`, `fn_auto_post_invoice`, `fn_manage_stock_reservation`, `fn_capture_requisition_item_value` foram removidos via migration `20260327000002`. Qualquer chamada SQL a essas funções resultará em `ERROR: function does not exist`.
+
+**Regra:** Use os métodos Rust equivalentes:
+
+| Trigger removido | Substituto |
+|---|---|
+| `fn_auto_post_invoice` | `InvoiceService::post_invoice()` |
+| `fn_process_stock_movement` | `StockMovementService::process_movement(&mut tx, input)` |
+| `fn_manage_stock_reservation` | `RequisitionService::approve_requisition()` |
+| `fn_capture_requisition_item_value` | `RequisitionService::add_item_to_requisition()` |
+| `fn_update_invoice_totals` | `InvoiceService::create_invoice()` — chama `recalculate_totals()` |
+| `fn_update_requisition_total` | `RequisitionService::add_item_to_requisition()` — recalcula via SQL UPDATE |
+
+**Transações:** `StockMovementService::process_movement` recebe `&mut Transaction<'_, Postgres>`. O caller (ex: `InvoiceService`) é responsável por abrir e commitar a transação.
+
+---
+
 ### H-12: `cargo check --workspace` antes de qualquer commit
 
 O repositório usa features que só são verificadas com `--workspace`. Um `cargo check` em um único crate pode não revelar quebras em dependentes.
@@ -943,6 +987,6 @@ Use este checklist após qualquer nova feature, bugfix ou refactoring antes de c
 
 ---
 
-> **Última atualização:** 2026-03-16 (adicionado H-17: enum `MaterialClassification`)
+> **Última atualização:** 2026-03-27 (adicionados H-18/H-19: refatoração triggers→Rust e glosas de NF; `InvoiceAdjustmentService`, `StockMovementService`; `RequisitionItemDto` campos corrigidos)
 > **Versão Rust:** stable (testado com 1.85+)
 > **Versão PostgreSQL:** 16 (mínimo: 14)

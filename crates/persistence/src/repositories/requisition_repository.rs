@@ -4,6 +4,7 @@ use domain::{
     models::requisition::*,
     ports::requisition::*,
 };
+use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -352,6 +353,33 @@ impl RequisitionItemRepositoryPort for RequisitionItemRepository {
             "#,
         )
         .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_db_error)
+    }
+
+    async fn create_item(
+        &self,
+        requisition_id: Uuid,
+        catalog_item_id: Uuid,
+        requested_quantity: Decimal,
+        unit_value: Decimal,
+        total_value: Decimal,
+        justification: Option<&str>,
+    ) -> Result<RequisitionItemDto, RepositoryError> {
+        sqlx::query_as::<_, RequisitionItemDto>(
+            r#"INSERT INTO requisition_items (
+                requisition_id, catalog_item_id,
+                requested_quantity, unit_value, total_value, justification
+               ) VALUES ($1, $2, $3, $4, $5, $6)
+               RETURNING *"#,
+        )
+        .bind(requisition_id)
+        .bind(catalog_item_id)
+        .bind(requested_quantity)
+        .bind(unit_value)
+        .bind(total_value)
+        .bind(justification)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)

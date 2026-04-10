@@ -536,7 +536,7 @@ async fn test_full_workflow_pending_to_posted() {
     let body: Value = response.json();
     assert_eq!(body["status"], "CHECKED");
 
-    // 4. Post (triggers stock movement via DB trigger)
+    // 4. Post (Rust StockMovementService creates ENTRY movements atomically)
     let response = app
         .api
         .post(&format!("/api/admin/invoices/{}/post", id))
@@ -1052,4 +1052,144 @@ async fn test_list_invoices_pagination() {
     assert!(body["invoices"].as_array().unwrap().len() <= 2);
     assert_eq!(body["limit"].as_i64().unwrap(), 2);
     assert_eq!(body["offset"].as_i64().unwrap(), 0);
+}
+
+// ============================================================================
+// STOCK MOVEMENT TESTS (Rust service — no DB triggers)
+// ============================================================================
+
+#[tokio::test]
+async fn test_post_invoice_creates_stock_entry() {
+    let app = common::spawn_app().await;
+    let supplier_id = create_test_supplier(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let unit_id = get_unit_id(&app.db_auth).await;
+    let catalog_item_id = create_test_catmat_item(&app.db_auth, unit_id).await;
+
+    let created: Value = app
+        .api
+        .post("/api/admin/invoices")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .await
+        .json();
+    let id = created["id"].as_str().unwrap();
+
+    app.api
+        .post(&format!("/api/admin/invoices/{}/start-checking", id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+    app.api
+        .post(&format!("/api/admin/invoices/{}/finish-checking", id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+    let posted: Value = app
+        .api
+        .post(&format!("/api/admin/invoices/{}/post", id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await
+        .json();
+    assert_eq!(posted["status"], "POSTED");
+
+    // qty = 5 from invoice_payload
+    let qty: rust_decimal::Decimal = sqlx::query_scalar(
+        "SELECT quantity FROM warehouse_stocks WHERE warehouse_id = $1 AND catalog_item_id = $2",
+    )
+    .bind(warehouse_id)
+    .bind(catalog_item_id)
+    .fetch_one(&app.db_auth)
+    .await
+    .expect("warehouse_stocks row expected after posting");
+
+    assert_eq!(qty, rust_decimal::Decimal::from(5));
+
+    let movement_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM stock_movements WHERE invoice_id = $1 AND movement_type = 'ENTRY'",
+    )
+    .bind(uuid::Uuid::parse_str(id).unwrap())
+    .fetch_one(&app.db_auth)
+    .await
+    .expect("count");
+
+    assert_eq!(movement_count, 1);
+}
+
+#[tokio::test]
+async fn test_cancel_posted_invoice_reverses_stock() {
+    let app = common::spawn_app().await;
+    let supplier_id = create_test_supplier(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let unit_id = get_unit_id(&app.db_auth).await;
+    let catalog_item_id = create_test_catmat_item(&app.db_auth, unit_id).await;
+
+    let created: Value = app
+        .api
+        .post("/api/admin/invoices")
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .await
+        .json();
+    let id = created["id"].as_str().unwrap();
+
+    app.api
+        .post(&format!("/api/admin/invoices/{}/start-checking", id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+    app.api
+        .post(&format!("/api/admin/invoices/{}/finish-checking", id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+    app.api
+        .post(&format!("/api/admin/invoices/{}/post", id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+
+    let qty_before: rust_decimal::Decimal = sqlx::query_scalar(
+        "SELECT quantity FROM warehouse_stocks WHERE warehouse_id = $1 AND catalog_item_id = $2",
+    )
+    .bind(warehouse_id)
+    .bind(catalog_item_id)
+    .fetch_one(&app.db_auth)
+    .await
+    .expect("stock row");
+
+    assert_eq!(qty_before, rust_decimal::Decimal::from(5));
+
+    let cancelled: Value = app
+        .api
+        .post(&format!("/api/admin/invoices/{}/cancel", id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await
+        .json();
+
+    assert_eq!(cancelled["status"], "CANCELLED");
+
+    let qty_after: rust_decimal::Decimal = sqlx::query_scalar(
+        "SELECT quantity FROM warehouse_stocks WHERE warehouse_id = $1 AND catalog_item_id = $2",
+    )
+    .bind(warehouse_id)
+    .bind(catalog_item_id)
+    .fetch_one(&app.db_auth)
+    .await
+    .expect("stock row after cancel");
+
+    assert_eq!(qty_after, rust_decimal::Decimal::ZERO);
+
+    let reversal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM stock_movements
+         WHERE invoice_id = $1 AND movement_type = 'ADJUSTMENT_SUB'",
+    )
+    .bind(uuid::Uuid::parse_str(id).unwrap())
+    .fetch_one(&app.db_auth)
+    .await
+    .expect("count");
+
+    assert_eq!(reversal_count, 1);
 }
