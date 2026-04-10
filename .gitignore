@@ -1,6 +1,6 @@
 /target
 
 # Environment variables (contains sensitive data)
-.env
-.env.*
+# .env
+# .env.*
 !.env.example
