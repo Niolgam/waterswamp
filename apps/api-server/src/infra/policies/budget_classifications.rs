@@ -8,7 +8,7 @@ pub async fn seed(enforcer: &mut Enforcer) -> Result<()> {
     add_crud_tree_policies(
         enforcer,
         ROLE_ADMIN,
-        "/api/admin/catalog/budget-classifications",
+        "/api/admin/budget-classifications",
     )
     .await?;
 
