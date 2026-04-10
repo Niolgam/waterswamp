@@ -434,7 +434,7 @@ impl ConflictResolutionService {
         let mut merged = queue_item.payload.clone();
 
         // Apply field resolutions
-        if let Some(obj) = merged.as_object_mut() {
+        if let Some(_obj) = merged.as_object_mut() {
             for (field, resolution) in field_resolutions {
                 match resolution {
                     FieldResolution::Local => {

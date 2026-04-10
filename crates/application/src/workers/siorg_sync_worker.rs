@@ -1,16 +1,11 @@
-use crate::external::{SiorgClient, SiorgSyncService};
+use crate::external::SiorgSyncService;
 use crate::metrics;
 use domain::models::organizational::*;
-use domain::ports::{
-    OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
-    OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
-    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort,
-};
+use domain::ports::{SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
-use uuid::Uuid;
 
 // ============================================================================
 // Worker Configuration
@@ -424,6 +419,7 @@ impl SiorgSyncWorkerCore {
 
 enum ProcessingResult {
     Success,
+    #[allow(dead_code)]
     Conflict(serde_json::Value),
     Skip(String),
 }

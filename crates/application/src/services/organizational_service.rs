@@ -1,5 +1,4 @@
 use crate::errors::ServiceError;
-use domain::errors::RepositoryError;
 use domain::models::organizational::*;
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,

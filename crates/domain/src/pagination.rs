@@ -162,7 +162,7 @@ mod tests {
         let items = vec![1, 2, 3];
         let paginated = Paginated::new(items, 100, 10, 0);
 
-        assert_eq!(paginated.items.len(), 3);
+        assert_eq!(paginated.data.len(), 3);
         assert_eq!(paginated.total, 100);
         assert_eq!(paginated.limit, 10);
         assert_eq!(paginated.offset, 0);
@@ -200,7 +200,7 @@ mod tests {
         let paginated = Paginated::new(vec![1, 2, 3], 3, 10, 0);
         let mapped = paginated.map(|x| x * 2);
 
-        assert_eq!(mapped.items, vec![2, 4, 6]);
+        assert_eq!(mapped.data, vec![2, 4, 6]);
         assert_eq!(mapped.total, 3);
     }
 
