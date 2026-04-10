@@ -299,7 +299,7 @@ async fn test_admin_list_users_pagination_and_search() {
     response.assert_status_ok();
     let json: Value = response.json();
     assert!(json["total"].as_i64().unwrap() >= 2);
-    assert!(json["items"].as_array().unwrap().len() >= 2);
+    assert!(json["data"].as_array().unwrap().len() >= 2);
 
     // 2. Testar Paginação (limit=1)
     let response_limit = app
@@ -308,7 +308,7 @@ async fn test_admin_list_users_pagination_and_search() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
     let json_limit: Value = response_limit.json();
-    assert_eq!(json_limit["items"].as_array().unwrap().len(), 1);
+    assert_eq!(json_limit["data"].as_array().unwrap().len(), 1);
     assert_eq!(json_limit["limit"], 1);
 
     // 3. Testar Busca
@@ -318,8 +318,8 @@ async fn test_admin_list_users_pagination_and_search() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
     let json_search: Value = response_search.json();
-    assert_eq!(json_search["items"].as_array().unwrap().len(), 1);
-    assert_eq!(json_search["items"][0]["username"], "alice");
+    assert_eq!(json_search["data"].as_array().unwrap().len(), 1);
+    assert_eq!(json_search["data"][0]["username"], "alice");
 }
 
 /// (Subtarefa 4.4) Testa atualização de password e role
