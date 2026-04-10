@@ -1143,7 +1143,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
-        let mut nodes: Vec<OrganizationalUnitTreeNode> = all_units
+        let nodes: Vec<OrganizationalUnitTreeNode> = all_units
             .into_iter()
             .map(|unit| OrganizationalUnitTreeNode {
                 unit,

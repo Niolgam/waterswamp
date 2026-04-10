@@ -4,7 +4,7 @@ use domain::errors::RepositoryError;
 use domain::models::organizational::*;
 use domain::ports::{SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort};
 use sqlx::PgPool;
-use tracing::{error, warn};
+use tracing::error;
 use uuid::Uuid;
 
 // ============================================================================

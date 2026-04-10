@@ -1815,7 +1815,7 @@ impl CatserSectionRepositoryPort for CatserSectionRepository {
         }
 
         // Assign divisions to their sections
-        for (division_id, division_node) in divisions_map {
+        for (_division_id, division_node) in divisions_map {
             if let Some(section_node) = sections_map.get_mut(&division_node.section_id) {
                 section_node.divisions.push(division_node);
             }

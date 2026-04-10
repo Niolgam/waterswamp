@@ -6,7 +6,7 @@ use domain::{
     ports::vehicle_fine::*,
 };
 use rust_decimal::Decimal;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db_utils::map_db_error;
