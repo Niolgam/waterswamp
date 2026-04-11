@@ -25,10 +25,7 @@ pub fn router() -> Router<AppState> {
         .merge(audit::router())
         .merge(requisitions::router())
         .nest("/geo_regions", geo_regions::router())
-        .nest(
-            "/catalog/budget-classifications",
-            budget_classifications::router(),
-        )
+        .nest("/budget-classifications", budget_classifications::router())
         .nest("/catalog", catalog::router())
         .nest("/organizational", organizational::router())
         .nest("/fleet", fleet::router())

@@ -418,7 +418,7 @@ async fn test_list_budget_classifications_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["items"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 2);
     assert!(body["limit"].is_number());
     assert!(body["offset"].is_number());
@@ -439,7 +439,7 @@ async fn test_list_budget_classifications_filter_by_level() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
 
     for item in items {
         assert_eq!(item["level"], 1);
@@ -464,7 +464,7 @@ async fn test_list_budget_classifications_filter_by_parent_id() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
 
     // Should contain child1
     assert!(items.iter().any(|item| item["id"] == child1["id"]));
@@ -502,7 +502,7 @@ async fn test_list_budget_classifications_filter_by_is_active() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
 
     // Should find the active classification
     assert!(items.iter().any(|item| item["id"] == active["id"]));
@@ -521,7 +521,7 @@ async fn test_list_budget_classifications_filter_by_is_active() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
 
     // Should NOT find the inactive classification when filtering for active only
     assert!(!items.iter().any(|item| item["id"] == inactive["id"]));
@@ -565,7 +565,7 @@ async fn test_list_budget_classifications_with_search() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
 
     assert!(items.iter().any(|item| item["name"].as_str().unwrap().contains(&searchable_name)));
 }
@@ -589,7 +589,7 @@ async fn test_list_budget_classifications_pagination() {
     let body: Value = response.json();
     assert_eq!(body["limit"], 2);
     assert_eq!(body["offset"], 0);
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
     assert!(items.len() <= 2);
 }
 
