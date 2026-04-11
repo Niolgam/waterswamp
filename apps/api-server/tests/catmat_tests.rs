@@ -286,7 +286,7 @@ async fn test_group_list_filter_by_active() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let groups = body["groups"].as_array().unwrap();
+    let groups = body["data"].as_array().unwrap();
     for g in groups {
         assert_eq!(g["is_active"], true);
     }
@@ -479,7 +479,7 @@ async fn test_class_list_filter_by_group() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let classes = body["classes"].as_array().unwrap();
+    let classes = body["data"].as_array().unwrap();
     assert!(classes.len() >= 2);
     for c in classes {
         assert_eq!(c["group_id"].as_str().unwrap(), g1_id);
@@ -652,7 +652,7 @@ async fn test_pdm_list_filter_by_class() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let pdms = body["pdms"].as_array().unwrap();
+    let pdms = body["data"].as_array().unwrap();
     assert!(pdms.len() >= 2);
     for p in pdms {
         assert_eq!(p["class_id"].as_str().unwrap(), c1_id);
@@ -884,7 +884,7 @@ async fn test_item_list_filter_by_pdm() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
     assert!(items.len() >= 2);
     for i in items {
         assert_eq!(i["pdm_id"].as_str().unwrap(), p1_id);
@@ -924,7 +924,7 @@ async fn test_item_list_filter_by_sustainable() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
     for i in items {
         assert_eq!(i["is_sustainable"], true);
     }
@@ -994,7 +994,7 @@ async fn test_group_list_pagination() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["groups"].as_array().unwrap().len() <= 2);
+    assert!(body["data"].as_array().unwrap().len() <= 2);
     assert!(body["total"].as_i64().unwrap() >= 3);
     assert_eq!(body["limit"], 2);
     assert_eq!(body["offset"], 0);
