@@ -10,7 +10,8 @@ use axum::{
 };
 use domain::models::requisition::{
     ApproveRequisitionPayload, AuditContext, CancelRequisitionPayload, CreateRequisitionItemPayload,
-    RejectRequisitionPayload, RollbackPayload,
+    FulfillItemInput, FulfillRequisitionPayload, RejectRequisitionPayload, RollbackPayload,
+    StartProcessingPayload,
 };
 use uuid::Uuid;
 
@@ -291,6 +292,57 @@ pub async fn restore_requisition_item(
         .await?;
 
     Ok(Json(item.into()))
+}
+
+/// POST /api/admin/requisitions/:id/start-processing
+/// Start processing an approved requisition (APPROVED → PROCESSING)
+pub async fn start_processing_requisition(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<StartProcessingRequest>,
+) -> Result<Json<RequisitionResponse>, AppError> {
+    let ctx = create_audit_context(&user, &headers);
+
+    let requisition = state
+        .requisition_service
+        .start_processing(id, &ctx, StartProcessingPayload { notes: payload.notes })
+        .await?;
+
+    Ok(Json(requisition.into()))
+}
+
+/// POST /api/admin/requisitions/:id/fulfill
+/// Fulfill (totally or partially) a requisition in processing (PROCESSING → FULFILLED/PARTIALLY_FULFILLED)
+pub async fn fulfill_requisition(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<FulfillRequisitionRequest>,
+) -> Result<Json<RequisitionResponse>, AppError> {
+    let ctx = create_audit_context(&user, &headers);
+
+    let domain_payload = FulfillRequisitionPayload {
+        items: payload
+            .items
+            .into_iter()
+            .map(|i| FulfillItemInput {
+                requisition_item_id: i.requisition_item_id,
+                fulfilled_quantity: i.fulfilled_quantity,
+                cut_reason: i.cut_reason,
+            })
+            .collect(),
+        notes: payload.notes,
+    };
+
+    let requisition = state
+        .requisition_service
+        .fulfill_requisition(id, &ctx, domain_payload)
+        .await?;
+
+    Ok(Json(requisition.into()))
 }
 
 /// POST /api/admin/requisitions/{id}/items

@@ -56,6 +56,24 @@ pub struct DeleteItemRequest {
     pub reason: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct StartProcessingRequest {
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FulfillItemRequest {
+    pub requisition_item_id: Uuid,
+    pub fulfilled_quantity: rust_decimal::Decimal,
+    pub cut_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FulfillRequisitionRequest {
+    pub items: Vec<FulfillItemRequest>,
+    pub notes: Option<String>,
+}
+
 // ============================================================================
 // Response DTOs
 // ============================================================================

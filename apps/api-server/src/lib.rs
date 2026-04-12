@@ -282,6 +282,9 @@ pub fn build_application_state(
         system_settings_repo_port.clone(),
     ));
 
+    // Stock movement service (needed by requisition, invoice, and adjustment services)
+    let stock_movement_service = Arc::new(StockMovementService::new(pool_auth.clone()));
+
     // Requisition repositories and service
     let requisition_repo_port: Arc<dyn RequisitionRepositoryPort> =
         Arc::new(RequisitionRepository::new(pool_auth.clone()));
@@ -292,6 +295,7 @@ pub fn build_application_state(
         pool_auth.clone(),
         requisition_repo_port,
         requisition_item_repo_port,
+        stock_movement_service.clone(),
     ));
 
     // Supplier repository and service
@@ -353,9 +357,6 @@ pub fn build_application_state(
         vehicle_fine_repo,
         vehicle_fine_status_history_repo,
     ));
-
-    // Stock movement service (needed by invoice and adjustment services)
-    let stock_movement_service = Arc::new(StockMovementService::new(pool_auth.clone()));
 
     // Invoice repositories and service
     let invoice_repo: Arc<dyn InvoiceRepositoryPort> =

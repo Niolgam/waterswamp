@@ -16,6 +16,8 @@ pub fn router() -> Router<AppState> {
         .route("/requisitions/{id}/approve", post(handlers::approve_requisition))
         .route("/requisitions/{id}/reject", post(handlers::reject_requisition))
         .route("/requisitions/{id}/cancel", post(handlers::cancel_requisition))
+        .route("/requisitions/{id}/start-processing", post(handlers::start_processing_requisition))
+        .route("/requisitions/{id}/fulfill", post(handlers::fulfill_requisition))
         // Audit/History routes
         .route("/requisitions/{id}/history", get(handlers::get_requisition_history))
         .route("/requisitions/{id}/rollback-points", get(handlers::get_rollback_points))
