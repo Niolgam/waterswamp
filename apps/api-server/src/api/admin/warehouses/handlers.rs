@@ -8,10 +8,30 @@ use axum::{
 };
 use domain::models::warehouse::{
     DisposalExitPayload, ManualExitPayload, ReturnEntryPayload, StandaloneEntryPayload,
+    StockMovementDto,
 };
 use serde::Deserialize;
 use utoipa::IntoParams;
 use uuid::Uuid;
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct MovementListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    pub catalog_item_id: Option<Uuid>,
+    pub movement_type: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct MovementsListResponse {
+    pub data: Vec<StockMovementDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+    pub warehouse_id: Uuid,
+}
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct WarehouseListQuery {
@@ -207,6 +227,36 @@ pub async fn unblock_stock(
 // ============================
 // Stock Movement Handlers
 // ============================
+
+/// GET /api/admin/warehouses/:id/movements
+/// List stock movements for a warehouse (audit trail)
+pub async fn list_stock_movements(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(warehouse_id): Path<Uuid>,
+    Query(query): Query<MovementListQuery>,
+) -> Result<Json<MovementsListResponse>, (StatusCode, String)> {
+    state
+        .warehouse_service
+        .list_stock_movements(
+            warehouse_id,
+            query.limit,
+            query.offset,
+            query.catalog_item_id,
+            query.movement_type,
+        )
+        .await
+        .map(|(movements, total)| {
+            Json(MovementsListResponse {
+                data: movements,
+                total,
+                limit: query.limit,
+                offset: query.offset,
+                warehouse_id,
+            })
+        })
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
 
 /// POST /api/admin/warehouses/:id/entries
 /// RF-009: Entrada Avulsa (doação ou ajuste de inventário)

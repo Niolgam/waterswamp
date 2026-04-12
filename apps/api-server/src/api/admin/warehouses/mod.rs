@@ -17,6 +17,7 @@ pub fn router() -> Router<AppState> {
         .route("/stocks/{stock_id}/block", post(handlers::block_stock))
         .route("/stocks/{stock_id}/unblock", post(handlers::unblock_stock))
         // Stock movement routes (RF-009, RF-011, RF-016, RF-017)
+        .route("/{id}/movements", get(handlers::list_stock_movements))
         .route("/{id}/entries", post(handlers::create_standalone_entry))
         .route("/{id}/returns", post(handlers::create_return_entry))
         .route("/{id}/disposals", post(handlers::create_disposal_exit))

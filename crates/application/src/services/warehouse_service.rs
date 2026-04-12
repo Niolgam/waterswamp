@@ -614,6 +614,89 @@ impl WarehouseService {
         })
     }
 
+    /// List stock movements for a warehouse (audit trail).
+    pub async fn list_stock_movements(
+        &self,
+        warehouse_id: Uuid,
+        limit: i64,
+        offset: i64,
+        catalog_item_id: Option<Uuid>,
+        movement_type: Option<String>,
+    ) -> Result<(Vec<StockMovementDto>, i64), ServiceError> {
+        // Validate warehouse exists
+        let _ = self
+            .warehouse_repo
+            .find_by_id(warehouse_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+
+        let movements = sqlx::query_as::<_, StockMovementDto>(
+            r#"SELECT
+                sm.id,
+                sm.warehouse_id,
+                w.name AS warehouse_name,
+                sm.catalog_item_id,
+                ci.description AS catalog_item_name,
+                ci.catmat_code AS catalog_item_code,
+                sm.movement_type,
+                sm.movement_date,
+                sm.quantity_raw,
+                sm.quantity_base,
+                sm.unit_price_base,
+                sm.total_value,
+                sm.balance_before,
+                sm.balance_after,
+                sm.average_before,
+                sm.average_after,
+                sm.invoice_id,
+                sm.requisition_id,
+                sm.related_warehouse_id,
+                rw.name AS related_warehouse_name,
+                sm.document_number,
+                sm.notes,
+                sm.batch_number,
+                sm.expiration_date,
+                sm.requires_review,
+                sm.user_id,
+                u.username AS user_name,
+                sm.created_at
+               FROM stock_movements sm
+               LEFT JOIN warehouses w ON w.id = sm.warehouse_id
+               LEFT JOIN catmat_items ci ON ci.id = sm.catalog_item_id
+               LEFT JOIN warehouses rw ON rw.id = sm.related_warehouse_id
+               LEFT JOIN users u ON u.id = sm.user_id
+               WHERE sm.warehouse_id = $1
+                 AND ($2::UUID IS NULL OR sm.catalog_item_id = $2)
+                 AND ($3::stock_movement_type_enum IS NULL OR sm.movement_type = $3)
+               ORDER BY sm.movement_date DESC
+               LIMIT $4 OFFSET $5"#,
+        )
+        .bind(warehouse_id)
+        .bind(catalog_item_id)
+        .bind(movement_type.as_deref())
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let total: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM stock_movements
+               WHERE warehouse_id = $1
+                 AND ($2::UUID IS NULL OR catalog_item_id = $2)
+                 AND ($3::stock_movement_type_enum IS NULL OR movement_type = $3)"#,
+        )
+        .bind(warehouse_id)
+        .bind(catalog_item_id)
+        .bind(movement_type.as_deref())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok((movements, total))
+    }
+
     /// RF-017: Saída por Ordem de Serviço — manual or OS-based exit (EXIT or LOSS).
     /// Requires document_number (OS number) and justification.
     pub async fn create_manual_exit(
