@@ -1,0 +1,2306 @@
+# SIGALM — API Contract & Integration Guide
+
+**Sistema:** SIGALM — Sistema de Gestão de Almoxarifado (UFMT)  
+**Backend:** Rust / Axum / PostgreSQL  
+**Versão do documento:** 1.0  
+**Data:** Março 2026  
+**Audiência:** Desenvolvedores frontend (Angular 19+)
+
+---
+
+## Índice
+
+1. [Overview](#1-overview)
+2. [Autenticação e Autorização](#2-autenticação-e-autorização)
+3. [Geo Regions](#3-geo-regions)
+4. [Classificações Orçamentárias](#4-classificações-orçamentárias)
+5. [Catálogo — Unidades de Medida e Conversões](#5-catálogo--unidades-de-medida-e-conversões)
+6. [Catálogo — CATMAT](#6-catálogo--catmat)
+7. [Catálogo — CATSER](#7-catálogo--catser)
+8. [Estrutura Organizacional](#8-estrutura-organizacional)
+9. [SIORG Sync](#9-siorg-sync)
+10. [Fornecedores](#10-fornecedores)
+11. [Almoxarifados e Estoque](#11-almoxarifados-e-estoque)
+12. [Notas Fiscais](#12-notas-fiscais)
+13. [Requisições](#13-requisições)
+14. [Referência Global de Erros](#14-referência-global-de-erros)
+15. [Guia de Integração Frontend](#15-guia-de-integração-frontend)
+
+---
+
+## 1. Overview
+
+### Descrição do sistema
+
+O SIGALM é um sistema de gestão de almoxarifado desenvolvido para a Universidade Federal de Mato Grosso (UFMT). Ele abrange o ciclo completo de materiais e serviços: desde o cadastro de fornecedores e itens de catálogo, passando pelo recebimento de notas fiscais, até o controle de estoque e atendimento de requisições internas.
+
+### Arquitetura
+
+```
+Frontend (Angular 19+)
+        │
+        │ HTTP/REST + JWT
+        ▼
+API Server (Axum / Rust)
+        │
+        ├── Application Layer (Services)
+        ├── Domain Layer (Models, Ports)
+        └── Persistence Layer (SQLx / PostgreSQL)
+                │
+                └── Triggers automáticos:
+                    fn_auto_post_invoice()      → cria movimentações ao lançar NF
+                    fn_cancel_requisition()     → libera reservas ao cancelar
+                    fn_rollback_requisition()   → reverte estado com auditoria
+                    fn_update_invoice_totals()  → recalcula totais da NF
+```
+
+### Base URL
+
+```
+https://<servidor>/api/v1
+```
+
+> ⚠️ Confirmar o prefixo exato com o time de backend. O prefixo `/api/v1` é assumido com base na estrutura do router.
+
+### Headers obrigatórios em todas as requisições autenticadas
+
+| Header | Valor | Obrigatório |
+|--------|-------|:-----------:|
+| `Authorization` | `Bearer <jwt_token>` | Sim |
+| `Content-Type` | `application/json` | Sim (POST/PUT/PATCH) |
+| `Accept` | `application/json` | Recomendado |
+
+### Formatos de dados
+
+| Tipo | Formato | Exemplo |
+|------|---------|---------|
+| UUID | string UUID v4 | `"550e8400-e29b-41d4-a716-446655440000"` |
+| Decimal / Monetário | string numérica | `"1500.000"`, `"0.85"` |
+| Timestamp | ISO 8601 UTC | `"2024-01-15T10:30:00Z"` |
+| Data (sem hora) | ISO 8601 date | `"2024-01-15"` |
+| Enum | SCREAMING\_SNAKE\_CASE | `"PENDING"`, `"STOCKABLE"` |
+
+> ⚠️ **Exceção crítica:** `RequisitionStatus` e `RequisitionPriority` são serializados pelo backend em **PascalCase** via `format!("{:?}", ...)`, resultando em `"Pending"`, `"PartiallyFulfilled"`, `"Normal"`. O frontend deve normalizar esses valores antes de usá-los.
+
+```typescript
+// Adapter obrigatório para RequisitionStatus
+export function parseRequisitionStatus(raw: string): RequisitionStatus {
+  // "Pending" → "PENDING"
+  // "PartiallyFulfilled" → "PARTIALLY_FULFILLED"
+  return raw
+    .replace(/([A-Z])/g, '_$1')
+    .toUpperCase()
+    .replace(/^_/, '') as RequisitionStatus;
+}
+```
+
+### Paginação
+
+A maioria dos endpoints de listagem utiliza paginação por `limit` e `offset`. A estrutura do response varia por módulo:
+
+| Módulo | Chave do array | Metadados |
+|--------|---------------|-----------|
+| Geo Regions, Budget Classifications | `items` | `total`, `limit`, `offset` |
+| Warehouses | `warehouses` | `total`, `limit`, `offset` |
+| Suppliers | `suppliers` | `total`, `limit`, `offset` |
+| Invoices | `invoices` | `total`, `limit`, `offset` |
+| Requisitions | `data` | `total`, `limit`, `offset` |
+| Catalog (groups, classes, etc.) | nome específico | `total`, `limit`, `offset` |
+
+### Enums da API
+
+#### InvoiceStatus
+| Valor | Descrição |
+|-------|-----------|
+| `PENDING` | Pendente de conferência |
+| `CHECKING` | Em conferência |
+| `CHECKED` | Conferida, aguardando lançamento |
+| `POSTED` | Lançada no estoque |
+| `REJECTED` | Rejeitada |
+| `CANCELLED` | Cancelada |
+
+#### WarehouseType
+| Valor | Descrição |
+|-------|-----------|
+| `CENTRAL` | Almoxarifado central |
+| `SECTOR` | Almoxarifado setorial |
+
+#### MaterialClassification
+| Valor | Comportamento no estoque |
+|-------|--------------------------|
+| `STOCKABLE` | Entrada no estoque ao lançar NF |
+| `PERMANENT` | Bem permanente (patrimônio) — sem impacto no estoque |
+| `DIRECT_USE` | Uso/consumo direto — sem impacto no estoque |
+
+#### RequisitionStatus *(PascalCase no wire — normalizar no frontend)*
+| Wire format | Normalizado | Descrição |
+|-------------|-------------|-----------|
+| `"Draft"` | `DRAFT` | Rascunho |
+| `"Pending"` | `PENDING` | Aguardando aprovação |
+| `"Approved"` | `APPROVED` | Aprovada |
+| `"Rejected"` | `REJECTED` | Rejeitada |
+| `"Processing"` | `PROCESSING` | Em atendimento |
+| `"Fulfilled"` | `FULFILLED` | Atendida completamente |
+| `"PartiallyFulfilled"` | `PARTIALLY_FULFILLED` | Atendida parcialmente |
+| `"Cancelled"` | `CANCELLED` | Cancelada |
+
+#### RequisitionPriority *(PascalCase no wire)*
+| Wire format | Normalizado |
+|-------------|-------------|
+| `"Low"` | `LOW` |
+| `"Normal"` | `NORMAL` |
+| `"High"` | `HIGH` |
+| `"Urgent"` | `URGENT` |
+
+#### ActivityArea (Unidade Organizacional)
+`SUPPORT` | `CORE`
+
+#### InternalUnitType
+`ADMINISTRATION` | `DEPARTMENT` | `LABORATORY` | `SECTOR` | `COUNCIL` | `COORDINATION` | `CENTER` | `DIVISION`
+
+#### SyncStatus (SIORG)
+`PENDING` | `PROCESSING` | `COMPLETED` | `FAILED` | `CONFLICT` | `SKIPPED`
+
+#### SiorgEntityType
+`ORGANIZATION` | `UNIT` | `CATEGORY` | `TYPE`
+
+#### SiorgChangeType
+`CREATION` | `UPDATE` | `EXTINCTION` | `HIERARCHY_CHANGE` | `MERGE` | `SPLIT`
+
+---
+
+## 2. Autenticação e Autorização
+
+### Tipo de token
+
+JWT Bearer. O token é gerado pelo serviço de autenticação Waterswamp (externo a este documento).
+
+### Uso
+
+```http
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### Modelo de autorização
+
+- Todas as rotas sob `/admin/` exigem sessão autenticada.
+- RBAC via Casbin: permissões específicas por recurso e ação.
+- Endpoints de leitura (`GET`) podem ter acesso mais amplo dependendo da política.
+- Operações de escrita (`POST`, `PUT`, `PATCH`, `DELETE`) exigem roles administrativos.
+
+### Rate limiting
+
+Um middleware `admin_rate_limiter` é aplicado a todas as rotas `/admin/`.
+
+- Exceder o limite retorna `429 Too Many Requests`.
+- Implementar backoff exponencial no frontend: 1s → 2s → 4s (máx. 3 tentativas).
+
+---
+
+## 3. Geo Regions
+
+**Prefixo:** `/admin/geo_regions`
+
+### 3.1 Países
+
+#### `GET /admin/geo_regions/countries`
+
+Lista países com paginação e busca opcional.
+
+**Query Parameters:**
+
+| Parâmetro | Tipo | Obrigatório | Padrão | Descrição |
+|-----------|------|:-----------:|--------|-----------|
+| `limit` | `integer` | Não | `10` | Máximo de registros por página |
+| `offset` | `integer` | Não | `0` | Deslocamento para paginação |
+| `search` | `string` | Não | — | Busca por nome (ILIKE) |
+
+**Response `200 OK`:**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "name": "Brasil",
+      "iso2": "BR",
+      "bacen_code": 1058,
+      "is_active": true,
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 10,
+  "offset": 0
+}
+```
+
+---
+
+#### `GET /admin/geo_regions/countries/{id}`
+
+Retorna um país pelo UUID.
+
+**Path Parameters:** `id` (UUID, obrigatório)
+
+**Response `200 OK`:** Objeto `CountryResponse` (mesma estrutura do item acima).
+
+**Erros:** `404` — país não encontrado.
+
+---
+
+#### `POST /admin/geo_regions/countries`
+
+Cria um novo país.
+
+**Request Body:**
+```json
+{
+  "name": "Brasil",
+  "iso2": "BR",
+  "bacen_code": 1058,
+  "is_active": true
+}
+```
+
+| Campo | Tipo | Obrigatório | Validação |
+|-------|------|:-----------:|-----------|
+| `name` | `string` | Sim | Não vazio |
+| `iso2` | `string` | Sim | Exatamente 2 caracteres |
+| `bacen_code` | `integer` | Sim | Único |
+| `is_active` | `boolean` | Sim | — |
+
+**Response `201 Created`:** Objeto `CountryResponse` criado.
+
+**Erros:** `400` (validação), `409` (ISO2 ou Bacen duplicado).
+
+---
+
+#### `PUT /admin/geo_regions/countries/{id}`
+
+Atualiza um país. Todos os campos são opcionais (atualização parcial).
+
+**Response `200 OK`:** Objeto `CountryResponse` atualizado.
+
+**Erros:** `400`, `404`, `409`.
+
+---
+
+#### `DELETE /admin/geo_regions/countries/{id}`
+
+**Response `204 No Content`**
+
+**Erros:** `404`.
+
+---
+
+### 3.2 Estados
+
+**Prefixo:** `/admin/geo_regions/states`
+
+#### `GET /admin/geo_regions/states`
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|-----------|------|:-----------:|-----------|
+| `limit` | `integer` | Não | Padrão: `50` |
+| `offset` | `integer` | Não | Padrão: `0` |
+| `search` | `string` | Não | Busca por nome ou sigla |
+| `country_id` | `UUID` | Não | Filtrar por país |
+
+**Response `200 OK`:**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "name": "Mato Grosso",
+      "abbreviation": "MT",
+      "ibge_code": 51,
+      "is_active": true,
+      "country_id": "uuid",
+      "country_name": "Brasil",
+      "country_iso2": "BR",
+      "country_bacen_code": 1058,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 27,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/geo_regions/states/{id}` → `200` `StateResponse`
+#### `POST /admin/geo_regions/states` → `201`
+
+```json
+{
+  "name": "Mato Grosso",
+  "abbreviation": "MT",
+  "ibge_code": 51,
+  "country_id": "uuid",
+  "is_active": true
+}
+```
+
+**Validação:** `abbreviation` deve ser única dentro do país. `ibge_code` deve ser globalmente único.
+
+#### `PUT /admin/geo_regions/states/{id}` → `200`
+#### `DELETE /admin/geo_regions/states/{id}` → `204`
+
+---
+
+### 3.3 Cidades
+
+**Prefixo:** `/admin/geo_regions/cities`
+
+#### `GET /admin/geo_regions/cities`
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|-----------|------|:-----------:|-----------|
+| `limit` | `integer` | Não | Padrão: `50` |
+| `offset` | `integer` | Não | Padrão: `0` |
+| `search` | `string` | Não | Busca por nome |
+| `state_id` | `UUID` | Não | Filtrar por estado |
+
+**Response `200 OK`:**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "name": "Cuiabá",
+      "ibge_code": 5103403,
+      "siafi_code": 9065,
+      "is_active": true,
+      "state_id": "uuid",
+      "state_name": "Mato Grosso",
+      "state_abbreviation": "MT",
+      "state_ibge_code": 51,
+      "country_id": "uuid",
+      "country_name": "Brasil",
+      "country_iso2": "BR",
+      "country_bacen_code": 1058,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 141,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/geo_regions/cities/{id}` → `200` `CityWithStateResponse`
+#### `POST /admin/geo_regions/cities` → `201`
+
+```json
+{
+  "name": "Cuiabá",
+  "ibge_code": 5103403,
+  "siafi_code": 9065,
+  "state_id": "uuid",
+  "is_active": true
+}
+```
+
+**Validação:** `ibge_code` único. `state_id` deve existir.
+
+#### `PUT /admin/geo_regions/cities/{id}` → `200`
+#### `DELETE /admin/geo_regions/cities/{id}` → `204`
+
+---
+
+## 4. Classificações Orçamentárias
+
+**Prefixo:** `/admin/budget-classifications`
+
+Sistema hierárquico de até 5 níveis. `full_code` e `level` são calculados automaticamente pelo banco de dados.
+
+### `GET /admin/budget-classifications`
+
+| Parâmetro | Tipo | Obrigatório | Padrão | Máx. |
+|-----------|------|:-----------:|--------|------|
+| `limit` | `integer` | Não | `50` | `100` |
+| `offset` | `integer` | Não | `0` | — |
+| `search` | `string` | Não | — | Busca por nome ou full_code |
+| `parent_id` | `UUID` | Não | — | — |
+| `level` | `integer` | Não | — | 1 a 5 |
+| `is_active` | `boolean` | Não | — | — |
+
+**Response `200 OK`:**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "parent_id": null,
+      "code_part": "3",
+      "full_code": "3",
+      "name": "Despesas Correntes",
+      "level": 1,
+      "is_active": true,
+      "parent_name": null,
+      "parent_full_code": null,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 42,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### `GET /admin/budget-classifications/tree`
+
+Retorna a hierarquia completa. **Não paginar.** Usar para tree pickers — cache agressivo no frontend.
+
+**Response `200 OK`:**
+```json
+[
+  {
+    "id": "uuid",
+    "parent_id": null,
+    "code_part": "3",
+    "full_code": "3",
+    "name": "Despesas Correntes",
+    "level": 1,
+    "is_active": true,
+    "children": [
+      {
+        "id": "uuid",
+        "parent_id": "uuid",
+        "code_part": "30",
+        "full_code": "3.30",
+        "level": 2,
+        "children": []
+      }
+    ],
+    "created_at": "...",
+    "updated_at": "..."
+  }
+]
+```
+
+### `GET /admin/budget-classifications/{id}` → `200` `BudgetClassificationWithParentResponse`
+### `POST /admin/budget-classifications` → `201`
+
+```json
+{
+  "parent_id": null,
+  "code_part": "3",
+  "name": "Despesas Correntes",
+  "is_active": true
+}
+```
+
+| Campo | Tipo | Obrigatório | Validação |
+|-------|------|:-----------:|-----------|
+| `parent_id` | `UUID\|null` | Não | Deve existir; nível do parent deve ser < 5 |
+| `code_part` | `string` | Sim | 1–10 caracteres |
+| `name` | `string` | Sim | 1–255 caracteres |
+| `is_active` | `boolean` | Não | Padrão: `true` |
+
+**Erros:** `400` (nível excedido), `404` (parent não encontrado), `409`.
+
+### `PUT /admin/budget-classifications/{id}` → `200`
+### `DELETE /admin/budget-classifications/{id}` → `204`
+
+**Restrição de deleção:** Falha com `409` se a classificação tiver filhos.
+
+---
+
+## 5. Catálogo — Unidades de Medida e Conversões
+
+**Prefixo:** `/admin/catalog`
+
+### 5.1 Unidades de Medida
+
+#### `GET /admin/catalog/units-of-measure`
+
+**Query:** `limit`, `offset`, `search` (por nome ou símbolo)
+
+**Response `200 OK`:**
+```json
+{
+  "units": [
+    {
+      "id": "uuid",
+      "name": "Unidade",
+      "symbol": "UN",
+      "description": "Item avulso",
+      "is_base_unit": true,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 15,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/catalog/units-of-measure/{id}` → `200` `UnitOfMeasureDto`
+#### `POST /admin/catalog/units-of-measure` → `201`
+
+```json
+{
+  "name": "Caixa",
+  "symbol": "CX",
+  "description": "Embalagem com múltiplas unidades",
+  "is_base_unit": false
+}
+```
+
+| Campo | Tipo | Obrigatório | Validação |
+|-------|------|:-----------:|-----------|
+| `name` | `string` | Sim | Não vazio |
+| `symbol` | `string` | Sim | Único |
+| `description` | `string` | Não | — |
+| `is_base_unit` | `boolean` | Sim | — |
+
+**Erro:** `409` se símbolo já existe.
+
+#### `PUT /admin/catalog/units-of-measure/{id}` → `200`
+#### `DELETE /admin/catalog/units-of-measure/{id}` → `204`
+
+---
+
+### 5.2 Conversões de Unidade
+
+#### `GET /admin/catalog/conversions`
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `limit` | `integer` | — |
+| `offset` | `integer` | — |
+| `from_unit_id` | `UUID` | Filtrar por unidade de origem |
+| `to_unit_id` | `UUID` | Filtrar por unidade de destino |
+
+**Response `200 OK`:**
+```json
+{
+  "conversions": [
+    {
+      "id": "uuid",
+      "from_unit_id": "uuid",
+      "from_unit_name": "Caixa",
+      "from_unit_symbol": "CX",
+      "to_unit_id": "uuid",
+      "to_unit_name": "Unidade",
+      "to_unit_symbol": "UN",
+      "catmat_id": null,
+      "description": "1 caixa = 12 unidades",
+      "conversion_factor": "12.000000",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 8,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/catalog/conversions/{id}` → `200` `UnitConversionWithDetailsDto`
+#### `POST /admin/catalog/conversions` → `201`
+
+```json
+{
+  "from_unit_id": "uuid",
+  "to_unit_id": "uuid",
+  "catmat_id": null,
+  "description": "1 caixa = 12 unidades",
+  "conversion_factor": "12.000000"
+}
+```
+
+| Campo | Tipo | Obrigatório | Validação |
+|-------|------|:-----------:|-----------|
+| `from_unit_id` | `UUID` | Sim | Deve existir; ≠ `to_unit_id` |
+| `to_unit_id` | `UUID` | Sim | Deve existir |
+| `conversion_factor` | `decimal` | Sim | > 0 |
+| `catmat_id` | `UUID\|null` | Não | — |
+
+**Erros:** `400` (mesma unidade, fator ≤ 0), `404`, `409` (conversão já existe).
+
+#### `PUT /admin/catalog/conversions/{id}` → `200`
+#### `DELETE /admin/catalog/conversions/{id}` → `204`
+
+---
+
+## 6. Catálogo — CATMAT
+
+**Prefixo:** `/admin/catalog/catmat`
+
+Hierarquia: **Grupo → Classe → PDM → Item**
+
+### 6.1 Grupos
+
+#### `GET /admin/catalog/catmat/groups`
+
+**Query:** `limit`, `offset`, `search`, `is_active`
+
+**Response `200 OK`:**
+```json
+{
+  "groups": [
+    {
+      "id": "uuid",
+      "code": "10",
+      "name": "Medicamentos",
+      "is_active": true,
+      "verification_status": "approved",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 50,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/catalog/catmat/groups/tree`
+
+Retorna hierarquia Grupo → Classes. Cache no frontend (15 min).
+
+```json
+[
+  {
+    "id": "uuid",
+    "code": "10",
+    "name": "Medicamentos",
+    "is_active": true,
+    "classes": [
+      {
+        "id": "uuid",
+        "group_id": "uuid",
+        "code": "1000",
+        "name": "Analgésicos",
+        "is_active": true,
+        "pdm_count": 12,
+        "created_at": "...",
+        "updated_at": "..."
+      }
+    ],
+    "created_at": "...",
+    "updated_at": "..."
+  }
+]
+```
+
+#### `GET /admin/catalog/catmat/groups/{id}` → `200` `CatmatGroupDto`
+#### `POST /admin/catalog/catmat/groups` → `201`
+
+```json
+{ "code": "10", "name": "Medicamentos", "is_active": true }
+```
+
+**Validação:** `code` único. **Erro:** `409`.
+
+#### `PUT /admin/catalog/catmat/groups/{id}` → `200`
+#### `DELETE /admin/catalog/catmat/groups/{id}` → `204`
+
+---
+
+### 6.2 Classes
+
+#### `GET /admin/catalog/catmat/classes`
+
+**Query:** `limit`, `offset`, `search`, `group_id`, `is_active`
+
+**Response `200 OK`:**
+```json
+{
+  "classes": [
+    {
+      "id": "uuid",
+      "group_id": "uuid",
+      "group_name": "Medicamentos",
+      "group_code": "10",
+      "code": "1000",
+      "name": "Analgésicos",
+      "is_active": true,
+      "verification_status": "approved",
+      "pdm_count": 12,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 200,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/catalog/catmat/classes/{id}` → `200` `CatmatClassWithDetailsDto`
+#### `POST /admin/catalog/catmat/classes` → `201`
+
+```json
+{
+  "group_id": "uuid",
+  "code": "1000",
+  "name": "Analgésicos",
+  "is_active": true
+}
+```
+
+#### `PUT /admin/catalog/catmat/classes/{id}` → `200`
+#### `DELETE /admin/catalog/catmat/classes/{id}` → `204`
+
+**Restrição:** `409` se classe possui PDMs.
+
+---
+
+### 6.3 PDMs (Padrão Descritivo de Material)
+
+#### `GET /admin/catalog/catmat/pdms`
+
+**Query:** `limit`, `offset`, `search`, `class_id`, `is_active`
+
+**Response `200 OK`:**
+```json
+{
+  "pdms": [
+    {
+      "id": "uuid",
+      "class_id": "uuid",
+      "class_name": "Analgésicos",
+      "class_code": "1000",
+      "group_id": "uuid",
+      "group_name": "Medicamentos",
+      "group_code": "10",
+      "code": "100015",
+      "description": "DIPIRONA SÓDICA",
+      "material_classification": "STOCKABLE",
+      "is_active": true,
+      "verification_status": "approved",
+      "item_count": 5,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 800,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/catalog/catmat/pdms/{id}` → `200` `CatmatPdmWithDetailsDto`
+#### `POST /admin/catalog/catmat/pdms` → `201`
+
+```json
+{
+  "class_id": "uuid",
+  "code": "100015",
+  "description": "DIPIRONA SÓDICA",
+  "material_classification": "STOCKABLE",
+  "is_active": true
+}
+```
+
+| Campo | Tipo | Obrigatório | Opções |
+|-------|------|:-----------:|--------|
+| `material_classification` | `enum` | Não | `STOCKABLE` \| `PERMANENT` \| `DIRECT_USE`. Padrão: `STOCKABLE` |
+
+**Restrição de deleção:** `409` se PDM possui itens.
+
+#### `PUT /admin/catalog/catmat/pdms/{id}` → `200`
+#### `DELETE /admin/catalog/catmat/pdms/{id}` → `204`
+
+---
+
+### 6.4 Itens CATMAT
+
+#### `GET /admin/catalog/catmat/items`
+
+**Query:** `limit`, `offset`, `search`, `pdm_id`, `is_sustainable`, `is_active`
+
+**Response `200 OK`:**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "pdm_id": "uuid",
+      "pdm_description": "DIPIRONA SÓDICA",
+      "pdm_code": "100015",
+      "pdm_material_classification": "STOCKABLE",
+      "class_id": "uuid",
+      "class_name": "Analgésicos",
+      "class_code": "1000",
+      "group_id": "uuid",
+      "group_name": "Medicamentos",
+      "group_code": "10",
+      "unit_of_measure_id": "uuid",
+      "unit_name": "Comprimido",
+      "unit_symbol": "CP",
+      "budget_classification_id": null,
+      "budget_classification_name": null,
+      "budget_classification_full_code": null,
+      "code": "10001500001",
+      "description": "DIPIRONA SÓDICA 500MG COMPRIMIDO",
+      "is_sustainable": false,
+      "code_ncm": "30049099",
+      "is_active": true,
+      "verification_status": "approved",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 5000,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/catalog/catmat/items/{id}` → `200` `CatmatItemWithDetailsDto`
+#### `POST /admin/catalog/catmat/items` → `201`
+
+```json
+{
+  "pdm_id": "uuid",
+  "unit_of_measure_id": "uuid",
+  "budget_classification_id": null,
+  "code": "10001500001",
+  "description": "DIPIRONA SÓDICA 500MG COMPRIMIDO",
+  "is_sustainable": false,
+  "code_ncm": "30049099",
+  "is_active": true
+}
+```
+
+**Validação:** `code` único. `pdm_id` e `unit_of_measure_id` devem existir.
+
+#### `PUT /admin/catalog/catmat/items/{id}` → `200`
+#### `DELETE /admin/catalog/catmat/items/{id}` → `204`
+
+---
+
+## 7. Catálogo — CATSER
+
+**Prefixo:** `/admin/catalog/catser`
+
+Hierarquia: **Seção → Divisão → Grupo → Classe → Item**
+
+### 7.1 Seções
+
+#### `GET /admin/catalog/catser/sections`
+
+**Query:** `limit`, `offset`, `search`, `is_active`
+
+**Response `200 OK`:**
+```json
+{
+  "sections": [
+    {
+      "id": "uuid",
+      "name": "Serviços de Saúde",
+      "is_active": true,
+      "verification_status": "approved",
+      "division_count": 5,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 10,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/catalog/catser/sections/tree`
+
+Árvore completa Seção → Divisão → Grupo → Classe. Endpoint pesado — cache mínimo de 15 minutos.
+
+#### `GET /admin/catalog/catser/sections/{id}` → `200` `CatserSectionWithDetailsDto`
+#### `POST /admin/catalog/catser/sections` → `201`
+
+```json
+{ "name": "Serviços de Saúde", "is_active": true }
+```
+
+**Restrição de deleção:** `409` se possui divisões.
+
+#### `PUT /admin/catalog/catser/sections/{id}` → `200`
+#### `DELETE /admin/catalog/catser/sections/{id}` → `204`
+
+---
+
+### 7.2 Divisões
+
+**Query GET:** `limit`, `offset`, `search`, `section_id`, `is_active`
+
+**Response:** `{ "divisions": [...], "total", "limit", "offset" }` — cada item inclui `section_name` e `group_count`.
+
+**POST body:**
+```json
+{ "section_id": "uuid", "name": "Diagnóstico e Tratamento", "is_active": true }
+```
+
+**Restrição de deleção:** `409` se possui grupos.
+
+---
+
+### 7.3 Grupos
+
+**Query GET:** `limit`, `offset`, `search`, `division_id`, `is_active`
+
+**GET `/admin/catalog/catser/groups/tree`** — árvore de grupos.
+
+**POST body:**
+```json
+{ "division_id": "uuid", "code": "07030", "name": "Laboratório Clínico", "is_active": true }
+```
+
+**Validação:** `code` único.
+
+---
+
+### 7.4 Classes
+
+**Query GET:** `limit`, `offset`, `search`, `group_id`, `is_active`
+
+**POST body:**
+```json
+{ "group_id": "uuid", "code": "07031", "name": "Exames Hematológicos", "is_active": true }
+```
+
+**Restrição de deleção:** `409` se possui itens.
+
+---
+
+### 7.5 Itens CATSER
+
+#### `GET /admin/catalog/catser/items`
+
+**Query:** `limit`, `offset`, `search`, `class_id`, `is_active`
+
+**Response `200 OK`:**
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "class_id": "uuid",
+      "class_name": "Exames Hematológicos",
+      "class_code": "07031",
+      "group_id": "uuid",
+      "group_name": "Laboratório Clínico",
+      "group_code": "07030",
+      "unit_of_measure_id": "uuid",
+      "unit_name": "Exame",
+      "unit_symbol": "EX",
+      "budget_classification_id": null,
+      "code": "0703105",
+      "code_cpc": null,
+      "description": "HEMOGRAMA COMPLETO",
+      "supplementary_description": null,
+      "specification": null,
+      "search_links": null,
+      "is_active": true,
+      "verification_status": "approved",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 300,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `POST /admin/catalog/catser/items` → `201`
+
+```json
+{
+  "class_id": "uuid",
+  "unit_of_measure_id": "uuid",
+  "budget_classification_id": null,
+  "code": "0703105",
+  "code_cpc": null,
+  "description": "HEMOGRAMA COMPLETO",
+  "supplementary_description": null,
+  "specification": null,
+  "search_links": null,
+  "is_active": true
+}
+```
+
+---
+
+## 8. Estrutura Organizacional
+
+**Prefixo:** `/admin/organizational`
+
+### 8.1 Configurações do Sistema
+
+#### `GET /admin/organizational/settings`
+
+**Query:** `limit`, `offset`, `category`
+
+**Response `200 OK`:**
+```json
+{
+  "settings": [
+    {
+      "key": "units.allow_custom_units",
+      "value": true,
+      "value_type": "boolean",
+      "description": "Permite criar unidades sem código SIORG",
+      "category": "units",
+      "is_sensitive": false,
+      "updated_at": "...",
+      "updated_by": null
+    }
+  ],
+  "total": 5,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+**Nota:** `key` é uma string e não UUID nos path params.
+
+#### `GET /admin/organizational/settings/{key}` → `200` `SystemSettingDto`
+#### `POST /admin/organizational/settings` → `201`
+
+```json
+{
+  "key": "units.allow_custom_units",
+  "value": true,
+  "value_type": "boolean",
+  "description": "...",
+  "category": "units",
+  "is_sensitive": false
+}
+```
+
+**Validação:** `value_type` deve ser `string`, `number`, `boolean` ou `json`.
+
+#### `PUT /admin/organizational/settings/{key}` → `200`
+#### `DELETE /admin/organizational/settings/{key}` → `204`
+
+---
+
+### 8.2 Organizações
+
+#### `GET /admin/organizational/organizations`
+
+**Query:** `limit`, `offset`, `is_active`
+
+**Response `200 OK`:**
+```json
+{
+  "organizations": [
+    {
+      "id": "uuid",
+      "acronym": "UFMT",
+      "name": "Universidade Federal de Mato Grosso",
+      "cnpj": "15453320000155",
+      "ug_code": 154046,
+      "siorg_code": 249,
+      "address": "Av. Fernando Corrêa da Costa, 2367",
+      "city": "Cuiabá",
+      "state": "MT",
+      "zip_code": "78060900",
+      "is_main": true,
+      "is_active": true,
+      "siorg_synced_at": "2024-01-01T00:00:00Z",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/organizational/organizations/{id}` → `200`
+#### `POST /admin/organizational/organizations` → `201`
+#### `PUT /admin/organizational/organizations/{id}` → `200`
+#### `DELETE /admin/organizational/organizations/{id}` → `204`
+
+---
+
+### 8.3 Categorias de Unidade
+
+**Prefixo:** `/admin/organizational/unit-categories`
+
+**Query GET:** `limit`, `offset`, `is_active`, `is_siorg_managed`
+
+CRUD completo: `GET`, `GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`
+
+---
+
+### 8.4 Tipos de Unidade
+
+**Prefixo:** `/admin/organizational/unit-types`
+
+**Query GET:** `limit`, `offset`, `is_active`, `is_siorg_managed`
+
+CRUD completo: `GET`, `GET /{id}`, `POST`, `PUT /{id}`, `DELETE /{id}`
+
+---
+
+### 8.5 Unidades Organizacionais
+
+#### `GET /admin/organizational/units`
+
+| Parâmetro | Tipo | Descrição |
+|-----------|------|-----------|
+| `limit` | `integer` | — |
+| `offset` | `integer` | — |
+| `organization_id` | `UUID` | — |
+| `parent_id` | `UUID` | — |
+| `category_id` | `UUID` | — |
+| `unit_type_id` | `UUID` | — |
+| `activity_area` | `enum` | `SUPPORT` \| `CORE` |
+| `internal_type` | `enum` | Ver enum InternalUnitType |
+| `is_active` | `boolean` | — |
+| `is_siorg_managed` | `boolean` | — |
+| `search` | `string` | Busca por nome, sigla ou nome formal |
+
+**Response `200 OK`:**
+```json
+{
+  "units": [
+    {
+      "id": "uuid",
+      "organization_id": "uuid",
+      "parent_id": null,
+      "category_id": "uuid",
+      "unit_type_id": "uuid",
+      "internal_type": "ADMINISTRATION",
+      "name": "Pró-Reitoria de Administração",
+      "formal_name": null,
+      "acronym": "PROAD",
+      "siorg_code": 1234,
+      "is_siorg_managed": true,
+      "activity_area": "SUPPORT",
+      "contact_info": {
+        "phones": ["65 3615-8000"],
+        "emails": ["proad@ufmt.br"],
+        "websites": [],
+        "address": null
+      },
+      "level": 1,
+      "path_ids": ["uuid"],
+      "path_names": "UFMT > PROAD",
+      "is_active": true,
+      "organization_name": "UFMT",
+      "organization_acronym": "UFMT",
+      "parent_name": null,
+      "category_name": "Pró-Reitoria",
+      "unit_type_name": "Administração"
+    }
+  ],
+  "total": 150,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/organizational/units/tree`
+
+Hierarquia completa como árvore aninhada. Endpoint pesado — cache de 5 minutos no frontend.
+
+#### `GET /admin/organizational/units/{id}` → `200` `OrganizationalUnitWithDetailsDto`
+#### `GET /admin/organizational/units/{id}/children` → `200` `Array<OrganizationalUnitDto>`
+#### `GET /admin/organizational/units/{id}/path` → `200` `Array<OrganizationalUnitDto>` (do root até a unidade)
+
+#### `POST /admin/organizational/units` → `201`
+
+```json
+{
+  "organization_id": "uuid",
+  "parent_id": null,
+  "category_id": "uuid",
+  "unit_type_id": "uuid",
+  "internal_type": "ADMINISTRATION",
+  "name": "Pró-Reitoria de Administração",
+  "acronym": "PROAD",
+  "siorg_code": 1234,
+  "activity_area": "SUPPORT",
+  "contact_info": {
+    "phones": [],
+    "emails": [],
+    "websites": [],
+    "address": null
+  },
+  "is_active": true
+}
+```
+
+**Validações:** `organization_id`, `category_id`, `unit_type_id` devem existir. `siorg_code` único se fornecido. Criar sem `siorg_code` requer `units.allow_custom_units = true` nas configurações.
+
+#### `PUT /admin/organizational/units/{id}` → `200`
+#### `DELETE /admin/organizational/units/{id}` → `204`
+
+**Restrição:** `409` se unidade possui filhos.
+
+#### `POST /admin/organizational/units/{id}/deactivate` → `204`
+
+**Body:** `{ "reason": "string | null" }`
+
+#### `POST /admin/organizational/units/{id}/activate` → `204`
+
+**Body:** `{}`
+
+---
+
+## 9. SIORG Sync
+
+**Prefixo:** `/admin/organizational/sync`
+
+### 9.1 Operações de Sincronização Imediata
+
+#### `POST /admin/organizational/sync/organization`
+```json
+{ "siorg_code": 249 }
+```
+→ `200` `OrganizationDto`
+
+#### `POST /admin/organizational/sync/organization/{id}`
+Sincronizar pelo UUID local. → `200` `OrganizationDto`
+
+#### `POST /admin/organizational/sync/organization/{id}/units`
+Sincronização em massa das unidades de uma organização.
+
+→ `200`
+```json
+{
+  "total_processed": 142,
+  "created": 10,
+  "updated": 130,
+  "failed": 2,
+  "errors": ["Unit 4321: SIORG timeout"]
+}
+```
+
+#### `POST /admin/organizational/sync/unit`
+```json
+{ "siorg_code": 5678 }
+```
+→ `200` `OrganizationalUnitDto`
+
+#### `POST /admin/organizational/sync/from-db`
+Re-sincronizar todas as entidades com código SIORG cadastrado.
+→ `200` (mesmo formato de sumário)
+
+#### `GET /admin/organizational/sync/health`
+→ `200` `{ "status": "healthy", "siorg_api": "available" }`  
+→ `503` se API SIORG indisponível.
+
+---
+
+### 9.2 Fila de Sincronização
+
+#### `GET /admin/organizational/sync/queue`
+
+**Query:** `limit`, `offset`, `status` (enum SyncStatus), `entity_type` (enum SiorgEntityType)
+
+→ `200` `Array<SiorgSyncQueueItem>`
+
+#### `GET /admin/organizational/sync/queue/stats`
+
+→ `200`
+```json
+{
+  "pending": 5,
+  "processing": 1,
+  "completed": 140,
+  "failed": 2,
+  "conflicts": 0,
+  "skipped": 3
+}
+```
+
+#### `GET /admin/organizational/sync/queue/{id}` → `200` `SiorgSyncQueueItem`
+#### `DELETE /admin/organizational/sync/queue/{id}` → `204`
+
+---
+
+### 9.3 Resolução de Conflitos
+
+#### `GET /admin/organizational/sync/conflicts`
+
+**Query:** `limit`, `offset`
+→ `200` `Array<SiorgSyncQueueItem>` (filtrado para status `CONFLICT`)
+
+#### `GET /admin/organizational/sync/conflicts/{id}`
+
+→ `200` `ConflictDetail`
+```json
+{
+  "queue_item": { "...SiorgSyncQueueItem" },
+  "entity_type": "UNIT",
+  "fields": [
+    {
+      "field": "name",
+      "local_value": "PROAD",
+      "siorg_value": "Pró-Reitoria de Administração",
+      "field_type": "string",
+      "has_conflict": true,
+      "metadata": null
+    }
+  ],
+  "local_entity_name": "PROAD",
+  "siorg_entity_name": "Pró-Reitoria de Administração"
+}
+```
+
+#### `POST /admin/organizational/sync/conflicts/{id}/resolve`
+
+```json
+{
+  "action": "MERGE",
+  "field_resolutions": {
+    "name": "SIORG"
+  },
+  "notes": "Aceitar nome oficial do SIORG"
+}
+```
+
+**Valores de `action`:** `ACCEPT_SIORG` | `KEEP_LOCAL` | `MERGE` | `SKIP`
+
+→ `200`
+
+---
+
+### 9.4 Histórico de Sincronização
+
+#### `GET /admin/organizational/sync/history`
+
+**Query:** `limit`, `offset`, `entity_type`, `siorg_code`, `change_type`, `requires_review`
+
+→ `200` `Array<SiorgHistoryItem>`
+
+#### `GET /admin/organizational/sync/history/{id}` → `200` `SiorgHistoryItem`
+#### `GET /admin/organizational/sync/history/entity/{entity_type}/{siorg_code}` → `200` `Array<SiorgHistoryItem>`
+
+#### `POST /admin/organizational/sync/history/{id}/review`
+```json
+{ "notes": "Revisado e confirmado" }
+```
+→ `200`
+
+---
+
+### 9.5 Estatísticas
+
+#### `GET /admin/organizational/sync/stats/detailed` → `200` `DetailedStats`
+#### `GET /admin/organizational/sync/stats/health` → `200` `HealthStatus`
+
+---
+
+## 10. Fornecedores
+
+**Prefixo:** `/admin/suppliers`
+
+### `GET /admin/suppliers`
+
+| Parâmetro | Tipo | Obrigatório | Padrão |
+|-----------|------|:-----------:|--------|
+| `limit` | `integer` | Não | `50` |
+| `offset` | `integer` | Não | `0` |
+| `search` | `string` | Não | — |
+| `is_active` | `boolean` | Não | — |
+
+**Response `200 OK`:**
+```json
+{
+  "suppliers": [
+    {
+      "id": "uuid",
+      "legal_name": "Distribuidora Alfa Ltda",
+      "trade_name": "Alfa Farma",
+      "document_number": "11222333000181",
+      "representative_name": "João Silva",
+      "address": "Rua das Flores, 123",
+      "neighborhood": "Centro",
+      "city_id": "uuid",
+      "city_name": "Cuiabá",
+      "state_abbreviation": "MT",
+      "zip_code": "78000000",
+      "email": "contato@alfa.com.br",
+      "phone": "65 3333-4444",
+      "is_active": true,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 45,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### `GET /admin/suppliers/{id}` → `200` `SupplierWithDetailsDto`
+
+### `POST /admin/suppliers` → `201`
+
+```json
+{
+  "legal_name": "Distribuidora Alfa Ltda",
+  "trade_name": "Alfa Farma",
+  "document_number": "11.222.333/0001-81",
+  "representative_name": "João Silva",
+  "address": "Rua das Flores, 123",
+  "neighborhood": "Centro",
+  "city_id": "uuid",
+  "zip_code": "78000000",
+  "email": "contato@alfa.com.br",
+  "phone": "65 3333-4444"
+}
+```
+
+| Campo | Tipo | Obrigatório | Validação |
+|-------|------|:-----------:|-----------|
+| `legal_name` | `string` | Sim | Não vazio |
+| `document_number` | `string` | Sim | CPF (11 dígitos) ou CNPJ (14 dígitos). Pontuação é removida automaticamente. Dígitos verificadores são validados. |
+| `city_id` | `UUID\|null` | Não | Deve existir se fornecido |
+
+**Erros:** `400` (CPF/CNPJ inválido), `409` (documento duplicado).
+
+### `PUT /admin/suppliers/{id}` → `200`
+### `DELETE /admin/suppliers/{id}` → `204`
+
+---
+
+## 11. Almoxarifados e Estoque
+
+**Prefixo:** `/admin/warehouses`
+
+### 11.1 Almoxarifados
+
+#### `GET /admin/warehouses`
+
+| Parâmetro | Tipo | Obrigatório | Padrão |
+|-----------|------|:-----------:|--------|
+| `limit` | `integer` | Não | `50` |
+| `offset` | `integer` | Não | `0` |
+| `search` | `string` | Não | — |
+| `warehouse_type` | `enum` | Não | `CENTRAL` \| `SECTOR` |
+| `city_id` | `UUID` | Não | — |
+| `is_active` | `boolean` | Não | — |
+
+**Response `200 OK`:**
+```json
+{
+  "warehouses": [
+    {
+      "id": "uuid",
+      "name": "Almoxarifado Central UFMT",
+      "code": "ALM-CENTRAL",
+      "warehouse_type": "CENTRAL",
+      "city_id": "uuid",
+      "city_name": "Cuiabá",
+      "state_abbreviation": "MT",
+      "responsible_user_id": null,
+      "responsible_unit_id": "uuid",
+      "allows_transfers": true,
+      "is_budgetary": true,
+      "address": "Campus Universitário",
+      "phone": "65 3615-9000",
+      "email": "almoxarifado@ufmt.br",
+      "is_active": true,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 8,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/warehouses/{id}` → `200` `WarehouseWithDetailsDto`
+
+#### `POST /admin/warehouses` → `201`
+
+```json
+{
+  "name": "Almoxarifado Central UFMT",
+  "code": "ALM-CENTRAL",
+  "warehouse_type": "CENTRAL",
+  "city_id": "uuid",
+  "responsible_user_id": null,
+  "responsible_unit_id": "uuid",
+  "allows_transfers": true,
+  "is_budgetary": true,
+  "address": "Campus Universitário",
+  "phone": "65 3615-9000",
+  "email": "almoxarifado@ufmt.br"
+}
+```
+
+**Validação:** `code` único; `name` não vazio.
+
+#### `PUT /admin/warehouses/{id}` → `200`
+#### `DELETE /admin/warehouses/{id}` → `204`
+
+---
+
+### 11.2 Estoque
+
+#### `GET /admin/warehouses/{id}/stocks`
+
+Lista itens em estoque de um almoxarifado específico.
+
+**Query:** `limit`, `offset`, `search`, `is_blocked`
+
+**Response `200 OK`:**
+```json
+{
+  "stocks": [
+    {
+      "id": "uuid",
+      "warehouse_id": "uuid",
+      "warehouse_name": "Almoxarifado Central UFMT",
+      "catalog_item_id": "uuid",
+      "catalog_item_name": "DIPIRONA SÓDICA 500MG COMPRIMIDO",
+      "catalog_item_code": "10001500001",
+      "unit_symbol": "CP",
+      "unit_name": "Comprimido",
+      "quantity": "1500.000",
+      "reserved_quantity": "200.000",
+      "available_quantity": "1300.000",
+      "average_unit_value": "0.85",
+      "total_value": "1275.00",
+      "min_stock": "100.000",
+      "max_stock": "5000.000",
+      "reorder_point": "500.000",
+      "resupply_days": 30,
+      "location": "Prateleira A3",
+      "secondary_location": null,
+      "is_blocked": false,
+      "block_reason": null,
+      "blocked_at": null,
+      "blocked_by": null,
+      "last_entry_at": "2024-01-15T10:00:00Z",
+      "last_exit_at": "2024-01-20T14:00:00Z",
+      "last_inventory_at": null,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 320,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `GET /admin/warehouses/stocks/{stock_id}` → `200` `WarehouseStockWithDetailsDto`
+
+#### `PATCH /admin/warehouses/stocks/{stock_id}`
+
+Atualiza parâmetros de controle. **Não altera quantidade** (movimentações são via trigger de NF).
+
+```json
+{
+  "min_stock": "100.000",
+  "max_stock": "5000.000",
+  "reorder_point": "500.000",
+  "resupply_days": 30,
+  "location": "Prateleira A3",
+  "secondary_location": null
+}
+```
+
+Todos os campos opcionais. → `200` `WarehouseStockDto`
+
+#### `POST /admin/warehouses/stocks/{stock_id}/block`
+
+```json
+{ "block_reason": "Aguardando laudo de qualidade" }
+```
+
+**Validação:** `block_reason` obrigatório e não vazio. Falha `400` se já bloqueado. → `200` `WarehouseStockDto`
+
+#### `POST /admin/warehouses/stocks/{stock_id}/unblock`
+
+Sem body. Falha `400` se não está bloqueado. → `200` `WarehouseStockDto`
+
+---
+
+## 12. Notas Fiscais
+
+**Prefixo:** `/admin/invoices`
+
+### Ciclo de vida
+
+```
+PENDING ──────────────────────────────────► CANCELLED
+   │
+   ▼
+CHECKING ──────────────────────────────────► CANCELLED
+   │                    │
+   │                    ▼
+   │                REJECTED
+   ▼
+CHECKED ───────────────────────────────────► CANCELLED
+   │                    │
+   │                    ▼
+   │                REJECTED
+   ▼
+POSTED ────────────────────────────────────► CANCELLED*
+
+* Cancelar NF POSTED reverte automaticamente as movimentações de estoque (trigger DB)
+```
+
+### `GET /admin/invoices`
+
+| Parâmetro | Tipo | Obrigatório | Padrão |
+|-----------|------|:-----------:|--------|
+| `limit` | `integer` | Não | `50` |
+| `offset` | `integer` | Não | `0` |
+| `search` | `string` | Não | — |
+| `status` | `enum` | Não | — |
+| `supplier_id` | `UUID` | Não | — |
+| `warehouse_id` | `UUID` | Não | — |
+
+**Response `200 OK`:**
+```json
+{
+  "invoices": [
+    {
+      "id": "uuid",
+      "invoice_number": "000123456",
+      "series": "1",
+      "access_key": "35240115453320000155550010001234561234567890",
+      "issue_date": "2024-01-15T00:00:00Z",
+      "supplier_id": "uuid",
+      "supplier_name": "Distribuidora Alfa Ltda",
+      "warehouse_id": "uuid",
+      "warehouse_name": "Almoxarifado Central UFMT",
+      "total_products": "1500.00",
+      "total_freight": "50.00",
+      "total_discount": "0.00",
+      "total_value": "1550.00",
+      "status": "PENDING",
+      "received_at": null,
+      "received_by": null,
+      "checked_at": null,
+      "checked_by": null,
+      "posted_at": null,
+      "posted_by": null,
+      "commitment_number": "2024NE000123",
+      "purchase_order_number": null,
+      "contract_number": null,
+      "notes": null,
+      "rejection_reason": null,
+      "pdf_url": null,
+      "xml_url": null,
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 85,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### `GET /admin/invoices/{id}` → `200` `InvoiceWithDetailsDto`
+
+### `GET /admin/invoices/{id}/items`
+
+→ `200` `{ "items": Array<InvoiceItemWithDetailsDto> }`
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "invoice_id": "uuid",
+      "catalog_item_id": "uuid",
+      "catalog_item_name": "DIPIRONA SÓDICA 500MG COMPRIMIDO",
+      "unit_conversion_id": null,
+      "unit_raw_id": "uuid",
+      "unit_raw_name": "Comprimido",
+      "unit_raw_symbol": "CP",
+      "material_classification": "STOCKABLE",
+      "quantity_raw": "1000.000",
+      "unit_value_raw": "0.85",
+      "total_value": "850.00",
+      "conversion_factor": "1.000000",
+      "quantity_base": "1000.000",
+      "unit_value_base": "0.85",
+      "ncm": "30049099",
+      "cfop": "1102",
+      "cest": null,
+      "batch_number": "LOT2024A",
+      "manufacturing_date": "2023-06-01",
+      "expiration_date": "2026-06-01",
+      "created_at": "..."
+    }
+  ]
+}
+```
+
+### `POST /admin/invoices` → `201`
+
+```json
+{
+  "invoice_number": "000123456",
+  "series": "1",
+  "access_key": "35240115453320000155550010001234561234567890",
+  "issue_date": "2024-01-15T00:00:00Z",
+  "supplier_id": "uuid",
+  "warehouse_id": "uuid",
+  "total_freight": "50.00",
+  "total_discount": "0.00",
+  "commitment_number": "2024NE000123",
+  "purchase_order_number": null,
+  "contract_number": null,
+  "notes": null,
+  "pdf_url": null,
+  "xml_url": null,
+  "items": [
+    {
+      "catalog_item_id": "uuid",
+      "unit_conversion_id": null,
+      "unit_raw_id": "uuid",
+      "quantity_raw": "1000.000",
+      "unit_value_raw": "0.85",
+      "conversion_factor": "1.000000",
+      "ncm": "30049099",
+      "cfop": "1102",
+      "cest": null,
+      "batch_number": "LOT2024A",
+      "manufacturing_date": "2023-06-01",
+      "expiration_date": "2026-06-01"
+    }
+  ]
+}
+```
+
+| Campo | Tipo | Obrigatório | Validação |
+|-------|------|:-----------:|-----------|
+| `invoice_number` | `string` | Sim | Não vazio |
+| `issue_date` | `string` | Sim | ISO 8601 datetime |
+| `supplier_id` | `UUID` | Sim | Deve existir |
+| `warehouse_id` | `UUID` | Sim | Deve existir |
+| `items` | `array` | Sim | Mínimo 1 item |
+| `items[].quantity_raw` | `decimal` | Sim | > 0 |
+| `access_key` | `string` | Não | Único globalmente se fornecido |
+
+**Erros:** `400` (sem itens, quantidade ≤ 0), `409` (chave de acesso duplicada).
+
+### `PUT /admin/invoices/{id}` → `200`
+
+Somente permitido para status `PENDING`. Todos os campos opcionais. **Não inclui itens** (gerenciados separadamente).
+
+**Erro:** `400` se status ≠ `PENDING`.
+
+### `DELETE /admin/invoices/{id}` → `204`
+
+Somente para status `PENDING`, `REJECTED` ou `CANCELLED`.
+
+---
+
+### 12.1 Transições de Status
+
+Todos os endpoints de transição:
+- **Método:** `POST`
+- **Response de sucesso:** `200` com `InvoiceWithDetailsDto` atualizada
+- **Erros comuns:** `400` (transição inválida para o status atual), `404`
+
+#### `POST /admin/invoices/{id}/start-checking`
+
+Transição: `PENDING → CHECKING`
+
+**Body:** `{}` (vazio)
+
+#### `POST /admin/invoices/{id}/finish-checking`
+
+Transição: `CHECKING → CHECKED`
+
+**Body:**
+```json
+{ "notes": "Todos os itens conferidos" }
+```
+`notes` é opcional.
+
+#### `POST /admin/invoices/{id}/post`
+
+Transição: `CHECKED → POSTED`
+
+⚠️ **Ação irreversível exceto via cancelamento.** O trigger `fn_auto_post_invoice()` cria automaticamente movimentações de estoque para todos os itens `STOCKABLE`.
+
+**Body:**
+```json
+{ "notes": null }
+```
+
+#### `POST /admin/invoices/{id}/reject`
+
+Transição: `CHECKING | CHECKED → REJECTED`
+
+**Body:**
+```json
+{ "rejection_reason": "Itens não conferem com o pedido de compra" }
+```
+
+**Validação:** `rejection_reason` obrigatório e não vazio.
+
+#### `POST /admin/invoices/{id}/cancel`
+
+Transição: qualquer status exceto `CANCELLED` → `CANCELLED`
+
+⚠️ Se a NF estava `POSTED`, o trigger reverte automaticamente as movimentações de estoque.
+
+**Body:** `{}`
+
+---
+
+## 13. Requisições
+
+**Prefixo:** `/admin/requisitions`
+
+### Ciclo de vida
+
+```
+DRAFT ──► PENDING ──► APPROVED ──► PROCESSING ──► FULFILLED
+                │                              └──► PARTIALLY_FULFILLED
+                ▼
+            REJECTED
+
+PENDING / APPROVED / PROCESSING ──► CANCELLED
+```
+
+### `GET /admin/requisitions`
+
+| Parâmetro | Tipo | Obrigatório | Padrão | Máx. |
+|-----------|------|:-----------:|--------|------|
+| `limit` | `integer` | Não | `20` | `100` |
+| `offset` | `integer` | Não | `0` | — |
+| `status` | `enum` | Não | — | Ver ciclo de vida |
+| `requester_id` | `UUID` | Não | — | — |
+| `warehouse_id` | `UUID` | Não | — | — |
+
+**Response `200 OK`:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "requisition_number": "REQ2024001",
+      "warehouse_id": "uuid",
+      "destination_unit_id": "uuid",
+      "requester_id": "uuid",
+      "status": "Pending",
+      "priority": "Normal",
+      "total_value": "1200.50",
+      "request_date": "2024-01-20T00:00:00Z",
+      "needed_by": "2024-02-01",
+      "approved_by": null,
+      "approved_at": null,
+      "rejection_reason": null,
+      "cancellation_reason": null,
+      "notes": "Urgente para laboratório",
+      "created_at": "...",
+      "updated_at": "..."
+    }
+  ],
+  "total": 55,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+> ⚠️ `status` e `priority` são retornados em **PascalCase** (`"Pending"`, `"Normal"`). Normalizar com `parseRequisitionStatus()` antes de usar.
+
+### `GET /admin/requisitions/{id}` → `200` `RequisitionResponse`
+
+### `GET /admin/requisitions/{id}/items`
+
+→ `200` `Array<ItemResponse>`
+
+```json
+[
+  {
+    "id": "uuid",
+    "requisition_id": "uuid",
+    "catmat_item_id": "uuid",
+    "catser_item_id": null,
+    "requested_quantity": "10.000",
+    "approved_quantity": null,
+    "fulfilled_quantity": null,
+    "unit_value": "120.05",
+    "total_value": "1200.50",
+    "justification": "Para estoque do laboratório",
+    "cut_reason": null,
+    "deleted_at": null,
+    "deleted_by": null,
+    "deletion_reason": null,
+    "created_at": "...",
+    "updated_at": "..."
+  }
+]
+```
+
+---
+
+### 13.1 Transições de Status
+
+Todos os endpoints exigem contexto de auditoria extraído automaticamente dos headers da requisição HTTP (IP, User-Agent).
+
+#### `POST /admin/requisitions/{id}/approve`
+
+**Validação:** status deve ser `PENDING`.
+
+**Body:**
+```json
+{ "notes": "Aprovado conforme orçamento disponível" }
+```
+
+`notes` é opcional. → `200` `RequisitionResponse`
+
+#### `POST /admin/requisitions/{id}/reject`
+
+**Validação:** status deve ser `PENDING`.
+
+**Body:**
+```json
+{ "reason": "Orçamento insuficiente para este período" }
+```
+
+`reason` **obrigatório** e não vazio. → `200` `RequisitionResponse`
+
+#### `POST /admin/requisitions/{id}/cancel`
+
+**Body:**
+```json
+{ "reason": "Solicitação cancelada pelo requisitante" }
+```
+
+`reason` **obrigatório** e não vazio.
+
+Delega para a função `fn_cancel_requisition()` no banco de dados, que valida o status, libera reservas de estoque e registra no histórico.
+
+→ `200` `serde_json::Value` — inspecionar campo `success`:
+```json
+{
+  "success": true,
+  "requisition_id": "uuid",
+  "previous_status": "PENDING",
+  "new_status": "CANCELLED",
+  "reason": "..."
+}
+```
+
+---
+
+### 13.2 Histórico de Auditoria
+
+#### `GET /admin/requisitions/{id}/history`
+
+**Query:** `limit` (inteiro, opcional, padrão `50`)
+
+→ `200`
+```json
+{
+  "requisition_id": "uuid",
+  "data": [
+    {
+      "history_id": "uuid",
+      "operation": "STATUS_CHANGE",
+      "status_before": "PENDING",
+      "status_after": "APPROVED",
+      "changed_fields": ["status", "approved_by", "approved_at"],
+      "performed_at": "2024-01-21T09:00:00Z",
+      "performed_by": "uuid",
+      "performed_by_name": "Maria Gestora",
+      "reason": "Aprovado conforme orçamento",
+      "summary": "Status alterado de PENDING para APPROVED"
+    }
+  ]
+}
+```
+
+#### `GET /admin/requisitions/{id}/rollback-points`
+
+**Query:** `limit` (inteiro, opcional, padrão `20`)
+
+→ `200`
+```json
+{
+  "requisition_id": "uuid",
+  "data": [
+    {
+      "history_id": "uuid",
+      "operation": "STATUS_CHANGE",
+      "status_after": "PENDING",
+      "performed_at": "2024-01-20T08:00:00Z",
+      "performed_by_name": "João Requisitante",
+      "changed_fields": ["status"],
+      "can_rollback": true,
+      "rollback_blocked_reason": null
+    }
+  ]
+}
+```
+
+**`can_rollback: false`** pode ocorrer por:
+- Existem movimentações de estoque posteriores ao ponto
+- Operação é do tipo DELETE/SOFT_DELETE
+- `is_rollback_point = false` no registro de histórico
+
+#### `POST /admin/requisitions/{id}/rollback`
+
+```json
+{
+  "history_id": "uuid",
+  "reason": "Revertendo aprovação indevida"
+}
+```
+
+Ambos os campos **obrigatórios**. `reason` não vazio.
+
+Delega para `fn_rollback_requisition()` no banco de dados.
+
+→ `200` `serde_json::Value`:
+```json
+{
+  "success": true,
+  "requisition_id": "uuid",
+  "rolled_back_to": "uuid",
+  "previous_status": "APPROVED",
+  "restored_status": "PENDING"
+}
+```
+
+---
+
+### 13.3 Gerenciamento de Itens
+
+#### `POST /admin/requisitions/{req_id}/items/{item_id}/delete`
+
+Exclusão lógica (soft delete) de um item. Usa POST pois DELETE HTTP não suporta body de forma confiável.
+
+```json
+{ "reason": "Item duplicado por erro de digitação" }
+```
+
+`reason` **obrigatório** e não vazio.
+
+→ `200` `{ "success": true, "message": "Item excluído com sucesso" }`
+
+#### `POST /admin/requisitions/{req_id}/items/{item_id}/restore`
+
+Restaura item com soft delete. Sem body.
+
+→ `200` `ItemResponse`
+
+---
+
+## 14. Referência Global de Erros
+
+Todos os erros retornam corpo em **texto plano** (não JSON), exceto os endpoints que usam `AppError` (geo regions, budget classifications, organizational) que podem retornar JSON estruturado.
+
+```
+HTTP/1.1 409 Conflict
+Content-Type: text/plain
+
+Almoxarifado com código 'ALM-001' já existe
+```
+
+| Status HTTP | Significado | Causas comuns |
+|-------------|-------------|---------------|
+| `400 Bad Request` | Erro de validação ou regra de negócio | Campo obrigatório vazio, transição de status inválida, CPF/CNPJ com checksum errado, `quantity ≤ 0` |
+| `401 Unauthorized` | Token ausente ou inválido | Token expirado, formato incorreto |
+| `403 Forbidden` | Permissões RBAC insuficientes | Role não tem acesso à ação |
+| `404 Not Found` | Entidade não existe | UUID incorreto, registro deletado |
+| `409 Conflict` | Violação de unicidade ou conflito de dependência | Código duplicado, delete bloqueado por filhos |
+| `422 Unprocessable Entity` | Falha de desserialização | JSON malformado, tipo de campo incorreto |
+| `429 Too Many Requests` | Rate limit excedido | Muitas requisições na janela de tempo |
+| `500 Internal Server Error` | Erro inesperado no servidor | Erro de banco, falha em trigger |
+| `503 Service Unavailable` | Dependência externa indisponível | API SIORG fora do ar |
+
+---
+
+## 15. Guia de Integração Frontend
+
+### 15.1 Autenticação
+
+Armazenar o JWT **em memória** (não em `localStorage`). Utilizar um mecanismo de refresh token para renovar antes da expiração.
+
+- Em `401`: redirecionar para login.
+- Em `403`: exibir página de acesso negado, **não tentar novamente**.
+
+### 15.2 Tratamento de Decimais
+
+Todos os campos monetários e de quantidade são retornados como **strings** (ex: `"1500.000"`, `"0.85"`). Usar biblioteca decimal para aritmética:
+
+```typescript
+import Decimal from 'decimal.js';
+
+// NUNCA usar parseFloat() para campos monetários
+// CORRETO:
+const total = new Decimal(item.quantity_raw).times(new Decimal(item.unit_value_raw));
+
+// INCORRETO:
+const total = parseFloat(item.quantity_raw) * parseFloat(item.unit_value_raw);
+```
+
+### 15.3 Retry e Backoff
+
+| Status | Tentar novamente? | Estratégia |
+|--------|:-----------------:|-----------|
+| `429` | Sim | Backoff exponencial: 1s → 2s → 4s (máx. 3 tentativas) |
+| `500` | Sim | Delay fixo 2s (máx. 2 tentativas) |
+| `503` | Sim | Backoff exponencial, exibir estado degradado após 3 falhas |
+| `401` | Uma vez | Renovar token, tentar novamente uma única vez |
+| `400` / `409` | Não | Usuário deve corrigir os dados |
+| `403` / `404` | Não | Exibir estado adequado |
+
+### 15.4 Estratégia de Cache
+
+| Endpoint | TTL sugerido | Invalidar quando |
+|----------|:----------:|-----------------|
+| `/catmat/groups/tree` | 15 min | Qualquer mutação de grupo ou classe CATMAT |
+| `/catser/sections/tree` | 15 min | Qualquer mutação CATSER |
+| `/budget-classifications/tree` | 10 min | Qualquer mutação de classificação |
+| `/organizational/units/tree` | 5 min | Qualquer mutação de unidade ou sync SIORG |
+| `/geo_regions/countries` | 60 min | Mutações de país |
+| `/geo_regions/states` | 60 min | Mutações de estado |
+| `/geo_regions/cities` | 30 min | Mutações de cidade |
+| `/catalog/units-of-measure` | 30 min | Mutações de unidade de medida |
+| Todos os outros endpoints de lista | Sem cache | Sempre buscar dado fresco |
+
+### 15.5 Paginação
+
+Padrão recomendado por contexto:
+
+| Contexto | `limit` recomendado |
+|----------|:------------------:|
+| Tabelas admin | `50` |
+| Scroll infinito | `20` |
+| Selects com busca server-side | `20` |
+| Pré-carregamento de lookup (países, UoM) | `200` |
+
+### 15.6 Selects com Busca Server-side
+
+Para entidades com muitos registros, **não carregar tudo no select**. Usar busca server-side com mínimo de 3 caracteres e debounce de 400ms:
+
+```typescript
+// Aplicar em: CATMAT Items (5000+), CATSER Items (300+),
+//             PDMs (800+), Fornecedores, Cidades
+searchTerm = signal('');
+
+results = rxResource({
+  request: () => ({ search: this.searchTerm() }),
+  loader: ({ request }) =>
+    request.search.length >= 3
+      ? this.api.catmat.items.list({ search: request.search, limit: 20 })
+      : of({ items: [], total: 0 }),
+});
+```
+
+### 15.7 Tratamento de Erros na UI
+
+```typescript
+// Os erros 400 e 409 são em PT-BR e legíveis pelo usuário final
+// Exibir diretamente como mensagem
+
+const ERROR_DISPLAY: Record<number, (msg: string) => string> = {
+  400: (msg) => msg,                    // mensagem do servidor
+  404: () => 'Registro não encontrado.',
+  409: (msg) => msg,                    // mensagem do servidor
+  429: () => 'Muitas requisições. Aguarde alguns segundos.',
+  500: () => 'Erro interno. Contate o suporte.',
+  503: () => 'Serviço temporariamente indisponível.',
+};
+```
+
+### 15.8 Formatação de Dados para Exibição
+
+```typescript
+// Datas: ISO → formato brasileiro
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+
+// Valores monetários: string → R$ formatado
+function formatCurrency(value: string): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(new Decimal(value).toNumber());
+}
+
+// Quantidades com 3 casas decimais
+function formatQuantity(value: string): string {
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  }).format(new Decimal(value).toNumber());
+}
+
+// CPF/CNPJ para exibição
+function formatDocument(doc: string): string {
+  const d = doc.replace(/\D/g, '');
+  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  return doc;
+}
+```
+
+### 15.9 Mapa de Dependências entre Módulos
+
+```
+Geo Regions (Países → Estados → Cidades)
+    ├── city_id em: Fornecedores, Almoxarifados
+    └── (via cascade select)
+
+Estrutura Organizacional
+    └── responsible_unit_id em: Almoxarifados
+    └── destination_unit_id em: Requisições
+
+Unidades de Medida
+    ├── unit_of_measure_id em: CATMAT Items, CATSER Items
+    └── unit_raw_id em: Itens de Nota Fiscal
+
+Classificações Orçamentárias
+    └── budget_classification_id em: CATMAT Items, CATSER Items
+
+CATMAT Items
+    ├── catalog_item_id em: Itens de Nota Fiscal
+    └── catmat_item_id em: Itens de Requisição
+
+CATSER Items
+    └── catser_item_id em: Itens de Requisição
+
+Fornecedores
+    └── supplier_id em: Notas Fiscais
+
+Almoxarifados
+    ├── warehouse_id em: Notas Fiscais
+    └── warehouse_id em: Requisições
+
+Notas Fiscais → Estoque (via trigger fn_auto_post_invoice)
+Requisições → Estoque (via fulfillment)
+```
+
+### 15.10 Premissas e Pontos de Atenção
+
+> As seguintes premissas foram adotadas onde a informação não estava explicitamente definida no código:
+
+1. **Prefixo de URL:** Assumido `/api/v1/admin/...` — confirmar o prefixo real na inicialização do servidor.
+2. **Endpoint de autenticação:** Fora do escopo deste documento (serviço Waterswamp).
+3. **`Paginated<T>`:** O struct de paginação usa `items`, `total`, `limit`, `offset` — confirmar os nomes exatos dos campos no código Rust.
+4. **`RequisitionStatus` PascalCase:** É uma inconsistência do backend (uso de `format!("{:?}", ...)` em vez de serialização Serde). O frontend **deve** normalizar com `parseRequisitionStatus()`.
+5. **Movimentações de estoque manuais:** Não expostas via API — gerenciadas exclusivamente via triggers de NF e fulfillment de requisições.
+6. **Roles RBAC específicas:** Não definidas no código analisado — consultar configuração Casbin do projeto.
+7. **Campos de itens de NF via edição:** O endpoint `PUT /invoices/{id}` não inclui itens. Itens de NF não possuem endpoint de edição separado no código analisado.
+
+---
+
+*SIGALM API Contract & Integration Guide v1.0 — Março 2026*  
+*Gerado a partir da análise do código-fonte Rust (Axum/SQLx) do projeto SIGALM/UFMT*
