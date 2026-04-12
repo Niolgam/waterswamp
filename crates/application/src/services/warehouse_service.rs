@@ -1,24 +1,37 @@
 use crate::errors::ServiceError;
+use crate::services::stock_movement_service::{ProcessMovementInput, StockMovementService, StockMovementType};
 use domain::{
     models::warehouse::*,
     ports::warehouse::*,
 };
+use rust_decimal::Decimal;
+use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
+// Regex for SEI process number validation (RF-039)
+// Default format: NNNNN.NNNNNN/YYYY-NN (e.g., 23108.012345/2026-07)
+const SEI_REGEX: &str = r"^\d{5}\.\d{6}/\d{4}-\d{2}$";
+
 pub struct WarehouseService {
+    pool: PgPool,
     warehouse_repo: Arc<dyn WarehouseRepositoryPort>,
     stock_repo: Arc<dyn WarehouseStockRepositoryPort>,
+    stock_movement_service: Arc<StockMovementService>,
 }
 
 impl WarehouseService {
     pub fn new(
+        pool: PgPool,
         warehouse_repo: Arc<dyn WarehouseRepositoryPort>,
         stock_repo: Arc<dyn WarehouseStockRepositoryPort>,
+        stock_movement_service: Arc<StockMovementService>,
     ) -> Self {
         Self {
+            pool,
             warehouse_repo,
             stock_repo,
+            stock_movement_service,
         }
     }
 
@@ -290,5 +303,405 @@ impl WarehouseService {
             .unblock(id)
             .await
             .map_err(ServiceError::from)
+    }
+
+    // ============================
+    // Stock Movement Operations
+    // ============================
+
+    /// RF-009: Entrada Avulsa — donation (DONATION_IN) or inventory adjustment surplus (ADJUSTMENT_ADD).
+    /// Requires origin_description (CPF/CNPJ or description).
+    pub async fn create_standalone_entry(
+        &self,
+        warehouse_id: Uuid,
+        payload: StandaloneEntryPayload,
+        user_id: Uuid,
+    ) -> Result<StandaloneEntryResult, ServiceError> {
+        // Validate warehouse exists
+        let _ = self
+            .warehouse_repo
+            .find_by_id(warehouse_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+
+        if payload.origin_description.trim().is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Origem da entrada avulsa é obrigatória".to_string(),
+            ));
+        }
+
+        if payload.items.is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Informe ao menos um item para a entrada".to_string(),
+            ));
+        }
+
+        let movement_type = match payload.entry_type {
+            StandaloneEntryType::Donation => StockMovementType::DonationIn,
+            StandaloneEntryType::InventoryAdjustment => StockMovementType::AdjustmentAdd,
+        };
+
+        let entry_type_str = format!("{:?}", payload.entry_type);
+        let doc_number = payload.document_number.clone()
+            .unwrap_or_else(|| format!("AVULSA/{}", payload.origin_description));
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let count = payload.items.len();
+        for item in &payload.items {
+            if item.quantity_raw <= Decimal::ZERO {
+                return Err(ServiceError::BadRequest(
+                    "Quantidade deve ser maior que zero".to_string(),
+                ));
+            }
+            if item.unit_price_base < Decimal::ZERO {
+                return Err(ServiceError::BadRequest(
+                    "Preço unitário não pode ser negativo".to_string(),
+                ));
+            }
+
+            let quantity_base = item.quantity_raw * item.conversion_factor;
+
+            self.stock_movement_service
+                .process_movement(
+                    &mut tx,
+                    ProcessMovementInput {
+                        warehouse_id,
+                        catalog_item_id: item.catalog_item_id,
+                        movement_type: movement_type.clone(),
+                        unit_raw_id: item.unit_raw_id,
+                        unit_conversion_id: item.unit_conversion_id,
+                        quantity_raw: item.quantity_raw,
+                        conversion_factor: item.conversion_factor,
+                        quantity_base,
+                        unit_price_base: item.unit_price_base,
+                        invoice_id: None,
+                        invoice_item_id: None,
+                        requisition_id: None,
+                        requisition_item_id: None,
+                        document_number: Some(doc_number.clone()),
+                        notes: item.item_notes.clone().or_else(|| payload.notes.clone()),
+                        user_id,
+                        batch_number: item.batch_number.clone(),
+                        expiration_date: item.expiration_date,
+                        divergence_justification: item.divergence_justification.clone(),
+                    },
+                )
+                .await?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(StandaloneEntryResult {
+            movements_created: count,
+            entry_type: entry_type_str,
+            origin_description: payload.origin_description,
+            warehouse_id,
+        })
+    }
+
+    /// RF-011: Devolução de Requisição — items returned from a fulfilled requisition back to stock (RETURN).
+    pub async fn create_return_entry(
+        &self,
+        warehouse_id: Uuid,
+        payload: ReturnEntryPayload,
+        user_id: Uuid,
+    ) -> Result<ReturnEntryResult, ServiceError> {
+        // Validate warehouse exists
+        let _ = self
+            .warehouse_repo
+            .find_by_id(warehouse_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+
+        if payload.items.is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Informe ao menos um item para a devolução".to_string(),
+            ));
+        }
+
+        // Verify requisition exists and was fulfilled
+        let req_status: Option<String> = sqlx::query_scalar(
+            "SELECT status::TEXT FROM requisitions WHERE id = $1",
+        )
+        .bind(payload.requisition_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        match req_status.as_deref() {
+            None => return Err(ServiceError::NotFound("Requisição não encontrada".to_string())),
+            Some(s) if !matches!(s, "FULFILLED" | "PARTIALLY_FULFILLED") => {
+                return Err(ServiceError::BadRequest(format!(
+                    "Devolução só é permitida para requisições FULFILLED ou PARTIALLY_FULFILLED. Status: {}",
+                    s
+                )));
+            }
+            _ => {}
+        }
+
+        let req_number: String = sqlx::query_scalar(
+            "SELECT requisition_number FROM requisitions WHERE id = $1",
+        )
+        .bind(payload.requisition_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let count = payload.items.len();
+        for item in &payload.items {
+            if item.quantity_raw <= Decimal::ZERO {
+                return Err(ServiceError::BadRequest(
+                    "Quantidade deve ser maior que zero".to_string(),
+                ));
+            }
+
+            let quantity_base = item.quantity_raw * item.conversion_factor;
+
+            self.stock_movement_service
+                .process_movement(
+                    &mut tx,
+                    ProcessMovementInput {
+                        warehouse_id,
+                        catalog_item_id: item.catalog_item_id,
+                        movement_type: StockMovementType::Return,
+                        unit_raw_id: item.unit_raw_id,
+                        unit_conversion_id: item.unit_conversion_id,
+                        quantity_raw: item.quantity_raw,
+                        conversion_factor: item.conversion_factor,
+                        quantity_base,
+                        unit_price_base: Decimal::ZERO, // uses current average cost
+                        invoice_id: None,
+                        invoice_item_id: None,
+                        requisition_id: Some(payload.requisition_id),
+                        requisition_item_id: None,
+                        document_number: Some(format!("DEV/{}", req_number)),
+                        notes: item.item_notes.clone().or_else(|| payload.notes.clone()),
+                        user_id,
+                        batch_number: item.batch_number.clone(),
+                        expiration_date: item.expiration_date,
+                        divergence_justification: None,
+                    },
+                )
+                .await?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(ReturnEntryResult {
+            movements_created: count,
+            requisition_id: payload.requisition_id,
+            warehouse_id,
+        })
+    }
+
+    /// RF-016: Saída por Desfazimento/Baixa — disposal or write-off (LOSS).
+    /// Requires: justification, SEI process number, and technical opinion URL (RN-005).
+    pub async fn create_disposal_exit(
+        &self,
+        warehouse_id: Uuid,
+        payload: DisposalExitPayload,
+        user_id: Uuid,
+    ) -> Result<DisposalExitResult, ServiceError> {
+        // Validate warehouse exists
+        let _ = self
+            .warehouse_repo
+            .find_by_id(warehouse_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+
+        // Validate mandatory fields (RN-005)
+        if payload.justification.trim().is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Justificativa é obrigatória para desfazimento (RN-005)".to_string(),
+            ));
+        }
+        if payload.technical_opinion_url.trim().is_empty() {
+            return Err(ServiceError::BadRequest(
+                "URL do Parecer Técnico é obrigatória para desfazimento (RN-005/RF-016)".to_string(),
+            ));
+        }
+
+        // Validate SEI process number format (RF-039)
+        let sei_regex = regex::Regex::new(SEI_REGEX).unwrap();
+        if !sei_regex.is_match(&payload.sei_process_number) {
+            return Err(ServiceError::BadRequest(format!(
+                "Número de processo SEI inválido. Formato esperado: NNNNN.NNNNNN/YYYY-NN (ex: 23108.012345/2026-07). Recebido: '{}'",
+                payload.sei_process_number
+            )));
+        }
+
+        if payload.items.is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Informe ao menos um item para o desfazimento".to_string(),
+            ));
+        }
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let count = payload.items.len();
+        for item in &payload.items {
+            if item.quantity_raw <= Decimal::ZERO {
+                return Err(ServiceError::BadRequest(
+                    "Quantidade deve ser maior que zero".to_string(),
+                ));
+            }
+
+            let quantity_base = item.quantity_raw * item.conversion_factor;
+
+            self.stock_movement_service
+                .process_movement(
+                    &mut tx,
+                    ProcessMovementInput {
+                        warehouse_id,
+                        catalog_item_id: item.catalog_item_id,
+                        movement_type: StockMovementType::Loss,
+                        unit_raw_id: item.unit_raw_id,
+                        unit_conversion_id: item.unit_conversion_id,
+                        quantity_raw: item.quantity_raw,
+                        conversion_factor: item.conversion_factor,
+                        quantity_base,
+                        unit_price_base: Decimal::ZERO, // uses average cost
+                        invoice_id: None,
+                        invoice_item_id: None,
+                        requisition_id: None,
+                        requisition_item_id: None,
+                        document_number: Some(payload.sei_process_number.clone()),
+                        notes: Some(format!(
+                            "DESFAZIMENTO — SEI: {} — Justificativa: {} — Parecer: {}",
+                            payload.sei_process_number,
+                            payload.justification,
+                            payload.technical_opinion_url
+                        )),
+                        user_id,
+                        batch_number: item.batch_number.clone(),
+                        expiration_date: None,
+                        divergence_justification: None,
+                    },
+                )
+                .await?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(DisposalExitResult {
+            movements_created: count,
+            sei_process_number: payload.sei_process_number,
+            warehouse_id,
+        })
+    }
+
+    /// RF-017: Saída por Ordem de Serviço — manual or OS-based exit (EXIT or LOSS).
+    /// Requires document_number (OS number) and justification.
+    pub async fn create_manual_exit(
+        &self,
+        warehouse_id: Uuid,
+        payload: ManualExitPayload,
+        user_id: Uuid,
+    ) -> Result<ManualExitResult, ServiceError> {
+        // Validate warehouse exists
+        let _ = self
+            .warehouse_repo
+            .find_by_id(warehouse_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+
+        if payload.document_number.trim().is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Número do documento (OS) é obrigatório".to_string(),
+            ));
+        }
+        if payload.justification.trim().is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Justificativa é obrigatória para saída manual".to_string(),
+            ));
+        }
+        if payload.items.is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Informe ao menos um item para a saída".to_string(),
+            ));
+        }
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let count = payload.items.len();
+        for item in &payload.items {
+            if item.quantity_raw <= Decimal::ZERO {
+                return Err(ServiceError::BadRequest(
+                    "Quantidade deve ser maior que zero".to_string(),
+                ));
+            }
+
+            let quantity_base = item.quantity_raw * item.conversion_factor;
+
+            self.stock_movement_service
+                .process_movement(
+                    &mut tx,
+                    ProcessMovementInput {
+                        warehouse_id,
+                        catalog_item_id: item.catalog_item_id,
+                        movement_type: StockMovementType::Exit,
+                        unit_raw_id: item.unit_raw_id,
+                        unit_conversion_id: item.unit_conversion_id,
+                        quantity_raw: item.quantity_raw,
+                        conversion_factor: item.conversion_factor,
+                        quantity_base,
+                        unit_price_base: Decimal::ZERO, // uses average cost
+                        invoice_id: None,
+                        invoice_item_id: None,
+                        requisition_id: None,
+                        requisition_item_id: None,
+                        document_number: Some(payload.document_number.clone()),
+                        notes: Some(format!(
+                            "Saída por OS — Justificativa: {}{}",
+                            payload.justification,
+                            item.item_notes.as_ref().map(|n| format!(" — {}", n)).unwrap_or_default()
+                        )),
+                        user_id,
+                        batch_number: item.batch_number.clone(),
+                        expiration_date: None,
+                        divergence_justification: None,
+                    },
+                )
+                .await?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(ManualExitResult {
+            movements_created: count,
+            document_number: payload.document_number,
+            warehouse_id,
+        })
     }
 }
