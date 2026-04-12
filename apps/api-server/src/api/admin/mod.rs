@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod policies;
 pub mod requisitions;
+pub mod transfers;
 pub mod users;
 
 pub mod invoices;
@@ -35,5 +36,6 @@ pub fn router() -> Router<AppState> {
         .nest("/vehicle-fines", vehicle_fines::router())
         .nest("/invoices", invoices::router())
         .nest("/warehouses", warehouses::router())
+        .merge(transfers::router())
         .layer(admin_rate_limiter())
 }

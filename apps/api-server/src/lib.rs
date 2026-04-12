@@ -25,6 +25,7 @@ use application::services::{
     invoice_service::InvoiceService,
     invoice_adjustment_service::InvoiceAdjustmentService,
     stock_movement_service::StockMovementService,
+    stock_transfer_service::StockTransferService,
     warehouse_service::WarehouseService,
     user_service::UserService,
     vehicle_service::VehicleService,
@@ -390,6 +391,12 @@ pub fn build_application_state(
         stock_movement_service.clone(),
     ));
 
+    // Stock transfer service
+    let stock_transfer_service = Arc::new(StockTransferService::new(
+        pool_auth.clone(),
+        stock_movement_service.clone(),
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -427,6 +434,7 @@ pub fn build_application_state(
         invoice_service,
         invoice_adjustment_service,
         stock_movement_service,
+        stock_transfer_service,
         warehouse_service,
         config,
         field_encryption_key: enc_key,

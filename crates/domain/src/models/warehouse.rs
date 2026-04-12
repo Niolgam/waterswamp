@@ -431,6 +431,8 @@ pub struct StockTransferItemDto {
     pub batch_number: Option<String>,
     pub expiration_date: Option<NaiveDate>,
     pub notes: Option<String>,
+    pub source_movement_id: Option<Uuid>,
+    pub destination_movement_id: Option<Uuid>,
 }
 
 /// DTO de uma transferência entre almoxarifados
