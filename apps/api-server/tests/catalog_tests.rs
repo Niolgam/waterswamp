@@ -328,7 +328,7 @@ async fn test_list_units_of_measure_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["units"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 2);
 }
 
@@ -377,7 +377,7 @@ async fn test_list_catmat_groups_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["groups"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 2);
 }
 
@@ -458,7 +458,7 @@ async fn test_list_catmat_classes_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["classes"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 1);
 }
 
@@ -532,7 +532,7 @@ async fn test_list_catmat_pdms_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["pdms"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 1);
 }
 
@@ -632,7 +632,7 @@ async fn test_list_catmat_items_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["items"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 1);
 }
 
@@ -689,7 +689,7 @@ async fn test_list_catser_groups_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["groups"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 1);
 }
 
@@ -767,7 +767,7 @@ async fn test_list_catser_items_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["items"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 1);
 }
 
@@ -914,7 +914,7 @@ async fn test_list_unit_conversions_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["conversions"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 1);
 }
 

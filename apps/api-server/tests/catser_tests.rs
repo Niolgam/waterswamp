@@ -298,7 +298,7 @@ async fn test_section_list_filter_by_active() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let sections = body["sections"].as_array().unwrap();
+    let sections = body["data"].as_array().unwrap();
     for s in sections {
         assert_eq!(s["is_active"], true);
     }
@@ -492,7 +492,7 @@ async fn test_division_list_filter_by_section() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let divisions = body["divisions"].as_array().unwrap();
+    let divisions = body["data"].as_array().unwrap();
     assert!(divisions.len() >= 2);
     for d in divisions {
         assert_eq!(d["section_id"].as_str().unwrap(), s1_id);
@@ -706,7 +706,7 @@ async fn test_catser_group_list_filter_by_division() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let groups = body["groups"].as_array().unwrap();
+    let groups = body["data"].as_array().unwrap();
     assert!(groups.len() >= 2);
     for g in groups {
         assert_eq!(g["division_id"].as_str().unwrap(), d1_id);
@@ -734,7 +734,7 @@ async fn test_catser_group_list_filter_by_active() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let groups = body["groups"].as_array().unwrap();
+    let groups = body["data"].as_array().unwrap();
     for g in groups {
         assert_eq!(g["is_active"], true);
     }
@@ -924,7 +924,7 @@ async fn test_catser_class_list_filter_by_group() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let classes = body["classes"].as_array().unwrap();
+    let classes = body["data"].as_array().unwrap();
     assert!(classes.len() >= 2);
     for c in classes {
         assert_eq!(c["group_id"].as_str().unwrap(), g1_id);
@@ -1154,7 +1154,7 @@ async fn test_catser_item_list_filter_by_class() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let items = body["items"].as_array().unwrap();
+    let items = body["data"].as_array().unwrap();
     assert!(items.len() >= 2);
     for i in items {
         assert_eq!(i["class_id"].as_str().unwrap(), c1_id);
@@ -1223,7 +1223,7 @@ async fn test_section_list_pagination() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["sections"].as_array().unwrap().len() <= 2);
+    assert!(body["data"].as_array().unwrap().len() <= 2);
     assert!(body["total"].as_i64().unwrap() >= 3);
     assert_eq!(body["limit"], 2);
     assert_eq!(body["offset"], 0);
@@ -1250,7 +1250,7 @@ async fn test_catser_item_list_pagination() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["items"].as_array().unwrap().len() <= 2);
+    assert!(body["data"].as_array().unwrap().len() <= 2);
     assert!(body["total"].as_i64().unwrap() >= 3);
     assert_eq!(body["limit"], 2);
     assert_eq!(body["offset"], 0);
