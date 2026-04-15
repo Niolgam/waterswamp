@@ -536,7 +536,7 @@ impl SiorgClient {
         codigo_unidade: i32,
     ) -> Result<Vec<SiorgUnidadeCompleta>> {
         let url = format!(
-            "{}/estrutura-organizacional/completa?codigoUnidade={}",
+            "{}/estrutura-organizacional/completa?codigoPoder=1&codigoEsfera=1&codigoUnidade={}",
             self.base_url, codigo_unidade
         );
 
@@ -646,15 +646,41 @@ impl SiorgClient {
             .await
             .context("Failed to read SIORG version response body")?;
 
-        let parsed = serde_json::from_str::<SiorgVersaoResponse>(&body)
-            .with_context(|| {
-                format!(
-                    "Failed to parse SIORG version response. Body (first 500 chars): {}",
-                    body.chars().take(2000).collect::<String>()
+        let preview: String = body.chars().take(2000).collect();
+        let v: serde_json::Value = serde_json::from_str(&body).with_context(|| {
+            format!("Failed to parse SIORG version response as JSON. Body: {}", preview)
+        })?;
+
+        // The API may return either:
+        // - {"tipoVersao": {...}} (documented format)
+        // - {"unidades": [{"versaoConsulta": "...", ...}]} (observed in production)
+        if let Some(tv) = v.get("tipoVersao") {
+            return serde_json::from_value::<SiorgTipoVersao>(tv.clone())
+                .context("Failed to parse tipoVersao field");
+        }
+
+        let versao_consulta = v
+            .get("unidades")
+            .and_then(|u| u.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|unit| unit.get("versaoConsulta"))
+            .and_then(|vc| vc.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "versaoConsulta not found in versao response. Body: {}",
+                    preview
                 )
             })?;
 
-        Ok(parsed.tipo_versao)
+        Ok(SiorgTipoVersao {
+            versao_consulta,
+            versao_anterior: None,
+            versao_posterior: None,
+            data_versao_anterior: None,
+            data_versao_posterior: None,
+            data_versao_consulta: None,
+        })
     }
 
     /// Retorna unidades alteradas de um órgão desde uma versão específica.

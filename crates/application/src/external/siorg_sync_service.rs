@@ -630,8 +630,15 @@ impl SiorgSyncService {
             errors: Vec::new(),
         };
 
+        // Exclude the root org entity itself — its record lives in `organizations`, not
+        // `organizational_units`. The API sometimes includes it in the full structure response.
+        let units: Vec<_> = units
+            .into_iter()
+            .filter(|u| u.siorg_code() != Some(org_siorg_code))
+            .collect();
+
         info!(
-            "Received {} unit(s) from SIORG for org {}",
+            "Received {} unit(s) from SIORG for org {} (root entity excluded)",
             units.len(),
             org_siorg_code
         );
