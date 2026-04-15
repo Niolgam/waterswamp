@@ -277,6 +277,7 @@ pub struct SiorgEndereco {
 pub struct SiorgUnidadeCompleta {
     #[serde(flatten)]
     pub base: SiorgUnidade,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_categoria_unidade: Option<String>,
     pub area_atuacao: Option<String>,
     pub competencia: Option<String>,
@@ -449,7 +450,7 @@ impl SiorgClient {
             .with_context(|| {
                 format!(
                     "Failed to parse SIORG unit response. Body (first 500 chars): {}",
-                    body.chars().take(500).collect::<String>()
+                    body.chars().take(2000).collect::<String>()
                 )
             })?;
 
@@ -506,7 +507,7 @@ impl SiorgClient {
             .with_context(|| {
                 format!(
                     "Failed to parse SIORG organizational structure response. Body (first 500 chars): {}",
-                    body.chars().take(500).collect::<String>()
+                    body.chars().take(2000).collect::<String>()
                 )
             })?;
 
@@ -549,7 +550,7 @@ impl SiorgClient {
             .with_context(|| {
                 format!(
                     "Failed to parse SIORG changes response. Body (first 500 chars): {}",
-                    body.chars().take(500).collect::<String>()
+                    body.chars().take(2000).collect::<String>()
                 )
             })?;
 
@@ -589,7 +590,7 @@ impl SiorgClient {
             .with_context(|| {
                 format!(
                     "Failed to parse SIORG version response. Body (first 500 chars): {}",
-                    body.chars().take(500).collect::<String>()
+                    body.chars().take(2000).collect::<String>()
                 )
             })?;
 
@@ -633,7 +634,7 @@ impl SiorgClient {
             .with_context(|| {
                 format!(
                     "Failed to parse SIORG changed units response. Body (first 500 chars): {}",
-                    body.chars().take(500).collect::<String>()
+                    body.chars().take(2000).collect::<String>()
                 )
             })?;
 
