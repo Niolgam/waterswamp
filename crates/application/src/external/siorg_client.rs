@@ -327,8 +327,14 @@ pub struct SiorgEndereco {
     pub bairro: Option<String>,
     #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub cep: Option<String>,
+    /// Código IBGE da UF — pode vir como inteiro (ex: 51) ou sigla (ex: "MT").
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub uf: Option<String>,
+    /// Código IBGE do município — pode vir como inteiro (ex: 5103403) ou nome.
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub municipio: Option<String>,
+    /// Código IBGE / ISO do país — pode vir como inteiro ou nome.
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub pais: Option<String>,
     pub tipo_endereco: Option<String>,
 }
