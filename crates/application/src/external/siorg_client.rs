@@ -7,7 +7,11 @@ use std::time::Duration;
 // SSRF protection
 // ---------------------------------------------------------------------------
 
-const SIORG_ALLOWED_HOSTS: &[&str] = &["estruturaorganizacional.dados.gov.br"];
+const SIORG_ALLOWED_HOSTS: &[&str] = &[
+    "estruturaorganizacional.dados.gov.br",
+    "api.siorg.gov.br",
+    "api.siorg.economia.gov.br",
+];
 
 fn ssrf_validate(url: &str, allowed_hosts: &[&str]) -> Result<()> {
     let host = extract_host(url)
