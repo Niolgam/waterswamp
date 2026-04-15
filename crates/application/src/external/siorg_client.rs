@@ -8,6 +8,46 @@ use std::time::Duration;
 // ora como número inteiro JSON. Estes helpers aceitam ambos.
 // ---------------------------------------------------------------------------
 
+/// Deserializa `unidade` que pode ser um objeto único `{…}` ou um array `[…]`.
+/// O endpoint `/completa` retorna array, mas `/id/unidade-organizacional/{id}` retorna objeto.
+fn deserialize_one_or_many<'de, D, T>(d: D) -> std::result::Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    use serde::de::{MapAccess, SeqAccess, Visitor};
+    use std::marker::PhantomData;
+
+    struct OneOrMany<T>(PhantomData<T>);
+
+    impl<'de, T: serde::Deserialize<'de>> Visitor<'de> for OneOrMany<T> {
+        type Value = Vec<T>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a single object or an array of objects")
+        }
+
+        fn visit_map<A: MapAccess<'de>>(self, map: A) -> std::result::Result<Vec<T>, A::Error> {
+            let item =
+                T::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+            Ok(vec![item])
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> std::result::Result<Vec<T>, A::Error> {
+            let mut items = Vec::new();
+            while let Some(item) = seq.next_element()? {
+                items.push(item);
+            }
+            Ok(items)
+        }
+    }
+
+    d.deserialize_any(OneOrMany(PhantomData))
+}
+
 fn deserialize_string_or_int<'de, D>(d: D) -> std::result::Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -261,7 +301,9 @@ impl SiorgUnidadeCompleta {
 #[derive(Debug, Deserialize)]
 pub struct SiorgEstruturaCompletaResponse {
     pub servico: SiorgServico,
-    /// A API usa a chave "unidade" (singular) mesmo retornando um array.
+    /// A API retorna objeto único `{}` em /id/… e array `[…]` em /completa.
+    /// O deserializer normaliza os dois casos para Vec.
+    #[serde(deserialize_with = "deserialize_one_or_many")]
     pub unidade: Vec<SiorgUnidadeCompleta>,
 }
 
@@ -411,11 +453,12 @@ impl SiorgClient {
                 )
             })?;
 
-        let codigo_str = codigo.to_string();
+        // Usa siorg_code() para suportar tanto "471" quanto a URI completa
+        // "https://estruturaorganizacional.dados.gov.br/id/unidade-organizacional/471"
         let unit = parsed
             .unidade
             .into_iter()
-            .find(|u| u.base.codigo_unidade == codigo_str);
+            .find(|u| u.siorg_code() == Some(codigo));
 
         Ok(unit)
     }
