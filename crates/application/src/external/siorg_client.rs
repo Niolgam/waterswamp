@@ -370,9 +370,10 @@ impl SiorgUnidadeCompleta {
 #[derive(Debug, Deserialize)]
 pub struct SiorgEstruturaCompletaResponse {
     pub servico: SiorgServico,
-    /// A API retorna objeto único `{}` em /id/… e array `[…]` em /completa.
-    /// O deserializer normaliza os dois casos para Vec.
-    #[serde(deserialize_with = "deserialize_one_or_many")]
+    /// O endpoint de unidade individual usa "unidade" (singular);
+    /// o endpoint /estrutura-organizacional/completa usa "unidades" (plural).
+    /// O alias aceita os dois nomes.
+    #[serde(alias = "unidades", deserialize_with = "deserialize_one_or_many")]
     pub unidade: Vec<SiorgUnidadeCompleta>,
 }
 
