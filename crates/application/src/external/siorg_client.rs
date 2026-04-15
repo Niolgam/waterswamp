@@ -4,6 +4,86 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
+// Serde helpers — a API SIORG retorna campos de código ora como string JSON,
+// ora como número inteiro JSON. Estes helpers aceitam ambos.
+// ---------------------------------------------------------------------------
+
+fn deserialize_string_or_int<'de, D>(d: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    struct V;
+    impl<'de> Visitor<'de> for V {
+        type Value = String;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("string or integer")
+        }
+        fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<String, E> {
+            Ok(v.to_owned())
+        }
+        fn visit_string<E: de::Error>(self, v: String) -> std::result::Result<String, E> {
+            Ok(v)
+        }
+        fn visit_i64<E: de::Error>(self, v: i64) -> std::result::Result<String, E> {
+            Ok(v.to_string())
+        }
+        fn visit_u64<E: de::Error>(self, v: u64) -> std::result::Result<String, E> {
+            Ok(v.to_string())
+        }
+    }
+    d.deserialize_any(V)
+}
+
+fn deserialize_opt_string_or_int<'de, D>(
+    d: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    struct V;
+    impl<'de> Visitor<'de> for V {
+        type Value = Option<String>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("null, string, or integer")
+        }
+        fn visit_none<E: de::Error>(self) -> std::result::Result<Option<String>, E> {
+            Ok(None)
+        }
+        fn visit_unit<E: de::Error>(self) -> std::result::Result<Option<String>, E> {
+            Ok(None)
+        }
+        fn visit_some<D2: serde::Deserializer<'de>>(
+            self,
+            d: D2,
+        ) -> std::result::Result<Option<String>, D2::Error> {
+            struct Inner;
+            impl<'de> Visitor<'de> for Inner {
+                type Value = String;
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("string or integer")
+                }
+                fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<String, E> {
+                    Ok(v.to_owned())
+                }
+                fn visit_string<E: de::Error>(self, v: String) -> std::result::Result<String, E> {
+                    Ok(v)
+                }
+                fn visit_i64<E: de::Error>(self, v: i64) -> std::result::Result<String, E> {
+                    Ok(v.to_string())
+                }
+                fn visit_u64<E: de::Error>(self, v: u64) -> std::result::Result<String, E> {
+                    Ok(v.to_string())
+                }
+            }
+            d.deserialize_any(Inner).map(Some)
+        }
+    }
+    d.deserialize_option(V)
+}
+
+// ---------------------------------------------------------------------------
 // SSRF protection
 // ---------------------------------------------------------------------------
 
@@ -82,13 +162,20 @@ pub struct SiorgServico {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SiorgUnidade {
+    /// Pode ser retornado como string `"471"` ou inteiro `471` dependendo do endpoint.
+    #[serde(deserialize_with = "deserialize_string_or_int")]
     pub codigo_unidade: String,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_unidade_pai: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_orgao_entidade: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_tipo_unidade: Option<String>,
     pub nome: String,
     pub sigla: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_esfera: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_poder: Option<String>,
     pub nivel_normatizacao: Option<String>,
     pub versao_consulta: Option<String>,
@@ -311,10 +398,18 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgEstruturaCompletaResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG unit response")?;
+            .context("Failed to read SIORG unit response body")?;
+
+        let parsed = serde_json::from_str::<SiorgEstruturaCompletaResponse>(&body)
+            .with_context(|| {
+                format!(
+                    "Failed to parse SIORG unit response. Body (first 500 chars): {}",
+                    body.chars().take(500).collect::<String>()
+                )
+            })?;
 
         let codigo_str = codigo.to_string();
         let unit = parsed
@@ -359,10 +454,18 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgEstruturaCompletaResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG organizational structure response")?;
+            .context("Failed to read SIORG structure response body")?;
+
+        let parsed = serde_json::from_str::<SiorgEstruturaCompletaResponse>(&body)
+            .with_context(|| {
+                format!(
+                    "Failed to parse SIORG organizational structure response. Body (first 500 chars): {}",
+                    body.chars().take(500).collect::<String>()
+                )
+            })?;
 
         Ok(parsed.unidade)
     }
@@ -394,10 +497,18 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgAlteracoesResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG changes response")?;
+            .context("Failed to read SIORG changes response body")?;
+
+        let parsed = serde_json::from_str::<SiorgAlteracoesResponse>(&body)
+            .with_context(|| {
+                format!(
+                    "Failed to parse SIORG changes response. Body (first 500 chars): {}",
+                    body.chars().take(500).collect::<String>()
+                )
+            })?;
 
         Ok(parsed.unidades)
     }
@@ -426,10 +537,18 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgVersaoResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG version response")?;
+            .context("Failed to read SIORG version response body")?;
+
+        let parsed = serde_json::from_str::<SiorgVersaoResponse>(&body)
+            .with_context(|| {
+                format!(
+                    "Failed to parse SIORG version response. Body (first 500 chars): {}",
+                    body.chars().take(500).collect::<String>()
+                )
+            })?;
 
         Ok(parsed.tipo_versao)
     }
@@ -462,10 +581,18 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgAlteradasResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG changed units response")?;
+            .context("Failed to read SIORG changed units response body")?;
+
+        let parsed = serde_json::from_str::<SiorgAlteradasResponse>(&body)
+            .with_context(|| {
+                format!(
+                    "Failed to parse SIORG changed units response. Body (first 500 chars): {}",
+                    body.chars().take(500).collect::<String>()
+                )
+            })?;
 
         Ok(parsed.unidades)
     }

@@ -60,7 +60,7 @@ impl SiorgSyncService {
             .siorg_client
             .get_unit_complete(siorg_code)
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))?
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?
             .ok_or_else(|| SyncError::NotFoundInSiorg(siorg_code))?;
 
         if let Some(local_org) = self
@@ -200,7 +200,7 @@ impl SiorgSyncService {
             .siorg_client
             .get_unit_complete(siorg_code)
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))?
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?
             .ok_or_else(|| SyncError::NotFoundInSiorg(siorg_code))?;
 
         self.upsert_unit(&siorg_unit).await
@@ -545,7 +545,7 @@ impl SiorgSyncService {
             .siorg_client
             .get_alteradas(org_siorg_code, from_versao)
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))?;
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?;
 
         info!(
             "{} unidade(s) alterada(s) para org {} desde versão {}",
@@ -620,7 +620,7 @@ impl SiorgSyncService {
             .siorg_client
             .get_estrutura_completa(org_siorg_code)
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))?;
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?;
 
         let mut summary = SyncSummary {
             total_processed: 0,
@@ -783,7 +783,7 @@ impl SiorgSyncService {
         self.siorg_client
             .health_check()
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))
     }
 }
 
