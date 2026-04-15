@@ -8,6 +8,63 @@ use std::time::Duration;
 // ora como número inteiro JSON. Estes helpers aceitam ambos.
 // ---------------------------------------------------------------------------
 
+/// Deserializa `Option<Vec<String>>` onde cada elemento pode ser string ou inteiro.
+/// Usado para `telefone` e `email` em `SiorgContato` que às vezes vêm como inteiros.
+fn deserialize_opt_vec_strings<'de, D>(
+    d: D,
+) -> std::result::Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{SeqAccess, Visitor};
+
+    struct OptVec;
+    impl<'de> Visitor<'de> for OptVec {
+        type Value = Option<Vec<String>>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("null or array of strings/integers")
+        }
+        fn visit_none<E: serde::de::Error>(self) -> std::result::Result<Option<Vec<String>>, E> {
+            Ok(None)
+        }
+        fn visit_unit<E: serde::de::Error>(self) -> std::result::Result<Option<Vec<String>>, E> {
+            Ok(None)
+        }
+        fn visit_some<D2: serde::Deserializer<'de>>(
+            self,
+            d: D2,
+        ) -> std::result::Result<Option<Vec<String>>, D2::Error> {
+            struct Seq;
+            impl<'de> Visitor<'de> for Seq {
+                type Value = Vec<String>;
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("array of strings or integers")
+                }
+                fn visit_seq<A: SeqAccess<'de>>(
+                    self,
+                    mut seq: A,
+                ) -> std::result::Result<Vec<String>, A::Error> {
+                    let mut items = Vec::new();
+                    while let Some(val) =
+                        seq.next_element::<serde_json::Value>()?
+                    {
+                        let s = match val {
+                            serde_json::Value::String(s) => s,
+                            serde_json::Value::Number(n) => n.to_string(),
+                            serde_json::Value::Null => continue,
+                            other => other.to_string(),
+                        };
+                        items.push(s);
+                    }
+                    Ok(items)
+                }
+            }
+            d.deserialize_seq(Seq).map(Some)
+        }
+    }
+    d.deserialize_option(OptVec)
+}
+
 /// Deserializa `unidade` que pode ser um objeto único `{…}` ou um array `[…]`.
 /// O endpoint `/completa` retorna array, mas `/id/unidade-organizacional/{id}` retorna objeto.
 fn deserialize_one_or_many<'de, D, T>(d: D) -> std::result::Result<Vec<T>, D::Error>
@@ -253,7 +310,9 @@ impl SiorgUnidade {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SiorgContato {
+    #[serde(default, deserialize_with = "deserialize_opt_vec_strings")]
     pub telefone: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_opt_vec_strings")]
     pub email: Option<Vec<String>>,
 }
 
