@@ -65,45 +65,6 @@ where
     d.deserialize_option(OptVec)
 }
 
-/// Deserializa `unidade` que pode ser um objeto único `{…}` ou um array `[…]`.
-/// O endpoint `/completa` retorna array, mas `/id/unidade-organizacional/{id}` retorna objeto.
-fn deserialize_one_or_many<'de, D, T>(d: D) -> std::result::Result<Vec<T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: serde::Deserialize<'de>,
-{
-    use serde::de::{MapAccess, SeqAccess, Visitor};
-    use std::marker::PhantomData;
-
-    struct OneOrMany<T>(PhantomData<T>);
-
-    impl<'de, T: serde::Deserialize<'de>> Visitor<'de> for OneOrMany<T> {
-        type Value = Vec<T>;
-
-        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("a single object or an array of objects")
-        }
-
-        fn visit_map<A: MapAccess<'de>>(self, map: A) -> std::result::Result<Vec<T>, A::Error> {
-            let item =
-                T::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
-            Ok(vec![item])
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(
-            self,
-            mut seq: A,
-        ) -> std::result::Result<Vec<T>, A::Error> {
-            let mut items = Vec::new();
-            while let Some(item) = seq.next_element()? {
-                items.push(item);
-            }
-            Ok(items)
-        }
-    }
-
-    d.deserialize_any(OneOrMany(PhantomData))
-}
 
 fn deserialize_string_or_int<'de, D>(d: D) -> std::result::Result<String, D::Error>
 where
@@ -366,15 +327,45 @@ impl SiorgUnidadeCompleta {
 
 // Wrappers de resposta da API
 
-/// Resposta de /unidade-organizacional/{cod}/completa e /estrutura-organizacional/completa
-#[derive(Debug, Deserialize)]
-pub struct SiorgEstruturaCompletaResponse {
-    pub servico: SiorgServico,
-    /// O endpoint de unidade individual usa "unidade" (singular);
-    /// o endpoint /estrutura-organizacional/completa usa "unidades" (plural).
-    /// O alias aceita os dois nomes.
-    #[serde(alias = "unidades", deserialize_with = "deserialize_one_or_many")]
-    pub unidade: Vec<SiorgUnidadeCompleta>,
+/// Extrai unidades de um `serde_json::Value` já parseado.
+///
+/// Suporta:
+/// - campo `"unidade"` (singular) com valor objeto `{}` ou array `[…]`
+/// - campo `"unidades"` (plural) com valor objeto `{}` ou array `[…]`
+///
+/// Isso contorna a limitação do serde onde `#[serde(alias)] + #[serde(deserialize_with)]`
+/// não chama o deserializador customizado quando o campo é encontrado via alias.
+fn extract_units_from_value(
+    v: &serde_json::Value,
+    body_preview: &str,
+) -> Result<Vec<SiorgUnidadeCompleta>> {
+    let units_val = v
+        .get("unidade")
+        .or_else(|| v.get("unidades"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Array(vec![]));
+
+    let units_array: Vec<serde_json::Value> = match units_val {
+        serde_json::Value::Array(arr) => arr,
+        obj @ serde_json::Value::Object(_) => vec![obj],
+        serde_json::Value::Null => vec![],
+        other => {
+            anyhow::bail!(
+                "Expected object or array for units field, got {:?}. Body: {}",
+                other,
+                body_preview
+            )
+        }
+    };
+
+    let mut units = Vec::with_capacity(units_array.len());
+    for (i, item) in units_array.into_iter().enumerate() {
+        let unit: SiorgUnidadeCompleta = serde_json::from_value(item).with_context(|| {
+            format!("Failed to parse unit at index {}. Body: {}", i, body_preview)
+        })?;
+        units.push(unit);
+    }
+    Ok(units)
 }
 
 /// Resposta de /estrutura-organizacional/alteracoes
@@ -515,20 +506,17 @@ impl SiorgClient {
             .await
             .context("Failed to read SIORG unit response body")?;
 
-        let parsed = serde_json::from_str::<SiorgEstruturaCompletaResponse>(&body)
-            .with_context(|| {
-                format!(
-                    "Failed to parse SIORG unit response. Body (first 500 chars): {}",
-                    body.chars().take(2000).collect::<String>()
-                )
-            })?;
+        let preview: String = body.chars().take(2000).collect();
+
+        let v: serde_json::Value = serde_json::from_str(&body).with_context(|| {
+            format!("Failed to parse SIORG unit response as JSON. Body: {}", preview)
+        })?;
+
+        let units = extract_units_from_value(&v, &preview)?;
 
         // Usa siorg_code() para suportar tanto "471" quanto a URI completa
         // "https://estruturaorganizacional.dados.gov.br/id/unidade-organizacional/471"
-        let unit = parsed
-            .unidade
-            .into_iter()
-            .find(|u| u.siorg_code() == Some(codigo));
+        let unit = units.into_iter().find(|u| u.siorg_code() == Some(codigo));
 
         Ok(unit)
     }
@@ -572,15 +560,18 @@ impl SiorgClient {
             .await
             .context("Failed to read SIORG structure response body")?;
 
-        let parsed = serde_json::from_str::<SiorgEstruturaCompletaResponse>(&body)
-            .with_context(|| {
-                format!(
-                    "Failed to parse SIORG organizational structure response. Body (first 500 chars): {}",
-                    body.chars().take(2000).collect::<String>()
-                )
-            })?;
+        let preview: String = body.chars().take(2000).collect();
 
-        Ok(parsed.unidade)
+        let v: serde_json::Value = serde_json::from_str(&body).with_context(|| {
+            format!(
+                "Failed to parse SIORG organizational structure response as JSON. Body: {}",
+                preview
+            )
+        })?;
+
+        let units = extract_units_from_value(&v, &preview)?;
+
+        Ok(units)
     }
 
     // ========================================================================
