@@ -1,4 +1,5 @@
 use crate::errors::ServiceError;
+use crate::services::stock_movement_service::{ProcessMovementInput, StockMovementService, StockMovementType};
 use domain::{
     models::requisition::*,
     ports::requisition::*,
@@ -16,6 +17,7 @@ pub struct RequisitionService {
     pool: PgPool,
     requisition_repo: Arc<dyn RequisitionRepositoryPort>,
     item_repo: Arc<dyn RequisitionItemRepositoryPort>,
+    stock_movement_service: Arc<StockMovementService>,
 }
 
 impl RequisitionService {
@@ -23,11 +25,13 @@ impl RequisitionService {
         pool: PgPool,
         requisition_repo: Arc<dyn RequisitionRepositoryPort>,
         item_repo: Arc<dyn RequisitionItemRepositoryPort>,
+        stock_movement_service: Arc<StockMovementService>,
     ) -> Self {
         Self {
             pool,
             requisition_repo,
             item_repo,
+            stock_movement_service,
         }
     }
 
@@ -420,6 +424,357 @@ impl RequisitionService {
             .get_rollback_points(id, limit.unwrap_or(20))
             .await
             .map_err(ServiceError::from)
+    }
+
+    // ========================================================================
+    // NEW STATUS TRANSITIONS (RF-013 / RF-014)
+    // ========================================================================
+
+    /// Start processing a requisition (APPROVED → PROCESSING).
+    /// Indicates that physical separation has begun.
+    pub async fn start_processing(
+        &self,
+        id: Uuid,
+        ctx: &AuditContext,
+        payload: StartProcessingPayload,
+    ) -> Result<RequisitionDto, ServiceError> {
+        let requisition = self.get_requisition(id).await?;
+
+        if requisition.status != RequisitionStatus::Approved {
+            return Err(ServiceError::BadRequest(format!(
+                "Requisição não pode iniciar processamento: status atual é {:?}. Esperado: APPROVED",
+                requisition.status
+            )));
+        }
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        sqlx::query("SELECT fn_set_audit_context($1, $2, $3)")
+            .bind(ctx.user_id)
+            .bind(ctx.ip_address.as_deref())
+            .bind(ctx.user_agent.as_deref())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let updated = sqlx::query_as::<_, RequisitionDto>(
+            r#"UPDATE requisitions SET
+                status = 'PROCESSING',
+                internal_notes = COALESCE($2, internal_notes),
+                updated_at = NOW()
+               WHERE id = $1
+               RETURNING *"#,
+        )
+        .bind(id)
+        .bind(payload.notes.as_deref())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(updated)
+    }
+
+    /// Fulfill a requisition in processing (PROCESSING → FULFILLED / PARTIALLY_FULFILLED).
+    ///
+    /// Atomically:
+    ///  1. Validates all items and cut reasons (RF-014)
+    ///  2. Generates EXIT stock movements via StockMovementService
+    ///  3. Releases stock reservations
+    ///  4. Transitions status to FULFILLED or PARTIALLY_FULFILLED
+    pub async fn fulfill_requisition(
+        &self,
+        id: Uuid,
+        ctx: &AuditContext,
+        payload: FulfillRequisitionPayload,
+    ) -> Result<RequisitionDto, ServiceError> {
+        let requisition = self.get_requisition(id).await?;
+
+        if requisition.status != RequisitionStatus::Processing {
+            return Err(ServiceError::BadRequest(format!(
+                "Requisição não pode ser atendida: status atual é {:?}. Esperado: PROCESSING",
+                requisition.status
+            )));
+        }
+
+        if payload.items.is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Informe ao menos um item para atendimento".to_string(),
+            ));
+        }
+
+        // ── Load all approved items for this requisition ──────────────────────
+        #[derive(sqlx::FromRow)]
+        struct ApprovedItemRow {
+            id: Uuid,
+            catalog_item_id: Uuid,
+            approved_quantity: Option<Decimal>,
+            requested_quantity: Decimal,
+            unit_value: Decimal,
+        }
+
+        let approved_items = sqlx::query_as::<_, ApprovedItemRow>(
+            r#"SELECT id, catalog_item_id, approved_quantity, requested_quantity, unit_value
+               FROM requisition_items
+               WHERE requisition_id = $1 AND deleted_at IS NULL"#,
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // ── Lookup unit info per catalog item ──────────────────────────────────
+        #[derive(sqlx::FromRow)]
+        struct ItemUnitRow {
+            catalog_item_id: Uuid,
+            unit_id: Uuid,
+        }
+        let catalog_ids: Vec<Uuid> = approved_items.iter().map(|i| i.catalog_item_id).collect();
+
+        let item_units: Vec<ItemUnitRow> = sqlx::query_as::<_, ItemUnitRow>(
+            "SELECT id AS catalog_item_id, base_unit_id AS unit_id FROM catmat_items WHERE id = ANY($1)",
+        )
+        .bind(&catalog_ids)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let unit_map: std::collections::HashMap<Uuid, Uuid> =
+            item_units.into_iter().map(|r| (r.catalog_item_id, r.unit_id)).collect();
+
+        // ── Validate each fulfill item ──────────────────────────────────────────
+        let mut is_partial = false;
+
+        for fi in &payload.items {
+            let approved = approved_items
+                .iter()
+                .find(|a| a.id == fi.requisition_item_id)
+                .ok_or_else(|| {
+                    ServiceError::BadRequest(format!(
+                        "Item {} não pertence a esta requisição",
+                        fi.requisition_item_id
+                    ))
+                })?;
+
+            if fi.fulfilled_quantity <= Decimal::ZERO {
+                return Err(ServiceError::BadRequest(format!(
+                    "Quantidade atendida deve ser maior que zero para o item {}",
+                    fi.requisition_item_id
+                )));
+            }
+
+            let approved_qty = approved.approved_quantity.unwrap_or(approved.requested_quantity);
+
+            if fi.fulfilled_quantity > approved_qty {
+                return Err(ServiceError::BadRequest(format!(
+                    "Quantidade atendida ({}) não pode exceder a aprovada ({}) para o item {}",
+                    fi.fulfilled_quantity, approved_qty, fi.requisition_item_id
+                )));
+            }
+
+            if fi.fulfilled_quantity < approved_qty {
+                // Partial cut: justification is mandatory (RF-014)
+                if fi.cut_reason.as_deref().unwrap_or("").trim().is_empty() {
+                    return Err(ServiceError::BadRequest(format!(
+                        "Justificativa de corte é obrigatória para atendimento parcial do item {}",
+                        fi.requisition_item_id
+                    )));
+                }
+                is_partial = true;
+            }
+        }
+
+        let new_status = if is_partial {
+            "PARTIALLY_FULFILLED"
+        } else {
+            "FULFILLED"
+        };
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        sqlx::query("SELECT fn_set_audit_context($1, $2, $3)")
+            .bind(ctx.user_id)
+            .bind(ctx.ip_address.as_deref())
+            .bind(ctx.user_agent.as_deref())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // ── Generate EXIT movements + release reservations ─────────────────────
+        for fi in &payload.items {
+            let approved = approved_items
+                .iter()
+                .find(|a| a.id == fi.requisition_item_id)
+                .unwrap(); // already validated above
+
+            let unit_id = unit_map.get(&approved.catalog_item_id).copied().ok_or_else(|| {
+                ServiceError::Internal(format!(
+                    "Unidade base não encontrada para item {}",
+                    approved.catalog_item_id
+                ))
+            })?;
+
+            // Generate EXIT stock movement
+            self.stock_movement_service
+                .process_movement(
+                    &mut tx,
+                    ProcessMovementInput {
+                        warehouse_id: requisition.warehouse_id,
+                        catalog_item_id: approved.catalog_item_id,
+                        movement_type: StockMovementType::Exit,
+                        unit_raw_id: unit_id,
+                        unit_conversion_id: None,
+                        quantity_raw: fi.fulfilled_quantity,
+                        conversion_factor: Decimal::ONE,
+                        quantity_base: fi.fulfilled_quantity,
+                        unit_price_base: approved.unit_value,
+                        invoice_id: None,
+                        invoice_item_id: None,
+                        requisition_id: Some(id),
+                        requisition_item_id: Some(fi.requisition_item_id),
+                        document_number: Some(requisition.requisition_number.clone()),
+                        notes: payload.notes.clone(),
+                        user_id: ctx.user_id,
+                        batch_number: None,
+                        expiration_date: None,
+                        divergence_justification: None,
+                    },
+                )
+                .await?;
+
+            // Update fulfilled_quantity and cut_reason on item
+            sqlx::query(
+                r#"UPDATE requisition_items SET
+                    fulfilled_quantity = $2,
+                    cut_reason = $3,
+                    updated_at = NOW()
+                   WHERE id = $1"#,
+            )
+            .bind(fi.requisition_item_id)
+            .bind(fi.fulfilled_quantity)
+            .bind(fi.cut_reason.as_deref())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+            // Release stock reservation for this item
+            let approved_qty = approved.approved_quantity.unwrap_or(approved.requested_quantity);
+            sqlx::query(
+                r#"UPDATE warehouse_stocks
+                   SET reserved_quantity = GREATEST(0, reserved_quantity - $1), updated_at = NOW()
+                   WHERE warehouse_id = $2 AND catalog_item_id = $3"#,
+            )
+            .bind(approved_qty)
+            .bind(requisition.warehouse_id)
+            .bind(approved.catalog_item_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+        }
+
+        // Mark all reservations as fulfilled
+        sqlx::query(
+            r#"UPDATE stock_reservations
+               SET is_active = FALSE, released_at = NOW(), release_reason = 'FULFILLED'
+               WHERE requisition_id = $1 AND is_active = TRUE"#,
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // Update requisition status
+        let updated = sqlx::query_as::<_, RequisitionDto>(
+            &format!(
+                r#"UPDATE requisitions SET
+                    status = '{}',
+                    fulfilled_by = $2,
+                    fulfilled_at = NOW(),
+                    internal_notes = COALESCE($3, internal_notes),
+                    updated_at = NOW()
+                   WHERE id = $1
+                   RETURNING *"#,
+                new_status
+            ),
+        )
+        .bind(id)
+        .bind(ctx.user_id)
+        .bind(payload.notes.as_deref())
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        Ok(updated)
+    }
+
+    /// Suspend a requisition when its organizational unit is blocked (RN-004).
+    /// Only transitions PENDING requisitions. PROCESSING requisitions are signaled but not suspended.
+    pub async fn suspend_requisition(
+        &self,
+        id: Uuid,
+        reason: &str,
+    ) -> Result<RequisitionDto, ServiceError> {
+        let requisition = self.get_requisition(id).await?;
+
+        if requisition.status != RequisitionStatus::Pending {
+            return Err(ServiceError::BadRequest(format!(
+                "Apenas requisições PENDING podem ser suspensas. Status atual: {:?}",
+                requisition.status
+            )));
+        }
+
+        sqlx::query_as::<_, RequisitionDto>(
+            r#"UPDATE requisitions SET
+                status = 'SUSPENDED',
+                internal_notes = COALESCE(internal_notes || E'\n', '') || $2,
+                updated_at = NOW()
+               WHERE id = $1
+               RETURNING *"#,
+        )
+        .bind(id)
+        .bind(format!("[SUSPENSO] {}", reason))
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))
+    }
+
+    /// Re-activate a suspended requisition when its unit is unblocked (RN-004).
+    pub async fn unsuspend_requisition(&self, id: Uuid) -> Result<RequisitionDto, ServiceError> {
+        let requisition = self.get_requisition(id).await?;
+
+        if requisition.status != RequisitionStatus::Suspended {
+            return Err(ServiceError::BadRequest(format!(
+                "Requisição não está suspensa. Status atual: {:?}",
+                requisition.status
+            )));
+        }
+
+        sqlx::query_as::<_, RequisitionDto>(
+            r#"UPDATE requisitions SET
+                status = 'PENDING',
+                updated_at = NOW()
+               WHERE id = $1
+               RETURNING *"#,
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))
     }
 
     // ========================================================================

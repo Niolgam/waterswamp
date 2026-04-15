@@ -25,6 +25,7 @@ use application::services::{
     invoice_service::InvoiceService,
     invoice_adjustment_service::InvoiceAdjustmentService,
     stock_movement_service::StockMovementService,
+    stock_transfer_service::StockTransferService,
     warehouse_service::WarehouseService,
     user_service::UserService,
     vehicle_service::VehicleService,
@@ -282,6 +283,9 @@ pub fn build_application_state(
         system_settings_repo_port.clone(),
     ));
 
+    // Stock movement service (needed by requisition, invoice, and adjustment services)
+    let stock_movement_service = Arc::new(StockMovementService::new(pool_auth.clone()));
+
     // Requisition repositories and service
     let requisition_repo_port: Arc<dyn RequisitionRepositoryPort> =
         Arc::new(RequisitionRepository::new(pool_auth.clone()));
@@ -292,6 +296,7 @@ pub fn build_application_state(
         pool_auth.clone(),
         requisition_repo_port,
         requisition_item_repo_port,
+        stock_movement_service.clone(),
     ));
 
     // Supplier repository and service
@@ -354,9 +359,6 @@ pub fn build_application_state(
         vehicle_fine_status_history_repo,
     ));
 
-    // Stock movement service (needed by invoice and adjustment services)
-    let stock_movement_service = Arc::new(StockMovementService::new(pool_auth.clone()));
-
     // Invoice repositories and service
     let invoice_repo: Arc<dyn InvoiceRepositoryPort> =
         Arc::new(InvoiceRepository::new(pool_auth.clone()));
@@ -382,7 +384,18 @@ pub fn build_application_state(
         Arc::new(WarehouseRepository::new(pool_auth.clone()));
     let stock_repo: Arc<dyn WarehouseStockRepositoryPort> =
         Arc::new(WarehouseStockRepository::new(pool_auth.clone()));
-    let warehouse_service = Arc::new(WarehouseService::new(warehouse_repo, stock_repo));
+    let warehouse_service = Arc::new(WarehouseService::new(
+        pool_auth.clone(),
+        warehouse_repo,
+        stock_repo,
+        stock_movement_service.clone(),
+    ));
+
+    // Stock transfer service
+    let stock_transfer_service = Arc::new(StockTransferService::new(
+        pool_auth.clone(),
+        stock_movement_service.clone(),
+    ));
 
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
@@ -421,6 +434,7 @@ pub fn build_application_state(
         invoice_service,
         invoice_adjustment_service,
         stock_movement_service,
+        stock_transfer_service,
         warehouse_service,
         config,
         field_encryption_key: enc_key,

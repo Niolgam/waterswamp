@@ -20,6 +20,8 @@ pub enum RequisitionStatus {
     Fulfilled,
     PartiallyFulfilled,
     Cancelled,
+    /// Requisição suspensa automaticamente quando a unidade organizacional é bloqueada (RN-004)
+    Suspended,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
@@ -180,6 +182,29 @@ pub struct CreateRequisitionItemPayload {
     pub catalog_item_id: Uuid,
     pub requested_quantity: Decimal,
     pub justification: Option<String>,
+}
+
+/// Payload para iniciar o processamento de uma requisição aprovada (APPROVED → PROCESSING)
+#[derive(Debug, Clone, Deserialize)]
+pub struct StartProcessingPayload {
+    pub notes: Option<String>,
+}
+
+/// Item individual no atendimento de uma requisição
+#[derive(Debug, Clone, Deserialize)]
+pub struct FulfillItemInput {
+    pub requisition_item_id: Uuid,
+    /// Quantidade efetivamente entregue (pode ser menor que approved_quantity para atendimento parcial)
+    pub fulfilled_quantity: Decimal,
+    /// Obrigatório quando fulfilled_quantity < approved_quantity (RF-014)
+    pub cut_reason: Option<String>,
+}
+
+/// Payload para atender (total ou parcialmente) uma requisição em processamento (PROCESSING → FULFILLED/PARTIALLY_FULFILLED)
+#[derive(Debug, Clone, Deserialize)]
+pub struct FulfillRequisitionPayload {
+    pub items: Vec<FulfillItemInput>,
+    pub notes: Option<String>,
 }
 
 // ============================================================================

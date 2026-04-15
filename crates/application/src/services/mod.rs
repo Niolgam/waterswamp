@@ -16,4 +16,5 @@ pub mod vehicle_fine_service;
 pub mod invoice_service;
 pub mod invoice_adjustment_service;
 pub mod stock_movement_service;
+pub mod stock_transfer_service;
 pub mod warehouse_service;
