@@ -727,13 +727,13 @@ impl SiorgSyncService {
         &self,
         name: &str,
     ) -> Result<OrganizationalUnitCategoryDto, SyncError> {
-        let (categories, _) = self
+        // Direct lookup by name — avoids the limit-10 list pagination issue
+        if let Some(category) = self
             .category_repo
-            .list(None, Some(true), 10, 0)
+            .find_by_name(name)
             .await
-            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
-
-        if let Some(category) = categories.into_iter().find(|c| c.name == name) {
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?
+        {
             return Ok(category);
         }
 
@@ -745,10 +745,31 @@ impl SiorgSyncService {
             is_active: true,
         };
 
-        self.category_repo
-            .create(payload)
-            .await
-            .map_err(|e| SyncError::DatabaseError(e.to_string()))
+        match self.category_repo.create(payload).await {
+            Ok(category) => Ok(category),
+            Err(e) => {
+                // Unique constraint violation: was created between our find and create.
+                // Retry the lookup.
+                let err_str = e.to_string();
+                if err_str.contains("unicidade")
+                    || err_str.contains("unique")
+                    || err_str.contains("duplicate")
+                {
+                    self.category_repo
+                        .find_by_name(name)
+                        .await
+                        .map_err(|e2| SyncError::DatabaseError(e2.to_string()))?
+                        .ok_or_else(|| {
+                            SyncError::DatabaseError(format!(
+                                "Category '{}' unique violation but not found on retry: {}",
+                                name, err_str
+                            ))
+                        })
+                } else {
+                    Err(SyncError::DatabaseError(err_str))
+                }
+            }
+        }
     }
 
     async fn find_or_create_type(
