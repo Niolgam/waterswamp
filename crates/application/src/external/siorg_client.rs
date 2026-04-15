@@ -261,9 +261,12 @@ pub struct SiorgContato {
 #[serde(rename_all = "camelCase")]
 pub struct SiorgEndereco {
     pub logradouro: Option<String>,
+    /// Número do endereço — pode vir como inteiro (ex: 2367) ou string.
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub numero: Option<String>,
     pub complemento: Option<String>,
     pub bairro: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub cep: Option<String>,
     pub uf: Option<String>,
     pub municipio: Option<String>,
