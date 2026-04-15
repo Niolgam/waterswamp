@@ -60,7 +60,7 @@ impl SiorgSyncService {
             .siorg_client
             .get_unit_complete(siorg_code)
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))?
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?
             .ok_or_else(|| SyncError::NotFoundInSiorg(siorg_code))?;
 
         if let Some(local_org) = self
@@ -200,7 +200,7 @@ impl SiorgSyncService {
             .siorg_client
             .get_unit_complete(siorg_code)
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))?
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?
             .ok_or_else(|| SyncError::NotFoundInSiorg(siorg_code))?;
 
         self.upsert_unit(&siorg_unit).await
@@ -545,7 +545,7 @@ impl SiorgSyncService {
             .siorg_client
             .get_alteradas(org_siorg_code, from_versao)
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))?;
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?;
 
         info!(
             "{} unidade(s) alterada(s) para org {} desde versão {}",
@@ -620,7 +620,7 @@ impl SiorgSyncService {
             .siorg_client
             .get_estrutura_completa(org_siorg_code)
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))?;
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?;
 
         let mut summary = SyncSummary {
             total_processed: 0,
@@ -630,8 +630,15 @@ impl SiorgSyncService {
             errors: Vec::new(),
         };
 
+        // Exclude the root org entity itself — its record lives in `organizations`, not
+        // `organizational_units`. The API sometimes includes it in the full structure response.
+        let units: Vec<_> = units
+            .into_iter()
+            .filter(|u| u.siorg_code() != Some(org_siorg_code))
+            .collect();
+
         info!(
-            "Received {} unit(s) from SIORG for org {}",
+            "Received {} unit(s) from SIORG for org {} (root entity excluded)",
             units.len(),
             org_siorg_code
         );
@@ -727,13 +734,13 @@ impl SiorgSyncService {
         &self,
         name: &str,
     ) -> Result<OrganizationalUnitCategoryDto, SyncError> {
-        let (categories, _) = self
+        // Direct lookup by name — avoids the limit-10 list pagination issue
+        if let Some(category) = self
             .category_repo
-            .list(None, Some(true), 10, 0)
+            .find_by_name(name)
             .await
-            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
-
-        if let Some(category) = categories.into_iter().find(|c| c.name == name) {
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?
+        {
             return Ok(category);
         }
 
@@ -745,10 +752,31 @@ impl SiorgSyncService {
             is_active: true,
         };
 
-        self.category_repo
-            .create(payload)
-            .await
-            .map_err(|e| SyncError::DatabaseError(e.to_string()))
+        match self.category_repo.create(payload).await {
+            Ok(category) => Ok(category),
+            Err(e) => {
+                // Unique constraint violation: was created between our find and create.
+                // Retry the lookup.
+                let err_str = e.to_string();
+                if err_str.contains("unicidade")
+                    || err_str.contains("unique")
+                    || err_str.contains("duplicate")
+                {
+                    self.category_repo
+                        .find_by_name(name)
+                        .await
+                        .map_err(|e2| SyncError::DatabaseError(e2.to_string()))?
+                        .ok_or_else(|| {
+                            SyncError::DatabaseError(format!(
+                                "Category '{}' unique violation but not found on retry: {}",
+                                name, err_str
+                            ))
+                        })
+                } else {
+                    Err(SyncError::DatabaseError(err_str))
+                }
+            }
+        }
     }
 
     async fn find_or_create_type(
@@ -783,7 +811,7 @@ impl SiorgSyncService {
         self.siorg_client
             .health_check()
             .await
-            .map_err(|e| SyncError::ApiError(e.to_string()))
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))
     }
 }
 

@@ -4,6 +4,144 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
+// Serde helpers — a API SIORG retorna campos de código ora como string JSON,
+// ora como número inteiro JSON. Estes helpers aceitam ambos.
+// ---------------------------------------------------------------------------
+
+/// Deserializa `Option<Vec<String>>` onde cada elemento pode ser string ou inteiro.
+/// Usado para `telefone` e `email` em `SiorgContato` que às vezes vêm como inteiros.
+fn deserialize_opt_vec_strings<'de, D>(
+    d: D,
+) -> std::result::Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{SeqAccess, Visitor};
+
+    struct OptVec;
+    impl<'de> Visitor<'de> for OptVec {
+        type Value = Option<Vec<String>>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("null or array of strings/integers")
+        }
+        fn visit_none<E: serde::de::Error>(self) -> std::result::Result<Option<Vec<String>>, E> {
+            Ok(None)
+        }
+        fn visit_unit<E: serde::de::Error>(self) -> std::result::Result<Option<Vec<String>>, E> {
+            Ok(None)
+        }
+        fn visit_some<D2: serde::Deserializer<'de>>(
+            self,
+            d: D2,
+        ) -> std::result::Result<Option<Vec<String>>, D2::Error> {
+            struct Seq;
+            impl<'de> Visitor<'de> for Seq {
+                type Value = Vec<String>;
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("array of strings or integers")
+                }
+                fn visit_seq<A: SeqAccess<'de>>(
+                    self,
+                    mut seq: A,
+                ) -> std::result::Result<Vec<String>, A::Error> {
+                    let mut items = Vec::new();
+                    while let Some(val) =
+                        seq.next_element::<serde_json::Value>()?
+                    {
+                        let s = match val {
+                            serde_json::Value::String(s) => s,
+                            serde_json::Value::Number(n) => n.to_string(),
+                            serde_json::Value::Null => continue,
+                            other => other.to_string(),
+                        };
+                        items.push(s);
+                    }
+                    Ok(items)
+                }
+            }
+            d.deserialize_seq(Seq).map(Some)
+        }
+    }
+    d.deserialize_option(OptVec)
+}
+
+
+fn deserialize_string_or_int<'de, D>(d: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    struct V;
+    impl<'de> Visitor<'de> for V {
+        type Value = String;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("string or integer")
+        }
+        fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<String, E> {
+            Ok(v.to_owned())
+        }
+        fn visit_string<E: de::Error>(self, v: String) -> std::result::Result<String, E> {
+            Ok(v)
+        }
+        fn visit_i64<E: de::Error>(self, v: i64) -> std::result::Result<String, E> {
+            Ok(v.to_string())
+        }
+        fn visit_u64<E: de::Error>(self, v: u64) -> std::result::Result<String, E> {
+            Ok(v.to_string())
+        }
+    }
+    d.deserialize_any(V)
+}
+
+fn deserialize_opt_string_or_int<'de, D>(
+    d: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    struct V;
+    impl<'de> Visitor<'de> for V {
+        type Value = Option<String>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("null, string, or integer")
+        }
+        fn visit_none<E: de::Error>(self) -> std::result::Result<Option<String>, E> {
+            Ok(None)
+        }
+        fn visit_unit<E: de::Error>(self) -> std::result::Result<Option<String>, E> {
+            Ok(None)
+        }
+        fn visit_some<D2: serde::Deserializer<'de>>(
+            self,
+            d: D2,
+        ) -> std::result::Result<Option<String>, D2::Error> {
+            struct Inner;
+            impl<'de> Visitor<'de> for Inner {
+                type Value = String;
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("string or integer")
+                }
+                fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<String, E> {
+                    Ok(v.to_owned())
+                }
+                fn visit_string<E: de::Error>(self, v: String) -> std::result::Result<String, E> {
+                    Ok(v)
+                }
+                fn visit_i64<E: de::Error>(self, v: i64) -> std::result::Result<String, E> {
+                    Ok(v.to_string())
+                }
+                fn visit_u64<E: de::Error>(self, v: u64) -> std::result::Result<String, E> {
+                    Ok(v.to_string())
+                }
+            }
+            d.deserialize_any(Inner).map(Some)
+        }
+    }
+    d.deserialize_option(V)
+}
+
+// ---------------------------------------------------------------------------
 // SSRF protection
 // ---------------------------------------------------------------------------
 
@@ -82,13 +220,20 @@ pub struct SiorgServico {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SiorgUnidade {
+    /// Pode ser retornado como string `"471"` ou inteiro `471` dependendo do endpoint.
+    #[serde(deserialize_with = "deserialize_string_or_int")]
     pub codigo_unidade: String,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_unidade_pai: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_orgao_entidade: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_tipo_unidade: Option<String>,
     pub nome: String,
     pub sigla: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_esfera: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_poder: Option<String>,
     pub nivel_normatizacao: Option<String>,
     pub versao_consulta: Option<String>,
@@ -126,7 +271,9 @@ impl SiorgUnidade {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SiorgContato {
+    #[serde(default, deserialize_with = "deserialize_opt_vec_strings")]
     pub telefone: Option<Vec<String>>,
+    #[serde(default, deserialize_with = "deserialize_opt_vec_strings")]
     pub email: Option<Vec<String>>,
 }
 
@@ -134,12 +281,21 @@ pub struct SiorgContato {
 #[serde(rename_all = "camelCase")]
 pub struct SiorgEndereco {
     pub logradouro: Option<String>,
+    /// Número do endereço — pode vir como inteiro (ex: 2367) ou string.
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub numero: Option<String>,
     pub complemento: Option<String>,
     pub bairro: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub cep: Option<String>,
+    /// Código IBGE da UF — pode vir como inteiro (ex: 51) ou sigla (ex: "MT").
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub uf: Option<String>,
+    /// Código IBGE do município — pode vir como inteiro (ex: 5103403) ou nome.
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub municipio: Option<String>,
+    /// Código IBGE / ISO do país — pode vir como inteiro ou nome.
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub pais: Option<String>,
     pub tipo_endereco: Option<String>,
 }
@@ -150,6 +306,7 @@ pub struct SiorgEndereco {
 pub struct SiorgUnidadeCompleta {
     #[serde(flatten)]
     pub base: SiorgUnidade,
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_int")]
     pub codigo_categoria_unidade: Option<String>,
     pub area_atuacao: Option<String>,
     pub competencia: Option<String>,
@@ -170,12 +327,45 @@ impl SiorgUnidadeCompleta {
 
 // Wrappers de resposta da API
 
-/// Resposta de /unidade-organizacional/{cod}/completa e /estrutura-organizacional/completa
-#[derive(Debug, Deserialize)]
-pub struct SiorgEstruturaCompletaResponse {
-    pub servico: SiorgServico,
-    /// A API usa a chave "unidade" (singular) mesmo retornando um array.
-    pub unidade: Vec<SiorgUnidadeCompleta>,
+/// Extrai unidades de um `serde_json::Value` já parseado.
+///
+/// Suporta:
+/// - campo `"unidade"` (singular) com valor objeto `{}` ou array `[…]`
+/// - campo `"unidades"` (plural) com valor objeto `{}` ou array `[…]`
+///
+/// Isso contorna a limitação do serde onde `#[serde(alias)] + #[serde(deserialize_with)]`
+/// não chama o deserializador customizado quando o campo é encontrado via alias.
+fn extract_units_from_value(
+    v: &serde_json::Value,
+    body_preview: &str,
+) -> Result<Vec<SiorgUnidadeCompleta>> {
+    let units_val = v
+        .get("unidade")
+        .or_else(|| v.get("unidades"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Array(vec![]));
+
+    let units_array: Vec<serde_json::Value> = match units_val {
+        serde_json::Value::Array(arr) => arr,
+        obj @ serde_json::Value::Object(_) => vec![obj],
+        serde_json::Value::Null => vec![],
+        other => {
+            anyhow::bail!(
+                "Expected object or array for units field, got {:?}. Body: {}",
+                other,
+                body_preview
+            )
+        }
+    };
+
+    let mut units = Vec::with_capacity(units_array.len());
+    for (i, item) in units_array.into_iter().enumerate() {
+        let unit: SiorgUnidadeCompleta = serde_json::from_value(item).with_context(|| {
+            format!("Failed to parse unit at index {}. Body: {}", i, body_preview)
+        })?;
+        units.push(unit);
+    }
+    Ok(units)
 }
 
 /// Resposta de /estrutura-organizacional/alteracoes
@@ -311,16 +501,22 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgEstruturaCompletaResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG unit response")?;
+            .context("Failed to read SIORG unit response body")?;
 
-        let codigo_str = codigo.to_string();
-        let unit = parsed
-            .unidade
-            .into_iter()
-            .find(|u| u.base.codigo_unidade == codigo_str);
+        let preview: String = body.chars().take(2000).collect();
+
+        let v: serde_json::Value = serde_json::from_str(&body).with_context(|| {
+            format!("Failed to parse SIORG unit response as JSON. Body: {}", preview)
+        })?;
+
+        let units = extract_units_from_value(&v, &preview)?;
+
+        // Usa siorg_code() para suportar tanto "471" quanto a URI completa
+        // "https://estruturaorganizacional.dados.gov.br/id/unidade-organizacional/471"
+        let unit = units.into_iter().find(|u| u.siorg_code() == Some(codigo));
 
         Ok(unit)
     }
@@ -340,7 +536,7 @@ impl SiorgClient {
         codigo_unidade: i32,
     ) -> Result<Vec<SiorgUnidadeCompleta>> {
         let url = format!(
-            "{}/estrutura-organizacional/completa?codigoUnidade={}",
+            "{}/estrutura-organizacional/completa?codigoPoder=1&codigoEsfera=1&codigoUnidade={}",
             self.base_url, codigo_unidade
         );
 
@@ -359,12 +555,23 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgEstruturaCompletaResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG organizational structure response")?;
+            .context("Failed to read SIORG structure response body")?;
 
-        Ok(parsed.unidade)
+        let preview: String = body.chars().take(2000).collect();
+
+        let v: serde_json::Value = serde_json::from_str(&body).with_context(|| {
+            format!(
+                "Failed to parse SIORG organizational structure response as JSON. Body: {}",
+                preview
+            )
+        })?;
+
+        let units = extract_units_from_value(&v, &preview)?;
+
+        Ok(units)
     }
 
     // ========================================================================
@@ -394,10 +601,18 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgAlteracoesResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG changes response")?;
+            .context("Failed to read SIORG changes response body")?;
+
+        let parsed = serde_json::from_str::<SiorgAlteracoesResponse>(&body)
+            .with_context(|| {
+                format!(
+                    "Failed to parse SIORG changes response. Body (first 500 chars): {}",
+                    body.chars().take(2000).collect::<String>()
+                )
+            })?;
 
         Ok(parsed.unidades)
     }
@@ -426,12 +641,46 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgVersaoResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG version response")?;
+            .context("Failed to read SIORG version response body")?;
 
-        Ok(parsed.tipo_versao)
+        let preview: String = body.chars().take(2000).collect();
+        let v: serde_json::Value = serde_json::from_str(&body).with_context(|| {
+            format!("Failed to parse SIORG version response as JSON. Body: {}", preview)
+        })?;
+
+        // The API may return either:
+        // - {"tipoVersao": {...}} (documented format)
+        // - {"unidades": [{"versaoConsulta": "...", ...}]} (observed in production)
+        if let Some(tv) = v.get("tipoVersao") {
+            return serde_json::from_value::<SiorgTipoVersao>(tv.clone())
+                .context("Failed to parse tipoVersao field");
+        }
+
+        let versao_consulta = v
+            .get("unidades")
+            .and_then(|u| u.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|unit| unit.get("versaoConsulta"))
+            .and_then(|vc| vc.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "versaoConsulta not found in versao response. Body: {}",
+                    preview
+                )
+            })?;
+
+        Ok(SiorgTipoVersao {
+            versao_consulta,
+            versao_anterior: None,
+            versao_posterior: None,
+            data_versao_anterior: None,
+            data_versao_posterior: None,
+            data_versao_consulta: None,
+        })
     }
 
     /// Retorna unidades alteradas de um órgão desde uma versão específica.
@@ -462,10 +711,18 @@ impl SiorgClient {
             anyhow::bail!("SIORG API error: {}", response.status());
         }
 
-        let parsed = response
-            .json::<SiorgAlteradasResponse>()
+        let body = response
+            .text()
             .await
-            .context("Failed to parse SIORG changed units response")?;
+            .context("Failed to read SIORG changed units response body")?;
+
+        let parsed = serde_json::from_str::<SiorgAlteradasResponse>(&body)
+            .with_context(|| {
+                format!(
+                    "Failed to parse SIORG changed units response. Body (first 500 chars): {}",
+                    body.chars().take(2000).collect::<String>()
+                )
+            })?;
 
         Ok(parsed.unidades)
     }
