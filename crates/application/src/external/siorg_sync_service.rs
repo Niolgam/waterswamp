@@ -7,7 +7,6 @@ pub use domain::models::{
     UpdateOrganizationPayload, UpdateOrganizationalUnitPayload, UpdateSystemSettingPayload,
 };
 use domain::ports::*;
-use sqlx::PgPool;
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use tracing::{error, info, warn};
