@@ -10,12 +10,15 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
 #[sqlx(type_name = "activity_area_enum", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ActivityArea {
-    Support,  // Área meio (administrativo)
-    Core,     // Área fim (acadêmico/pesquisa)
+    Support, // Área meio (administrativo)
+    Core,    // Área fim (acadêmico/pesquisa)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
-#[sqlx(type_name = "internal_unit_type_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(
+    type_name = "internal_unit_type_enum",
+    rename_all = "SCREAMING_SNAKE_CASE"
+)]
 pub enum InternalUnitType {
     Administration,
     Department,
@@ -28,7 +31,10 @@ pub enum InternalUnitType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
-#[sqlx(type_name = "siorg_entity_type_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(
+    type_name = "siorg_entity_type_enum",
+    rename_all = "SCREAMING_SNAKE_CASE"
+)]
 pub enum SiorgEntityType {
     Organization,
     Unit,
@@ -37,7 +43,10 @@ pub enum SiorgEntityType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
-#[sqlx(type_name = "siorg_change_type_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(
+    type_name = "siorg_change_type_enum",
+    rename_all = "SCREAMING_SNAKE_CASE"
+)]
 pub enum SiorgChangeType {
     Creation,
     Update,
@@ -65,6 +74,30 @@ pub enum MappingStatus {
     Deprecated,
     Merged,
     Unmapped,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct SyncSummary {
+    pub total_processed: i32,
+    pub created: i32,
+    pub updated: i32,
+    pub deleted: i32,
+    pub failed: i32,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SiorgUpsertPayload {
+    pub organization_id: Uuid,
+    pub category_id: Uuid,
+    pub unit_type_id: Uuid,
+    pub siorg_code: i32,
+    pub parent_id: Option<Uuid>,
+    pub name: String,
+    pub acronym: Option<String>,
+    pub internal_type: InternalUnitType,
+    pub activity_area: ActivityArea,
+    pub is_active: bool,
 }
 
 // ============================================================================

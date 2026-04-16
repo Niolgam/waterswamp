@@ -10,83 +10,83 @@ use tracing::{error, info};
 
 // Imports de Portas e Serviços
 use application::services::{
-    auth_service::AuthService, budget_classifications_service::BudgetClassificationsService,
-    catalog_service::CatalogService, geo_regions_service::GeoRegionsService,
+    auth_service::AuthService,
+    budget_classifications_service::BudgetClassificationsService,
+    catalog_service::CatalogService,
+    driver_service::DriverService,
+    fueling_service::FuelingService,
+    geo_regions_service::GeoRegionsService,
+    invoice_adjustment_service::InvoiceAdjustmentService,
+    invoice_service::InvoiceService,
     mfa_service::MfaService,
     organizational_service::{
         OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
         OrganizationalUnitTypeService, SystemSettingsService,
     },
     requisition_service::RequisitionService,
-    supplier_service::SupplierService,
-    driver_service::DriverService,
-    fueling_service::FuelingService,
-    vehicle_fine_service::VehicleFineService,
-    invoice_service::InvoiceService,
-    invoice_adjustment_service::InvoiceAdjustmentService,
     stock_movement_service::StockMovementService,
     stock_transfer_service::StockTransferService,
-    warehouse_service::WarehouseService,
+    supplier_service::SupplierService,
     user_service::UserService,
+    vehicle_fine_service::VehicleFineService,
     vehicle_service::VehicleService,
+    warehouse_service::WarehouseService,
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
-    BuildingTypeRepositoryPort,
-    CatmatGroupRepositoryPort, CatmatClassRepositoryPort, CatmatPdmRepositoryPort, CatmatItemRepositoryPort,
-    CatserSectionRepositoryPort, CatserDivisionRepositoryPort,
-    CatserGroupRepositoryPort, CatserClassRepositoryPort, CatserItemRepositoryPort,
-    CityRepositoryPort, CountryRepositoryPort, EmailServicePort, FloorRepositoryPort,
-    MfaRepositoryPort, OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
+    BuildingTypeRepositoryPort, CatmatClassRepositoryPort, CatmatGroupRepositoryPort,
+    CatmatItemRepositoryPort, CatmatPdmRepositoryPort, CatserClassRepositoryPort,
+    CatserDivisionRepositoryPort, CatserGroupRepositoryPort, CatserItemRepositoryPort,
+    CatserSectionRepositoryPort, CityRepositoryPort, CountryRepositoryPort, DriverRepositoryPort,
+    EmailServicePort, FloorRepositoryPort, FuelingRepositoryPort, InvoiceAdjustmentRepositoryPort,
+    InvoiceItemRepositoryPort, InvoiceRepositoryPort, MfaRepositoryPort,
+    OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
-    RequisitionItemRepositoryPort, RequisitionRepositoryPort,
-    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort, SiteRepositoryPort,
-    SpaceRepositoryPort, SpaceTypeRepositoryPort, StateRepositoryPort,
-    SystemSettingsRepositoryPort, UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort,
-    UserRepositoryPort,
-    VehicleCategoryRepositoryPort, VehicleMakeRepositoryPort, VehicleModelRepositoryPort,
-    VehicleColorRepositoryPort, VehicleFuelTypeRepositoryPort, VehicleTransmissionTypeRepositoryPort,
-    SupplierRepositoryPort,
-    DriverRepositoryPort,
-    FuelingRepositoryPort,
-    VehicleFineTypeRepositoryPort, VehicleFineRepositoryPort, VehicleFineStatusHistoryRepositoryPort,
-    InvoiceRepositoryPort, InvoiceItemRepositoryPort, InvoiceAdjustmentRepositoryPort,
-    WarehouseRepositoryPort, WarehouseStockRepositoryPort,
-    VehicleRepositoryPort, VehicleDocumentRepositoryPort, VehicleStatusHistoryRepositoryPort,
+    RequisitionItemRepositoryPort, RequisitionRepositoryPort, SiorgHistoryRepositoryPort,
+    SiorgSyncQueueRepositoryPort, SiteRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
+    StateRepositoryPort, SupplierRepositoryPort, SystemSettingsRepositoryPort,
+    UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort, UserRepositoryPort,
+    VehicleCategoryRepositoryPort, VehicleColorRepositoryPort, VehicleDocumentRepositoryPort,
+    VehicleFineRepositoryPort, VehicleFineStatusHistoryRepositoryPort,
+    VehicleFineTypeRepositoryPort, VehicleFuelTypeRepositoryPort, VehicleMakeRepositoryPort,
+    VehicleModelRepositoryPort, VehicleRepositoryPort, VehicleStatusHistoryRepositoryPort,
+    VehicleTransmissionTypeRepositoryPort, WarehouseRepositoryPort, WarehouseStockRepositoryPort,
 };
 use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
     catalog_repository::{
-        CatmatGroupRepository, CatmatClassRepository, CatmatPdmRepository, CatmatItemRepository,
-        CatserSectionRepository, CatserDivisionRepository,
-        CatserGroupRepository, CatserClassRepository, CatserItemRepository,
-        UnitConversionRepository, UnitOfMeasureRepository,
+        CatmatClassRepository, CatmatGroupRepository, CatmatItemRepository, CatmatPdmRepository,
+        CatserClassRepository, CatserDivisionRepository, CatserGroupRepository,
+        CatserItemRepository, CatserSectionRepository, UnitConversionRepository,
+        UnitOfMeasureRepository,
     },
+    driver_repository::DriverRepository,
     facilities_repository::{
         BuildingRepository, BuildingTypeRepository, FloorRepository, SiteRepository,
         SpaceRepository, SpaceTypeRepository,
     },
+    fueling_repository::FuelingRepository,
     geo_regions_repository::{CityRepository, CountryRepository, StateRepository},
+    invoice_adjustment_repository::InvoiceAdjustmentRepository,
+    invoice_repository::{InvoiceItemRepository, InvoiceRepository},
     mfa_repository::MfaRepository,
     organizational_repository::{
-        OrganizationRepository, OrganizationalUnitCategoryRepository,
-        OrganizationalUnitRepository, OrganizationalUnitTypeRepository, SystemSettingsRepository,
+        OrganizationRepository, OrganizationalUnitCategoryRepository, OrganizationalUnitRepository,
+        OrganizationalUnitTypeRepository, SystemSettingsRepository,
     },
     requisition_repository::{RequisitionItemRepository, RequisitionRepository},
-    user_repository::UserRepository,
     supplier_repository::SupplierRepository,
-    driver_repository::DriverRepository,
-    fueling_repository::FuelingRepository,
-    vehicle_fine_repository::{VehicleFineTypeRepository, VehicleFineRepository, VehicleFineStatusHistoryRepository},
-    invoice_repository::{InvoiceRepository, InvoiceItemRepository},
-    invoice_adjustment_repository::InvoiceAdjustmentRepository,
-    warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
-    vehicle_repository::{
-        VehicleCategoryRepository, VehicleMakeRepository, VehicleModelRepository,
-        VehicleColorRepository, VehicleFuelTypeRepository, VehicleTransmissionTypeRepository,
-        VehicleRepository, VehicleDocumentRepository, VehicleStatusHistoryRepository,
+    user_repository::UserRepository,
+    vehicle_fine_repository::{
+        VehicleFineRepository, VehicleFineStatusHistoryRepository, VehicleFineTypeRepository,
     },
+    vehicle_repository::{
+        VehicleCategoryRepository, VehicleColorRepository, VehicleDocumentRepository,
+        VehicleFuelTypeRepository, VehicleMakeRepository, VehicleModelRepository,
+        VehicleRepository, VehicleStatusHistoryRepository, VehicleTransmissionTypeRepository,
+    },
+    warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
 };
 
 // Core & Infra
@@ -120,8 +120,9 @@ pub fn build_application_state(
 ) -> state::AppState {
     let audit_service = AuditService::new(pool_logs.clone());
 
-    let enc_key = field_encryption::parse_key(&config.field_encryption_key)
-        .expect("WS_FIELD_ENCRYPTION_KEY must be a valid 64-char hex string (openssl rand -hex 32)");
+    let enc_key = field_encryption::parse_key(&config.field_encryption_key).expect(
+        "WS_FIELD_ENCRYPTION_KEY must be a valid 64-char hex string (openssl rand -hex 32)",
+    );
 
     let user_repo_port: Arc<dyn UserRepositoryPort> =
         Arc::new(UserRepository::new(pool_auth.clone(), enc_key));
@@ -230,26 +231,31 @@ pub fn build_application_state(
         Arc::new(SystemSettingsRepository::new(pool_auth_arc.clone()));
     let organization_repo_port: Arc<dyn OrganizationRepositoryPort> =
         Arc::new(OrganizationRepository::new(pool_auth_arc.clone()));
-    let unit_category_repo_port: Arc<dyn OrganizationalUnitCategoryRepositoryPort> =
-        Arc::new(OrganizationalUnitCategoryRepository::new(pool_auth_arc.clone()));
+    let unit_category_repo_port: Arc<dyn OrganizationalUnitCategoryRepositoryPort> = Arc::new(
+        OrganizationalUnitCategoryRepository::new(pool_auth_arc.clone()),
+    );
     let unit_type_repo_port: Arc<dyn OrganizationalUnitTypeRepositoryPort> =
         Arc::new(OrganizationalUnitTypeRepository::new(pool_auth_arc.clone()));
     let organizational_unit_repo_port: Arc<dyn OrganizationalUnitRepositoryPort> =
         Arc::new(OrganizationalUnitRepository::new(pool_auth_arc.clone()));
 
     // SIORG Sync repositories
-    let siorg_sync_queue_repo_port: Arc<dyn SiorgSyncQueueRepositoryPort> =
-        Arc::new(persistence::repositories::siorg_sync_repository::SiorgSyncQueueRepository::new(pool_auth.clone()));
-    let siorg_history_repo_port: Arc<dyn SiorgHistoryRepositoryPort> =
-        Arc::new(persistence::repositories::siorg_sync_repository::SiorgHistoryRepository::new(pool_auth.clone()));
+    let siorg_sync_queue_repo_port: Arc<dyn SiorgSyncQueueRepositoryPort> = Arc::new(
+        persistence::repositories::siorg_sync_repository::SiorgSyncQueueRepository::new(
+            pool_auth.clone(),
+        ),
+    );
+    let siorg_history_repo_port: Arc<dyn SiorgHistoryRepositoryPort> = Arc::new(
+        persistence::repositories::siorg_sync_repository::SiorgHistoryRepository::new(
+            pool_auth.clone(),
+        ),
+    );
 
     // Organizational services
     let system_settings_service = Arc::new(SystemSettingsService::new(
         system_settings_repo_port.clone(),
     ));
-    let organization_service = Arc::new(OrganizationService::new(
-        organization_repo_port.clone(),
-    ));
+    let organization_service = Arc::new(OrganizationService::new(organization_repo_port.clone()));
     let organizational_unit_category_service = Arc::new(OrganizationalUnitCategoryService::new(
         unit_category_repo_port.clone(),
     ));
@@ -271,7 +277,7 @@ pub fn build_application_state(
 
     let siorg_client = Arc::new(
         application::external::SiorgClient::new(siorg_base_url, siorg_token)
-            .expect("Failed to create SIORG client")
+            .expect("Failed to create SIORG client"),
     );
 
     let siorg_sync_service = Arc::new(application::external::SiorgSyncService::new(
@@ -281,6 +287,7 @@ pub fn build_application_state(
         unit_category_repo_port,
         unit_type_repo_port,
         system_settings_repo_port.clone(),
+        pool_auth.clone(),
     ));
 
     // Stock movement service (needed by requisition, invoice, and adjustment services)

@@ -1,6 +1,14 @@
 use super::siorg_client::{SiorgClient, SiorgUnidade, SiorgUnidadeCompleta};
-use domain::models::organizational::*;
+pub use domain::models::{
+    ActivityArea, ContactInfo, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
+    CreateOrganizationalUnitPayload, CreateOrganizationalUnitTypePayload,
+    CreateSystemSettingPayload, InternalUnitType, OrganizationDto, OrganizationalUnitCategoryDto,
+    OrganizationalUnitDto, OrganizationalUnitTypeDto, SiorgUpsertPayload, SyncSummary,
+    UpdateOrganizationPayload, UpdateOrganizationalUnitPayload, UpdateSystemSettingPayload,
+};
 use domain::ports::*;
+use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -24,6 +32,7 @@ pub struct SiorgSyncService {
     category_repo: Arc<dyn OrganizationalUnitCategoryRepositoryPort>,
     type_repo: Arc<dyn OrganizationalUnitTypeRepositoryPort>,
     settings_repo: Arc<dyn SystemSettingsRepositoryPort>,
+    pool: sqlx::PgPool,
 }
 
 impl SiorgSyncService {
@@ -34,6 +43,7 @@ impl SiorgSyncService {
         category_repo: Arc<dyn OrganizationalUnitCategoryRepositoryPort>,
         type_repo: Arc<dyn OrganizationalUnitTypeRepositoryPort>,
         settings_repo: Arc<dyn SystemSettingsRepositoryPort>,
+        pool: sqlx::PgPool,
     ) -> Self {
         Self {
             siorg_client,
@@ -42,7 +52,46 @@ impl SiorgSyncService {
             category_repo,
             type_repo,
             settings_repo,
+            pool,
         }
+    }
+
+    async fn prepare_dependencies(
+        &self,
+        units: &[SiorgUnidadeCompleta],
+    ) -> Result<(HashMap<String, Uuid>, HashMap<String, Uuid>), SyncError> {
+        let mut types_cache = HashMap::new();
+        let mut cats_cache = HashMap::new();
+
+        for unit in units {
+            // 1. Resolve o Tipo de Unidade (Tabela Dinâmica)
+            // Se o SIORG não informar, usamos uma constante clara em vez de esconder o erro
+            let tipo_code = unit
+                .base
+                .codigo_tipo_unidade
+                .clone()
+                .unwrap_or_else(|| "NAO_INFORMADO".to_string());
+
+            if !types_cache.contains_key(&tipo_code) {
+                // A função find_or_create_type já lida com a verificação no DB
+                let u_type = self.find_or_create_type(&tipo_code).await?;
+                types_cache.insert(tipo_code, u_type.id);
+            }
+
+            // 2. Resolve a Categoria (Tabela Dinâmica)
+            let cat_code = unit
+                .codigo_categoria_unidade
+                .clone()
+                .unwrap_or_else(|| "NAO_INFORMADA".to_string());
+
+            if !cats_cache.contains_key(&cat_code) {
+                // A função find_or_create_category já lida com a verificação no DB
+                let cat = self.find_or_create_category(&cat_code).await?;
+                cats_cache.insert(cat_code, cat.id);
+            }
+        }
+
+        Ok((types_cache, cats_cache))
     }
 
     // ========================================================================
@@ -50,10 +99,7 @@ impl SiorgSyncService {
     // ========================================================================
 
     /// Synchronize a single organization from SIORG
-    pub async fn sync_organization(
-        &self,
-        siorg_code: i32,
-    ) -> Result<OrganizationDto, SyncError> {
+    pub async fn sync_organization(&self, siorg_code: i32) -> Result<OrganizationDto, SyncError> {
         info!("Syncing organization with SIORG code {}", siorg_code);
 
         let siorg_unit = self
@@ -387,128 +433,136 @@ impl SiorgSyncService {
     /// - Se mudou e há versão armazenada: sync incremental via `get_alteradas` (N mudanças).
     /// - Se não há versão armazenada: sync completo via `get_estrutura_completa` (primeira vez).
     pub async fn sync_all_from_db(&self) -> Result<SyncSummary, SyncError> {
-        info!("Starting full sync from DB: fetching all active organizations with siorg_code");
+        info!("Iniciando sincronização global: buscando organizações ativas com siorg_code");
 
+        // 1. Lista as organizações ativas registradas (limite alto para garantir que pegue todas)
         let (orgs, _) = self
             .organization_repo
             .list(Some(true), 1000, 0)
             .await
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
 
-        let mut summary = SyncSummary {
-            total_processed: 0,
-            created: 0,
-            updated: 0,
-            failed: 0,
-            errors: Vec::new(),
-        };
+        let mut summary = SyncSummary::default();
 
+        // Filtra apenas as que possuem código SIORG válido
         let siorg_orgs: Vec<_> = orgs.into_iter().filter(|o| o.siorg_code > 0).collect();
 
         info!(
-            "Found {} organization(s) with siorg_code to sync",
+            "Encontrada(s) {} organização(ões) para sincronizar.",
             siorg_orgs.len()
         );
 
         for org in siorg_orgs {
             summary.total_processed += 1;
 
+            // PASSO A: Atualiza os dados do Órgão Raiz na tabela 'organizations'
             if let Err(e) = self.sync_organization(org.siorg_code).await {
                 summary.failed += 1;
-                summary
-                    .errors
-                    .push(format!("Org {} (siorg={}): {}", org.id, org.siorg_code, e));
-                error!(
-                    "Failed to sync organization {} (siorg_code={}): {}",
+                summary.errors.push(format!(
+                    "Falha na raiz Org {} (siorg={}): {}",
                     org.id, org.siorg_code, e
+                ));
+                error!(
+                    "Erro ao sincronizar raiz da organização {}: {}",
+                    org.siorg_code, e
                 );
                 continue;
             }
             summary.updated += 1;
 
+            // PASSO B: Sincroniza a árvore de unidades (Pró-Reitorias, Departamentos, etc.)
+            // Passamos o UUID (org.id) para o novo motor de Bulk Sync
             if let Err(e) = self
-                .sync_organization_units_versioned(org.siorg_code, &mut summary)
+                .sync_organization_units_versioned(org.id, org.siorg_code, &mut summary)
                 .await
             {
                 summary.failed += 1;
                 summary.errors.push(format!(
-                    "Org {} (siorg={}) units: {}",
+                    "Falha nas unidades da Org {} (siorg={}): {}",
                     org.id, org.siorg_code, e
                 ));
                 error!(
-                    "Failed to sync units for organization {} (siorg_code={}): {}",
-                    org.id, org.siorg_code, e
+                    "Erro ao sincronizar unidades para org {}: {}",
+                    org.siorg_code, e
                 );
             }
         }
 
-        info!("Full DB sync completed: {:?}", summary);
+        info!("Sincronização global concluída: {:?}", summary);
         Ok(summary)
     }
 
     /// Sync inteligente de unidades: escolhe entre incremental e completo com base na versão.
     async fn sync_organization_units_versioned(
         &self,
+        org_id: Uuid,
         org_siorg_code: i32,
         summary: &mut SyncSummary,
     ) -> Result<(), SyncError> {
-        // Consulta versão atual na API (1 chamada leve)
         let versao_api = match self.siorg_client.get_versao(org_siorg_code).await {
             Ok(v) => v,
             Err(e) => {
                 warn!(
-                    "Falha ao obter versão do SIORG para org {}: {}. Usando sync completo.",
+                    "Falha ao obter versão para org {}: {}. Forçando sync completo.",
                     org_siorg_code, e
                 );
-                return self.run_full_unit_sync(org_siorg_code, summary).await;
+                return self
+                    .run_full_unit_sync(org_id, org_siorg_code, summary)
+                    .await;
             }
         };
 
         let stored_versao = self.get_stored_versao(org_siorg_code).await;
 
+        let (_, total_local) = self
+            .unit_repo
+            .list(
+                Some(org_id),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                1,
+                0,
+            )
+            .await
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+
+        let base_vazia = total_local == 0;
+
         match stored_versao {
-            Some(ref from) if *from == versao_api.versao_consulta => {
-                // Nenhuma alteração desde o último sync
+            // Cenário A: Mesma versão e banco já populado -> Nada a fazer
+            Some(ref from) if *from == versao_api.versao_consulta && !base_vazia => {
                 info!(
-                    "Org {} já está na versão {} — nenhuma alteração.",
+                    "Org {} já está sincronizado na versão {}.",
                     org_siorg_code, from
                 );
             }
-            Some(from) => {
-                // Há uma versão anterior: tenta sync incremental
+            // Cenário B: Existe versão anterior e dados locais -> Executa Sync Incremental
+            Some(from) if !base_vazia => {
                 info!(
-                    "Sync incremental org {}: {} → {}",
+                    "Iniciando sync incremental org {}: {} → {}",
                     org_siorg_code, from, versao_api.versao_consulta
                 );
-                match self
-                    .run_incremental_unit_sync(org_siorg_code, &from, summary)
-                    .await
-                {
-                    Ok(()) => {
-                        self.save_versao(org_siorg_code, &versao_api.versao_consulta)
-                            .await;
-                    }
-                    Err(e) => {
-                        // Versão muito antiga ou histórico indisponível na API:
-                        // descarta versão armazenada e executa sync completo.
-                        warn!(
-                            "Sync incremental falhou para org {} (versão {}): {}. \
-                             Executando sync completo como fallback.",
-                            org_siorg_code, from, e
-                        );
-                        self.run_full_unit_sync(org_siorg_code, summary).await?;
-                        self.save_versao(org_siorg_code, &versao_api.versao_consulta)
-                            .await;
-                    }
-                }
+                self.run_incremental_unit_sync(org_id, org_siorg_code, &from, summary)
+                    .await?;
+                // Sucesso total no lote -> Salva a nova versão
+                self.save_versao(org_siorg_code, &versao_api.versao_consulta)
+                    .await;
             }
-            None => {
-                // Nenhuma versão armazenada: sync completo inicial
+            // Cenário C: Base vazia ou sem versão -> Executa Sync Completo Inicial (Bulk Upsert)
+            _ => {
                 info!(
-                    "Nenhuma versão armazenada para org {}. Executando sync completo.",
+                    "Iniciando carga completa para org {} (Base vazia ou sem histórico).",
                     org_siorg_code
                 );
-                self.run_full_unit_sync(org_siorg_code, summary).await?;
+                self.run_full_unit_sync(org_id, org_siorg_code, summary)
+                    .await?;
+                // Sucesso total no lote -> Salva a versão inicial
                 self.save_versao(org_siorg_code, &versao_api.versao_consulta)
                     .await;
             }
@@ -517,18 +571,27 @@ impl SiorgSyncService {
         Ok(())
     }
 
-    /// Sync completo de unidades via `get_estrutura_completa` (1 chamada HTTP).
     async fn run_full_unit_sync(
         &self,
+        org_id: Uuid,
         org_siorg_code: i32,
         summary: &mut SyncSummary,
     ) -> Result<(), SyncError> {
-        let result = self.sync_organization_units(org_siorg_code).await?;
+        let units = self
+            .siorg_client
+            .get_estrutura_completa(org_siorg_code)
+            .await
+            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?;
+
+        let result = self
+            .execute_bulk_sync(org_id, units, org_siorg_code)
+            .await?;
+
         summary.total_processed += result.total_processed;
-        summary.created += result.created;
         summary.updated += result.updated;
+        summary.created += result.created;
         summary.failed += result.failed;
-        summary.errors.extend(result.errors);
+
         Ok(())
     }
 
@@ -537,68 +600,33 @@ impl SiorgSyncService {
     /// - EXCLUSAO / EXTINCAO → desativa localmente
     async fn run_incremental_unit_sync(
         &self,
+        org_id: Uuid,
         org_siorg_code: i32,
         from_versao: &str,
         summary: &mut SyncSummary,
     ) -> Result<(), SyncError> {
-        let units = self
+        let changed_units = self
             .siorg_client
             .get_alteradas(org_siorg_code, from_versao)
             .await
             .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?;
 
-        info!(
-            "{} unidade(s) alterada(s) para org {} desde versão {}",
-            units.len(),
-            org_siorg_code,
-            from_versao
-        );
+        // 2. Converte SiorgUnidadeAlterada -> SiorgUnidadeCompleta
+        // O seu código já tem um impl From para isso
+        let units: Vec<SiorgUnidadeCompleta> = changed_units
+            .into_iter()
+            .map(SiorgUnidadeCompleta::from)
+            .collect();
 
-        for unit in &units {
-            summary.total_processed += 1;
-            let code_display = unit
-                .siorg_code()
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| unit.base.codigo_unidade.clone());
+        // 3. Executa o processamento em lote
+        let result = self
+            .execute_bulk_sync(org_id, units, org_siorg_code)
+            .await?;
 
-            if unit.base.is_exclusao() {
-                match self.deactivate_unit(&unit.base).await {
-                    Ok(true) => {
-                        info!("Unidade {} desativada (EXCLUSAO)", code_display);
-                        summary.updated += 1;
-                    }
-                    Ok(false) => {
-                        // Unidade extinta que não existe localmente — ignora
-                    }
-                    Err(e) => {
-                        summary.failed += 1;
-                        summary
-                            .errors
-                            .push(format!("Unit {} (EXCLUSAO): {}", code_display, e));
-                        error!("Failed to deactivate unit {}: {}", code_display, e);
-                    }
-                }
-            } else {
-                // Converte dados resumidos em SiorgUnidadeCompleta (campos extras como None)
-                let completa = SiorgUnidadeCompleta::from(unit.clone());
-                match self.upsert_unit(&completa).await {
-                    Ok(u) => {
-                        if u.created_at == u.updated_at {
-                            summary.created += 1;
-                        } else {
-                            summary.updated += 1;
-                        }
-                    }
-                    Err(e) => {
-                        summary.failed += 1;
-                        summary
-                            .errors
-                            .push(format!("Unit {}: {}", code_display, e));
-                        error!("Failed to sync unit {}: {}", code_display, e);
-                    }
-                }
-            }
-        }
+        // 4. Atualiza o sumário
+        summary.total_processed += result.total_processed;
+        summary.updated += result.updated;
+        summary.deleted += result.deleted;
 
         Ok(())
     }
@@ -626,6 +654,7 @@ impl SiorgSyncService {
             total_processed: 0,
             created: 0,
             updated: 0,
+            deleted: 0,
             failed: 0,
             errors: Vec::new(),
         };
@@ -670,6 +699,111 @@ impl SiorgSyncService {
         Ok(summary)
     }
 
+    async fn execute_bulk_sync(
+        &self,
+        org_id: Uuid,
+        units: Vec<SiorgUnidadeCompleta>,
+        org_siorg_code: i32,
+    ) -> Result<SyncSummary, SyncError> {
+        let units: Vec<_> = units
+            .into_iter()
+            .filter(|u| u.siorg_code() != Some(org_siorg_code))
+            .collect();
+
+        if units.is_empty() {
+            return Ok(SyncSummary::default());
+        }
+
+        // ====================================================================
+        // 1. PRÉ-PROCESSAMENTO: Garante todas as dependências antes de abrir a transação
+        // ====================================================================
+        let (types_cache, cats_cache) = self.prepare_dependencies(&units).await?;
+
+        let mut id_lookup: HashMap<i32, Uuid> =
+            self.unit_repo
+                .get_siorg_map_by_org(org_id)
+                .await
+                .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+
+        let mut sorted_units = units;
+        sorted_units.sort_by_key(|u| u.base.codigo_unidade.len());
+
+        // ====================================================================
+        // 2. TRANSAÇÃO PRINCIPAL
+        // ====================================================================
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+        let mut summary = SyncSummary::default();
+
+        for siorg_unit in sorted_units {
+            summary.total_processed += 1;
+            let siorg_code = siorg_unit.siorg_code().unwrap();
+
+            // Busca os IDs reais nos caches que preparamos acima (Tempo: O(1))
+            let tipo_ref = siorg_unit
+                .base
+                .codigo_tipo_unidade
+                .as_deref()
+                .unwrap_or("NAO_INFORMADO");
+            let cat_ref = siorg_unit
+                .codigo_categoria_unidade
+                .as_deref()
+                .unwrap_or("NAO_INFORMADA");
+
+            let unit_type_id = *types_cache.get(tipo_ref).unwrap();
+            let category_id = *cats_cache.get(cat_ref).unwrap();
+
+            let payload = SiorgUpsertPayload {
+                organization_id: org_id,
+                parent_id: siorg_unit
+                    .parent_siorg_code()
+                    .and_then(|c| id_lookup.get(&c).cloned()),
+                category_id,  // <--- Agora usa a categoria real do SIORG!
+                unit_type_id, // <--- Agora usa o tipo real do SIORG!
+                internal_type: self.map_internal_type(&siorg_unit.base.codigo_tipo_unidade), // O Enum continua heurístico
+                name: siorg_unit.base.nome.clone(),
+                acronym: siorg_unit.base.sigla.clone(),
+                siorg_code,
+                activity_area: match siorg_unit.area_atuacao.as_deref() {
+                    Some("FIM") | Some("CORE") => ActivityArea::Core,
+                    _ => ActivityArea::Support,
+                },
+                is_active: !siorg_unit.base.is_exclusao(),
+            };
+
+            match self.unit_repo.upsert_in_transaction(&mut tx, payload).await {
+                Ok(unit) => {
+                    id_lookup.insert(siorg_code, unit.id);
+                    if siorg_unit.base.is_exclusao() {
+                        summary.deleted += 1;
+                    } else {
+                        summary.updated += 1;
+                    }
+                }
+                Err(e) => {
+                    tx.rollback().await.ok();
+                    return Err(SyncError::DatabaseError(e.to_string()));
+                }
+            }
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+        Ok(summary)
+    }
+
+    fn map_internal_type(&self, code: &Option<String>) -> InternalUnitType {
+        match code.as_deref() {
+            Some("DEPARTMENT") => InternalUnitType::Department,
+            Some("LABORATORY") => InternalUnitType::Laboratory,
+            Some("COORDINATION") => InternalUnitType::Coordination,
+            _ => InternalUnitType::Sector,
+        }
+    }
     // ========================================================================
     // Version Storage (via SystemSettings)
     // ========================================================================
@@ -835,17 +969,4 @@ pub enum SyncError {
 
     #[error("Conflict: {0}")]
     Conflict(String),
-}
-
-// ============================================================================
-// Sync Summary
-// ============================================================================
-
-#[derive(Debug, Clone)]
-pub struct SyncSummary {
-    pub total_processed: i32,
-    pub created: i32,
-    pub updated: i32,
-    pub failed: i32,
-    pub errors: Vec<String>,
 }
