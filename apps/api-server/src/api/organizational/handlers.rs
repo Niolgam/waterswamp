@@ -773,7 +773,7 @@ pub async fn list_organizational_units(
 pub async fn get_organizational_units_tree(
     _user: CurrentUser,
     State(state): State<AppState>,
-    Query(query): Query<OrganizationsListQuery>,
+    Query(_query): Query<OrganizationsListQuery>,
 ) -> Result<Json<Vec<OrganizationalUnitTreeNode>>, (StatusCode, String)> {
     let service = get_unit_service(&state);
 

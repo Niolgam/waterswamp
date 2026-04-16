@@ -1,5 +1,5 @@
 use axum::{extract::State, http::StatusCode, Json};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::extractors::current_user::CurrentUser;

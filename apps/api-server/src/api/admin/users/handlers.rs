@@ -12,7 +12,6 @@ use domain::ports::AuthRepositoryPort;
 use domain::ports::UserRepositoryPort;
 use persistence::repositories::{auth_repository::AuthRepository, user_repository::UserRepository};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use uuid::Uuid;
 use validator::Validate;
 

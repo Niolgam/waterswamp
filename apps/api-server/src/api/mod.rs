@@ -19,6 +19,4 @@ pub mod mfa;
 pub mod organizational;
 pub mod users;
 
-use axum::Router;
 
-use crate::infra::state::AppState;

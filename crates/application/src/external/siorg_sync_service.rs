@@ -8,7 +8,7 @@ pub use domain::models::{
 };
 use domain::ports::*;
 use sqlx::PgPool;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -64,30 +64,29 @@ impl SiorgSyncService {
         let mut cats_cache = HashMap::new();
 
         for unit in units {
-            // 1. Resolve o Tipo de Unidade (Tabela Dinâmica)
-            // Se o SIORG não informar, usamos uma constante clara em vez de esconder o erro
+            // 1. Resolve o Tipo de Unidade
             let tipo_code = unit
                 .base
                 .codigo_tipo_unidade
                 .clone()
                 .unwrap_or_else(|| "NAO_INFORMADO".to_string());
 
-            if !types_cache.contains_key(&tipo_code) {
-                // A função find_or_create_type já lida com a verificação no DB
+            // Usando a API Entry: faz o lookup do hash apenas uma vez
+            if let Entry::Vacant(e) = types_cache.entry(tipo_code.clone()) {
                 let u_type = self.find_or_create_type(&tipo_code).await?;
-                types_cache.insert(tipo_code, u_type.id);
+                e.insert(u_type.id);
             }
 
-            // 2. Resolve a Categoria (Tabela Dinâmica)
+            // 2. Resolve a Categoria
             let cat_code = unit
                 .codigo_categoria_unidade
                 .clone()
                 .unwrap_or_else(|| "NAO_INFORMADA".to_string());
 
-            if !cats_cache.contains_key(&cat_code) {
-                // A função find_or_create_category já lida com a verificação no DB
+            // Usando a API Entry: faz o lookup do hash apenas uma vez
+            if let Entry::Vacant(e) = cats_cache.entry(cat_code.clone()) {
                 let cat = self.find_or_create_category(&cat_code).await?;
-                cats_cache.insert(cat_code, cat.id);
+                e.insert(cat.id);
             }
         }
 
@@ -107,7 +106,7 @@ impl SiorgSyncService {
             .get_unit_complete(siorg_code)
             .await
             .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?
-            .ok_or_else(|| SyncError::NotFoundInSiorg(siorg_code))?;
+            .ok_or(SyncError::NotFoundInSiorg(siorg_code))?;
 
         if let Some(local_org) = self
             .organization_repo
@@ -130,8 +129,6 @@ impl SiorgSyncService {
             .siorg_code()
             .ok_or_else(|| SyncError::MissingRequiredField("codigo_unidade".to_string()))?;
 
-        // CNPJ e código UG não são fornecidos pela API SIORG pública.
-        // Criamos o registro com valores vazios; o operador deve preenchê-los manualmente.
         warn!(
             "Criando organização siorg={} sem CNPJ/UG (não disponíveis na API SIORG). \
              Preencha manualmente após a sincronização.",
@@ -247,7 +244,7 @@ impl SiorgSyncService {
             .get_unit_complete(siorg_code)
             .await
             .map_err(|e| SyncError::ApiError(format!("{:#}", e)))?
-            .ok_or_else(|| SyncError::NotFoundInSiorg(siorg_code))?;
+            .ok_or(SyncError::NotFoundInSiorg(siorg_code))?;
 
         self.upsert_unit(&siorg_unit).await
     }

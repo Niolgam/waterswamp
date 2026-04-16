@@ -1,4 +1,3 @@
-use domain::models::organizational::*;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 

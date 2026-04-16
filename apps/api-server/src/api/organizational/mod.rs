@@ -4,7 +4,7 @@ pub mod stats_handlers;
 pub mod sync_handlers;
 
 use crate::infra::state::AppState;
-use axum::{routing::{delete, get, post}, Router};
+use axum::{routing::{get, post}, Router};
 
 /// Creates the organizational router with all CRUD routes
 pub fn router() -> Router<AppState> {
