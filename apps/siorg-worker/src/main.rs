@@ -8,8 +8,8 @@ use domain::ports::{
 };
 use persistence::repositories::{
     organizational_repository::{
-        OrganizationRepository, OrganizationalUnitCategoryRepository,
-        OrganizationalUnitRepository, OrganizationalUnitTypeRepository, SystemSettingsRepository,
+        OrganizationRepository, OrganizationalUnitCategoryRepository, OrganizationalUnitRepository,
+        OrganizationalUnitTypeRepository, SystemSettingsRepository,
     },
     siorg_sync_repository::{SiorgHistoryRepository, SiorgSyncQueueRepository},
 };
@@ -37,8 +37,8 @@ async fn main() -> Result<()> {
 
     // Connect to database
     info!("🔌 Conectando ao banco de dados...");
-    let database_url = env::var("DATABASE_URL")
-        .context("DATABASE_URL deve estar definida no ambiente")?;
+    let database_url =
+        env::var("DATABASE_URL").context("DATABASE_URL deve estar definida no ambiente")?;
     let pool = PgPool::connect(&database_url)
         .await
         .context("Falha ao conectar ao banco de dados")?;
@@ -71,8 +71,7 @@ async fn main() -> Result<()> {
     let siorg_token = env::var("SIORG_API_TOKEN").ok();
 
     let siorg_client = Arc::new(
-        SiorgClient::new(siorg_base_url, siorg_token)
-            .expect("Failed to create SIORG client"),
+        SiorgClient::new(siorg_base_url, siorg_token).expect("Failed to create SIORG client"),
     );
 
     let sync_service = Arc::new(SiorgSyncService::new(
@@ -82,16 +81,12 @@ async fn main() -> Result<()> {
         category_repo,
         type_repo,
         settings_repo,
+        pool.clone(),
     ));
 
     // Create worker
     info!("⚙️  Criando worker...");
-    let worker = SiorgSyncWorkerCore::new(
-        config,
-        sync_queue_repo,
-        history_repo,
-        sync_service,
-    );
+    let worker = SiorgSyncWorkerCore::new(config, sync_queue_repo, history_repo, sync_service);
 
     info!("✨ Worker inicializado com sucesso!");
     info!("🔄 Iniciando processamento...");

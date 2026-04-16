@@ -1,13 +1,29 @@
-use domain::models::organizational::*;
 use domain::errors::RepositoryError;
+use domain::models::{
+    ActivityArea, ContactInfo, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
+    CreateOrganizationalUnitPayload, CreateOrganizationalUnitTypePayload,
+    CreateSystemSettingPayload, InternalUnitType, OrganizationDto, OrganizationalUnitCategoryDto,
+    OrganizationalUnitDto, OrganizationalUnitTreeNode, OrganizationalUnitTypeDto,
+    OrganizationalUnitWithDetailsDto, SiorgUpsertPayload, SystemSettingDto,
+    UpdateOrganizationPayload, UpdateOrganizationalUnitCategoryPayload,
+    UpdateOrganizationalUnitPayload, UpdateOrganizationalUnitTypePayload,
+    UpdateSystemSettingPayload,
+};
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
     SystemSettingsRepositoryPort,
 };
 use sqlx::{PgPool, Row};
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
+
+#[derive(sqlx::FromRow)]
+struct SiorgMapRow {
+    siorg_code: Option<i32>,
+    id: Uuid,
+}
 
 // ============================================================================
 // System Settings Repository
@@ -39,7 +55,7 @@ impl SystemSettingsRepositoryPort for SystemSettingsRepository {
                 updated_by
             FROM system_settings
             WHERE key = $1
-            "#
+            "#,
         )
         .bind(key)
         .fetch_optional(&*self.pool)
@@ -70,7 +86,7 @@ impl SystemSettingsRepositoryPort for SystemSettingsRepository {
             WHERE ($1::TEXT IS NULL OR category = $1)
             ORDER BY category, key
             LIMIT $2 OFFSET $3
-            "#
+            "#,
         )
         .bind(category)
         .bind(limit)
@@ -83,7 +99,7 @@ impl SystemSettingsRepositoryPort for SystemSettingsRepository {
             r#"
             SELECT COUNT(*) FROM system_settings
             WHERE ($1::TEXT IS NULL OR category = $1)
-            "#
+            "#,
         )
         .bind(category)
         .fetch_one(&*self.pool)
@@ -152,7 +168,7 @@ impl SystemSettingsRepositoryPort for SystemSettingsRepository {
 
     async fn delete(&self, key: &str) -> Result<(), RepositoryError> {
         let result = sqlx::query("DELETE FROM system_settings WHERE key = $1")
-        .bind(key)
+            .bind(key)
             .execute(&*self.pool)
             .await
             .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -191,7 +207,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
                 created_at, updated_at
             FROM organizations
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .fetch_optional(&*self.pool)
@@ -211,7 +227,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
                 created_at, updated_at
             FROM organizations
             WHERE cnpj = $1
-            "#
+            "#,
         )
         .bind(cnpj)
         .fetch_optional(&*self.pool)
@@ -234,7 +250,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
                 created_at, updated_at
             FROM organizations
             WHERE siorg_code = $1
-            "#
+            "#,
         )
         .bind(siorg_code)
         .fetch_optional(&*self.pool)
@@ -255,7 +271,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
             FROM organizations
             WHERE is_main = TRUE
             LIMIT 1
-            "#
+            "#,
         )
         .fetch_optional(&*self.pool)
         .await
@@ -281,7 +297,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
             WHERE ($1::BOOLEAN IS NULL OR is_active = $1)
             ORDER BY is_main DESC, name
             LIMIT $2 OFFSET $3
-            "#
+            "#,
         )
         .bind(is_active)
         .bind(limit)
@@ -295,7 +311,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
             SELECT COUNT(*)::BIGINT as "count!"
             FROM organizations
             WHERE ($1::BOOLEAN IS NULL OR is_active = $1)
-            "#
+            "#,
         )
         .bind(is_active)
         .fetch_one(&*self.pool)
@@ -322,7 +338,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
                 address, city, state, zip_code, phone, email, website, logo_url,
                 is_main, is_active, siorg_synced_at, siorg_raw_data,
                 created_at, updated_at
-            "#
+            "#,
         )
         .bind(payload.acronym)
         .bind(payload.name)
@@ -372,7 +388,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
                 address, city, state, zip_code, phone, email, website, logo_url,
                 is_main, is_active, siorg_synced_at, siorg_raw_data,
                 created_at, updated_at
-            "#
+            "#,
         )
         .bind(id)
         .bind(payload.acronym)
@@ -395,7 +411,7 @@ impl OrganizationRepositoryPort for OrganizationRepository {
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         let result = sqlx::query("DELETE FROM organizations WHERE id = $1")
-        .bind(id)
+            .bind(id)
             .execute(&*self.pool)
             .await
             .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -436,7 +452,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
                 siorg_sync_status, siorg_raw_data, created_at, updated_at
             FROM organizational_unit_categories
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .fetch_optional(&*self.pool)
@@ -459,7 +475,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_categories
             WHERE name = $1
-            "#
+            "#,
         )
         .bind(name)
         .fetch_optional(&*self.pool)
@@ -482,7 +498,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_categories
             WHERE siorg_code = $1
-            "#
+            "#,
         )
         .bind(siorg_code)
         .fetch_optional(&*self.pool)
@@ -511,7 +527,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
               AND ($2::BOOLEAN IS NULL OR is_siorg_managed = $2)
             ORDER BY display_order, name
             LIMIT $3 OFFSET $4
-            "#
+            "#,
         )
         .bind(is_active)
         .bind(is_siorg_managed)
@@ -527,7 +543,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
             FROM organizational_unit_categories
             WHERE ($1::BOOLEAN IS NULL OR is_active = $1)
               AND ($2::BOOLEAN IS NULL OR is_siorg_managed = $2)
-            "#
+            "#,
         )
         .bind(is_active)
         .bind(is_siorg_managed)
@@ -553,7 +569,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
                 display_order, is_active, siorg_synced_at,
                 siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
-            "#
+            "#,
         )
         .bind(payload.name)
         .bind(payload.description)
@@ -587,7 +603,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
                 display_order, is_active, siorg_synced_at,
                 siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
-            "#
+            "#,
         )
         .bind(id)
         .bind(payload.name)
@@ -603,7 +619,7 @@ impl OrganizationalUnitCategoryRepositoryPort for OrganizationalUnitCategoryRepo
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         let result = sqlx::query("DELETE FROM organizational_unit_categories WHERE id = $1")
-        .bind(id)
+            .bind(id)
             .execute(&*self.pool)
             .await
             .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -645,7 +661,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_types
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .fetch_optional(&*self.pool)
@@ -668,7 +684,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_types
             WHERE code = $1
-            "#
+            "#,
         )
         .bind(code)
         .fetch_optional(&*self.pool)
@@ -691,7 +707,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
                 siorg_raw_data, created_at, updated_at
             FROM organizational_unit_types
             WHERE siorg_code = $1
-            "#
+            "#,
         )
         .bind(siorg_code)
         .fetch_optional(&*self.pool)
@@ -720,7 +736,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
               AND ($2::BOOLEAN IS NULL OR is_siorg_managed = $2)
             ORDER BY name
             LIMIT $3 OFFSET $4
-            "#
+            "#,
         )
         .bind(is_active)
         .bind(is_siorg_managed)
@@ -736,7 +752,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
             FROM organizational_unit_types
             WHERE ($1::BOOLEAN IS NULL OR is_active = $1)
               AND ($2::BOOLEAN IS NULL OR is_siorg_managed = $2)
-            "#
+            "#,
         )
         .bind(is_active)
         .bind(is_siorg_managed)
@@ -762,7 +778,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
                 is_active, siorg_synced_at,
                 siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
-            "#
+            "#,
         )
         .bind(payload.code)
         .bind(payload.name)
@@ -795,7 +811,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
                 is_active, siorg_synced_at,
                 siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
-            "#
+            "#,
         )
         .bind(id)
         .bind(payload.name)
@@ -810,7 +826,7 @@ impl OrganizationalUnitTypeRepositoryPort for OrganizationalUnitTypeRepository {
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         let result = sqlx::query("DELETE FROM organizational_unit_types WHERE id = $1")
-        .bind(id)
+            .bind(id)
             .execute(&*self.pool)
             .await
             .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -854,10 +870,7 @@ impl OrganizationalUnitRepository {
 
 #[async_trait::async_trait]
 impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
-    async fn find_by_id(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<OrganizationalUnitDto>, RepositoryError> {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<OrganizationalUnitDto>, RepositoryError> {
         let result = sqlx::query_as::<_, OrganizationalUnitDto>(
             r#"
             SELECT
@@ -872,7 +885,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
                 siorg_raw_data, created_at, updated_at
             FROM organizational_units
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .fetch_optional(&*self.pool)
@@ -971,7 +984,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
                 siorg_raw_data, created_at, updated_at
             FROM organizational_units
             WHERE siorg_code = $1
-            "#
+            "#,
         )
         .bind(siorg_code)
         .fetch_optional(&*self.pool)
@@ -1136,7 +1149,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             FROM organizational_units
             WHERE ($1::UUID IS NULL OR organization_id = $1)
             ORDER BY level, name
-            "#
+            "#,
         )
         .bind(organization_id)
         .fetch_all(&*self.pool)
@@ -1186,7 +1199,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             FROM organizational_units
             WHERE parent_id = $1
             ORDER BY name
-            "#
+            "#,
         )
         .bind(parent_id)
         .fetch_all(&*self.pool)
@@ -1197,13 +1210,12 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
     }
 
     async fn has_children(&self, id: Uuid) -> Result<bool, RepositoryError> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM organizational_units WHERE parent_id = $1"
-        )
-        .bind(id)
-        .fetch_one(&*self.pool)
-        .await
-        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM organizational_units WHERE parent_id = $1")
+                .bind(id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         Ok(count > 0)
     }
@@ -1250,7 +1262,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
                 level, path_ids, path_names, is_active, deactivated_at, deactivation_reason,
                 siorg_synced_at, siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
-            "#
+            "#,
         )
         .bind(payload.organization_id)
         .bind(payload.parent_id)
@@ -1276,7 +1288,10 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         id: Uuid,
         payload: UpdateOrganizationalUnitPayload,
     ) -> Result<OrganizationalUnitDto, RepositoryError> {
-        let contact_info_json = payload.contact_info.as_ref().map(|c| serde_json::to_value(c).unwrap());
+        let contact_info_json = payload
+            .contact_info
+            .as_ref()
+            .map(|c| serde_json::to_value(c).unwrap());
 
         let result = sqlx::query_as::<_, OrganizationalUnitDto>(
             r#"
@@ -1305,7 +1320,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
                 level, path_ids, path_names, is_active, deactivated_at, deactivation_reason,
                 siorg_synced_at, siorg_sync_status,
                 siorg_raw_data, created_at, updated_at
-            "#
+            "#,
         )
         .bind(id)
         .bind(payload.parent_id)
@@ -1328,7 +1343,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
 
     async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
         let result = sqlx::query("DELETE FROM organizational_units WHERE id = $1")
-        .bind(id)
+            .bind(id)
             .execute(&*self.pool)
             .await
             .map_err(|e| RepositoryError::Database(e.to_string()))?;
@@ -1346,7 +1361,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             UPDATE organizational_units
             SET is_active = FALSE, deactivated_at = NOW(), deactivation_reason = $2
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .bind(reason)
@@ -1367,7 +1382,7 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             UPDATE organizational_units
             SET is_active = TRUE, deactivated_at = NULL, deactivation_reason = NULL
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .execute(&*self.pool)
@@ -1379,5 +1394,69 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         }
 
         Ok(())
+    }
+
+    async fn get_siorg_map_by_org(
+        &self,
+        organization_id: Uuid,
+    ) -> Result<HashMap<i32, Uuid>, RepositoryError> {
+        let rows = sqlx::query_as::<_, SiorgMapRow>(
+            r#"
+            SELECT siorg_code, id 
+            FROM organizational_units 
+            WHERE organization_id = $1 AND siorg_code IS NOT NULL
+            "#,
+        )
+        .bind(organization_id)
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+
+        // Converte o vetor de rows no HashMap final
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| r.siorg_code.map(|code| (code, r.id)))
+            .collect())
+    }
+
+    async fn upsert_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        p: SiorgUpsertPayload,
+    ) -> Result<OrganizationalUnitDto, RepositoryError> {
+        let result = sqlx::query_as::<_, OrganizationalUnitDto>(
+            r#"
+            INSERT INTO organizational_units (
+                organization_id, parent_id, category_id, unit_type_id, internal_type,
+                name, acronym, siorg_code, activity_area, is_active, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+            ON CONFLICT (siorg_code) 
+            DO UPDATE SET 
+                parent_id = EXCLUDED.parent_id,
+                category_id = EXCLUDED.category_id,
+                unit_type_id = EXCLUDED.unit_type_id,
+                name = EXCLUDED.name,
+                acronym = EXCLUDED.acronym,
+                is_active = EXCLUDED.is_active,
+                updated_at = NOW()
+            RETURNING *
+            "#,
+        )
+        .bind(p.organization_id)
+        .bind(p.parent_id)
+        .bind(p.category_id)
+        .bind(p.unit_type_id)
+        .bind(p.internal_type)
+        .bind(p.name)
+        .bind(p.acronym)
+        .bind(p.siorg_code)
+        .bind(p.activity_area)
+        .bind(p.is_active)
+        .fetch_one(&mut **tx) // Executa dentro da transação
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+
+        Ok(result)
     }
 }
