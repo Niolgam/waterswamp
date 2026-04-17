@@ -37,7 +37,7 @@ pub async fn list_logs(
     State(state): State<AppState>,
     Query(filter): Query<AuditLogFilter>,
 ) -> Result<Json<AuditLogListResponse>, AppError> {
-    let limit = filter.limit.unwrap_or(20).max(1).min(100);
+    let limit = filter.limit.unwrap_or(20).clamp(1, 100);
 
     // Tests use 'offset' directly, but we support 'page' for convenience.
     let offset = if let Some(o) = filter.offset {

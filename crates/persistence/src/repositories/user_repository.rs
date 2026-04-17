@@ -82,9 +82,9 @@ impl UserRepository {
     fn to_user_dto(&self, row: RawUserRow) -> Result<UserDto, RepositoryError> {
         let email_plain = self.decrypt_email(&row.email)?;
         let email = Email::try_from(email_plain)
-            .map_err(|e| RepositoryError::InvalidData(e))?;
+            .map_err(RepositoryError::InvalidData)?;
         let username = Username::try_from(row.username)
-            .map_err(|e| RepositoryError::InvalidData(e))?;
+            .map_err(RepositoryError::InvalidData)?;
         Ok(UserDto {
             id: row.id,
             username,
@@ -97,9 +97,9 @@ impl UserRepository {
     fn to_user_dto_extended(&self, row: RawUserExtendedRow) -> Result<UserDtoExtended, RepositoryError> {
         let email_plain = self.decrypt_email(&row.email)?;
         let email = Email::try_from(email_plain)
-            .map_err(|e| RepositoryError::InvalidData(e))?;
+            .map_err(RepositoryError::InvalidData)?;
         let username = Username::try_from(row.username)
-            .map_err(|e| RepositoryError::InvalidData(e))?;
+            .map_err(RepositoryError::InvalidData)?;
         Ok(UserDtoExtended {
             id: row.id,
             username,

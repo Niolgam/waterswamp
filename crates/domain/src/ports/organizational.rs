@@ -164,6 +164,7 @@ pub trait OrganizationalUnitTypeRepositoryPort: Send + Sync {
 // Organizational Unit Repository Port
 // ============================================================================
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait OrganizationalUnitRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<OrganizationalUnitDto>, RepositoryError>;

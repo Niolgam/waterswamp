@@ -181,7 +181,7 @@ impl BudgetClassificationsService {
         &self,
         level: i32,
     ) -> Result<Vec<BudgetClassificationDto>, ServiceError> {
-        if level < 1 || level > 5 {
+        if !(1..=5).contains(&level) {
             return Err(ServiceError::BadRequest(
                 "Level must be between 1 and 5".to_string(),
             ));

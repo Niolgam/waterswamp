@@ -123,10 +123,9 @@ pub async fn get_detailed_stats(
     }
 
     let oldest_conflict_age_hours = conflict_items.first().map(|item| {
-        let age = chrono::Utc::now()
+        chrono::Utc::now()
             .signed_duration_since(item.created_at)
-            .num_hours() as f64;
-        age
+            .num_hours() as f64
     });
 
     // Get history statistics

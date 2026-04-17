@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use chrono::NaiveDate;
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait DriverRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<DriverDto>, RepositoryError>;

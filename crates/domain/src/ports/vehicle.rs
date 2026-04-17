@@ -39,6 +39,7 @@ pub trait VehicleMakeRepositoryPort: Send + Sync {
 // Vehicle Model Repository Port
 // ============================
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait VehicleModelRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<VehicleModelDto>, RepositoryError>;
@@ -135,6 +136,8 @@ pub trait VehicleTransmissionTypeRepositoryPort: Send + Sync {
 // Vehicle Repository Port
 // ============================
 
+#[allow(clippy::too_many_arguments)]
+
 #[async_trait]
 pub trait VehicleRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<VehicleDto>, RepositoryError>;
@@ -227,6 +230,7 @@ pub trait VehicleRepositoryPort: Send + Sync {
 // Vehicle Document Repository Port
 // ============================
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait VehicleDocumentRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<VehicleDocumentDto>, RepositoryError>;

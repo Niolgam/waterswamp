@@ -24,6 +24,7 @@ impl AuditService {
     }
 
     /// Logs a generic audit event.
+    #[allow(clippy::too_many_arguments)]
     pub async fn log_event(
         &self,
         user_id: Option<Uuid>,

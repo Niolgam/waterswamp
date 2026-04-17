@@ -140,6 +140,7 @@ pub trait CatmatPdmRepositoryPort: Send + Sync {
 // CATMAT Item Repository Port
 // ============================
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait CatmatItemRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatmatItemDto>, RepositoryError>;
@@ -258,6 +259,7 @@ pub trait CatserClassRepositoryPort: Send + Sync {
 // CATSER Item Repository Port
 // ============================
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait CatserItemRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<CatserItemDto>, RepositoryError>;

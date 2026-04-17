@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait InvoiceRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<InvoiceDto>, RepositoryError>;
@@ -110,6 +111,7 @@ pub trait InvoiceRepositoryPort: Send + Sync {
     ) -> Result<(Vec<InvoiceWithDetailsDto>, i64), RepositoryError>;
 }
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait InvoiceItemRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<InvoiceItemDto>, RepositoryError>;

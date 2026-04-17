@@ -17,6 +17,7 @@ impl<'a> AuditLogRepository<'a> {
     }
 
     /// Creates a new audit log entry.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         &self,
         user_id: Option<Uuid>,
@@ -77,6 +78,7 @@ impl<'a> AuditLogRepository<'a> {
     }
 
     /// Lists audit logs with filtering, pagination, and sorting.
+    #[allow(clippy::too_many_arguments)]
     pub async fn list(
         &self,
         limit: i64,
@@ -228,6 +230,7 @@ impl<'a> AuditLogRepository<'a> {
     }
 
     // Helper to execute the list query with all bindings
+    #[allow(clippy::too_many_arguments)]
     async fn execute_list_query(
         &self,
         query_str: &str,
@@ -279,6 +282,7 @@ impl<'a> AuditLogRepository<'a> {
     }
 
     // Helper to execute the count query with all bindings
+    #[allow(clippy::too_many_arguments)]
     async fn execute_count_query(
         &self,
         query_str: &str,

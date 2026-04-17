@@ -31,7 +31,6 @@ pub use mock::MockEmail;
 
 use anyhow::Context;
 use async_trait::async_trait;
-use htmlescape;
 use lettre::{
     message::header::ContentType,
     transport::smtp::{
@@ -41,7 +40,6 @@ use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use once_cell::sync::Lazy;
-use serde_json;
 use std::collections::HashMap;
 use tera::{Context as TeraContext, Tera, Value};
 
@@ -317,28 +315,27 @@ impl EmailSender for EmailService {
         self.send_raw(to, sub, tpl, ctx).await
     }
 
-    // Stub methods para cumprir a interface antiga se necessário,
-    // ou apenas use send_raw nos lugares antigos.
     fn send_welcome_email(&self, to: String, user: &str) {
-        // Redireciona para lógica nova convertendo tipos (cuidado com unwrap em prod)
-        // Isso é só para compatibilidade
         if let (Ok(e), Ok(u)) = (Email::try_from(to), Username::try_from(user)) {
-            let _ = EmailServicePort::send_welcome_email(self, &e, &u);
+            drop(EmailServicePort::send_welcome_email(self, &e, &u));
         }
     }
+
     fn send_password_reset_email(&self, to: String, user: &str, token: &str) {
         if let (Ok(e), Ok(u)) = (Email::try_from(to), Username::try_from(user)) {
-            let _ = EmailServicePort::send_password_reset_email(self, &e, &u, token);
+            drop(EmailServicePort::send_password_reset_email(self, &e, &u, token));
         }
     }
+
     fn send_verification_email(&self, to: String, user: &str, token: &str) {
         if let (Ok(e), Ok(u)) = (Email::try_from(to), Username::try_from(user)) {
-            let _ = EmailServicePort::send_verification_email(self, &e, &u, token);
+            drop(EmailServicePort::send_verification_email(self, &e, &u, token));
         }
     }
+
     fn send_mfa_enabled_email(&self, to: String, user: &str) {
         if let (Ok(e), Ok(u)) = (Email::try_from(to), Username::try_from(user)) {
-            let _ = EmailServicePort::send_mfa_enabled_email(self, &e, &u);
+            drop(EmailServicePort::send_mfa_enabled_email(self, &e, &u));
         }
     }
 }

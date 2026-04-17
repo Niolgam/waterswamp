@@ -21,6 +21,7 @@ pub struct CatalogService {
 }
 
 impl CatalogService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         unit_repo: Arc<dyn UnitOfMeasureRepositoryPort>,
         conversion_repo: Arc<dyn UnitConversionRepositoryPort>,

@@ -373,7 +373,7 @@ impl SiorgSyncQueueRepositoryPort for SiorgSyncQueueRepository {
     ) -> Result<(), RepositoryError> {
         // Check if max attempts reached
         let item = self.find_by_id(id).await?;
-        let item = item.ok_or_else(|| RepositoryError::NotFound)?;
+        let item = item.ok_or(RepositoryError::NotFound)?;
 
         let new_status = if item.attempts + 1 >= item.max_attempts {
             SyncStatus::Failed
