@@ -10,7 +10,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use domain::models::organizational::{ActivityArea, InternalUnitType};
+use domain::models::organizational::ActivityArea;
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
@@ -70,7 +70,6 @@ pub struct OrganizationalUnitsListQuery {
     pub category_id: Option<Uuid>,
     pub unit_type_id: Option<Uuid>,
     pub activity_area: Option<ActivityArea>,
-    pub internal_type: Option<InternalUnitType>,
     pub is_active: Option<bool>,
     pub is_siorg_managed: Option<bool>,
     pub search: Option<String>,
@@ -716,7 +715,6 @@ pub async fn create_organizational_unit(
         ("category_id" = Option<Uuid>, Query, description = "Filter by category"),
         ("unit_type_id" = Option<Uuid>, Query, description = "Filter by type"),
         ("activity_area" = Option<ActivityArea>, Query, description = "Filter by activity area"),
-        ("internal_type" = Option<InternalUnitType>, Query, description = "Filter by internal type"),
         ("is_active" = Option<bool>, Query, description = "Filter by active status"),
         ("is_siorg_managed" = Option<bool>, Query, description = "Filter by SIORG management"),
         ("search" = Option<String>, Query, description = "Search by name"),
@@ -741,7 +739,6 @@ pub async fn list_organizational_units(
             query.category_id,
             query.unit_type_id,
             query.activity_area,
-            query.internal_type,
             query.is_active,
             query.is_siorg_managed,
             query.search.as_deref(),

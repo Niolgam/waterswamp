@@ -5,7 +5,7 @@ use utoipa::ToSchema;
 pub use domain::models::organizational::{
     ActivityArea, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
     CreateOrganizationalUnitPayload, CreateOrganizationalUnitTypePayload,
-    CreateSystemSettingPayload, InternalUnitType, OrganizationDto, OrganizationalUnitCategoryDto,
+    CreateSystemSettingPayload, OrganizationDto, OrganizationalUnitCategoryDto,
     OrganizationalUnitDto, OrganizationalUnitTreeNode, OrganizationalUnitTypeDto,
     OrganizationalUnitWithDetailsDto, SystemSettingDto, UpdateOrganizationPayload,
     UpdateOrganizationalUnitCategoryPayload, UpdateOrganizationalUnitPayload,

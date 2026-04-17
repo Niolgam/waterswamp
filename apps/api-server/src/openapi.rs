@@ -350,7 +350,6 @@ use utoipa::OpenApi;
 
             // Organization - Domain Models
             domain::models::organizational::ActivityArea,
-            domain::models::organizational::InternalUnitType,
             domain::models::organizational::ContactInfo,
             domain::models::organizational::SystemSettingDto,
             domain::models::organizational::CreateSystemSettingPayload,

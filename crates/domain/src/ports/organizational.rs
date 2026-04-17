@@ -186,7 +186,6 @@ pub trait OrganizationalUnitRepositoryPort: Send + Sync {
         category_id: Option<Uuid>,
         unit_type_id: Option<Uuid>,
         activity_area: Option<ActivityArea>,
-        internal_type: Option<InternalUnitType>,
         is_active: Option<bool>,
         is_siorg_managed: Option<bool>,
         search: Option<&str>,
