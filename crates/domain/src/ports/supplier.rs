@@ -3,6 +3,7 @@ use crate::models::supplier::*;
 use async_trait::async_trait;
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait SupplierRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<SupplierDto>, RepositoryError>;

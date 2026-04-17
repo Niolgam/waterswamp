@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait FuelingRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<FuelingDto>, RepositoryError>;

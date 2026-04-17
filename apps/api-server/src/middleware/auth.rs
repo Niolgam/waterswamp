@@ -13,36 +13,6 @@ use domain::ports::SessionRepositoryPort;
 use persistence::repositories::session_repository::SessionRepository;
 use tower_cookies::Cookies;
 
-pub async fn mw_authenticate(
-    State(state): State<AppState>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response, AppError> {
-    let token = extract_token(req.headers())
-        .ok_or_else(|| AppError::Unauthorized("Token not found".to_string()))?;
-
-    // Verify token using JwtService (supports key rotation)
-    let claims = state
-        .jwt_service
-        .verify_token(&token, TokenType::Access)
-        .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))?;
-
-    let user_id = claims.sub;
-    // Username já está disponível no JWT - não precisa query no banco! (N+1 fix)
-    let username = claims.username.clone();
-
-    let current_user = CurrentUser {
-        id: user_id,
-        username,
-    };
-
-    // Injeta os claims e o usuário atual na requisição
-    req.extensions_mut().insert(claims);
-    req.extensions_mut().insert(current_user);
-
-    Ok(next.run(req).await)
-}
-
 fn extract_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get("Authorization")

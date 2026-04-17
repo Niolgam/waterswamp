@@ -334,6 +334,7 @@ impl VehicleFineService {
             .ok_or(ServiceError::Internal("Falha ao buscar multa restaurada".to_string()))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_fines(
         &self,
         limit: i64,

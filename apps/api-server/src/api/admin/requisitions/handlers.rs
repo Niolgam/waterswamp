@@ -65,7 +65,7 @@ pub async fn list_requisitions(
     _user: CurrentUser,
     Query(query): Query<RequisitionListQuery>,
 ) -> Result<Json<RequisitionListResponse>, AppError> {
-    let limit = query.limit.unwrap_or(20).min(100).max(1);
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
     let offset = query.offset.unwrap_or(0).max(0);
 
     let (requisitions, total) = state

@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait WarehouseRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<WarehouseDto>, RepositoryError>;
@@ -63,6 +64,7 @@ pub trait WarehouseRepositoryPort: Send + Sync {
     ) -> Result<(Vec<WarehouseWithDetailsDto>, i64), RepositoryError>;
 }
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait WarehouseStockRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<WarehouseStockDto>, RepositoryError>;

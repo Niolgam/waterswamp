@@ -38,7 +38,7 @@ pub async fn shutdown_signal_with_timeout(timeout_secs: u64) {
 
     let shutdown = shutdown_signal();
 
-    if let Err(_) = timeout(Duration::from_secs(timeout_secs), shutdown).await {
+    if timeout(Duration::from_secs(timeout_secs), shutdown).await.is_err() {
         tracing::warn!(
             "⏱️ Timeout de {} segundos atingido, forçando shutdown...",
             timeout_secs

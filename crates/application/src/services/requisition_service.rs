@@ -296,6 +296,7 @@ impl RequisitionService {
         // Release active stock reservations
         #[derive(sqlx::FromRow)]
         struct ReservationRow {
+            #[allow(dead_code)]
             id: Uuid,
             catalog_item_id: Uuid,
             quantity: Decimal,

@@ -90,6 +90,7 @@ pub struct ProcessMovementInput {
 // ============================================================================
 
 pub struct StockMovementService {
+    #[allow(dead_code)]
     pool: PgPool,
 }
 
@@ -356,6 +357,7 @@ impl StockMovementService {
             conversion_factor: Decimal,
             quantity_base: Decimal,
             unit_value_base: Decimal,
+            #[allow(dead_code)]
             total_value: Decimal,
             batch_number: Option<String>,
             expiration_date: Option<NaiveDate>,
@@ -456,9 +458,9 @@ impl StockMovementService {
                     requisition_id: None,
                     requisition_item_id: None,
                     document_number: Some(format!("ESTORNO NF {}", invoice_number)),
-                    notes: Some(format!(
-                        "Estorno automático — NF revertida de POSTED para CANCELLED"
-                    )),
+                    notes: Some(
+                        "Estorno automático — NF revertida de POSTED para CANCELLED".to_string(),
+                    ),
                     user_id,
                     batch_number: mv.batch_number,
                     expiration_date: mv.expiration_date,
@@ -472,6 +474,7 @@ impl StockMovementService {
 
     /// Gera movimentações ADJUSTMENT_SUB para itens de ajuste (glosa).
     /// Chamado por InvoiceAdjustmentService dentro de uma transação.
+    #[allow(clippy::too_many_arguments)]
     pub async fn process_adjustment_sub(
         &self,
         tx: &mut Transaction<'_, Postgres>,

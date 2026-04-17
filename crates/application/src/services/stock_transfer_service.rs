@@ -1,13 +1,13 @@
-/// StockTransferService — RF-018: Transferência entre Almoxarifados
-///
-/// Implements a two-step transfer flow with pessimistic locking (RN-011):
-///   1. `initiate_transfer()` — source warehouse manager starts the transfer,
-///      generating a TRANSFER_OUT movement and reserving stock.
-///   2. `confirm_transfer()` — destination manager confirms receipt,
-///      generating a TRANSFER_IN movement atomically.
-///   3. `reject_transfer()` — destination rejects; source reservation is released
-///      via a compensatory TRANSFER_IN (returns the stock).
-///   4. `cancel_transfer()` — source cancels before confirmation.
+//! StockTransferService — RF-018: Transferência entre Almoxarifados
+//!
+//! Implements a two-step transfer flow with pessimistic locking (RN-011):
+//!   1. `initiate_transfer()` — source warehouse manager starts the transfer,
+//!      generating a TRANSFER_OUT movement and reserving stock.
+//!   2. `confirm_transfer()` — destination manager confirms receipt,
+//!      generating a TRANSFER_IN movement atomically.
+//!   3. `reject_transfer()` — destination rejects; source reservation is released
+//!      via a compensatory TRANSFER_IN (returns the stock).
+//!   4. `cancel_transfer()` — source cancels before confirmation.
 
 use crate::errors::ServiceError;
 use crate::services::stock_movement_service::{ProcessMovementInput, StockMovementService, StockMovementType};

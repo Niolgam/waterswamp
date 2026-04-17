@@ -295,7 +295,7 @@ pub struct UpdateOrganizationalUnitTypePayload {
 // Organizational Unit
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct ContactInfo {
     #[serde(default)]
     pub phones: Vec<String>,
@@ -395,17 +395,6 @@ pub struct UpdateOrganizationalUnitPayload {
 
 fn default_true() -> bool {
     true
-}
-
-impl Default for ContactInfo {
-    fn default() -> Self {
-        Self {
-            phones: Vec::new(),
-            emails: Vec::new(),
-            websites: Vec::new(),
-            address: None,
-        }
-    }
 }
 
 // ============================================================================

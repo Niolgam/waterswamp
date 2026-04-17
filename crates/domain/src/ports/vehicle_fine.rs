@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait VehicleFineTypeRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<VehicleFineTypeDto>, RepositoryError>;
@@ -41,6 +42,7 @@ pub trait VehicleFineTypeRepositoryPort: Send + Sync {
     ) -> Result<(Vec<VehicleFineTypeDto>, i64), RepositoryError>;
 }
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait VehicleFineRepositoryPort: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<VehicleFineDto>, RepositoryError>;

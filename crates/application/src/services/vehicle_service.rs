@@ -100,6 +100,7 @@ pub struct VehicleService {
 }
 
 impl VehicleService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         vehicle_repo: Arc<dyn VehicleRepositoryPort>,
         category_repo: Arc<dyn VehicleCategoryRepositoryPort>,
@@ -627,6 +628,7 @@ impl VehicleService {
         self.get_vehicle(id).await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn list_vehicles(
         &self,
         limit: i64,
@@ -659,6 +661,7 @@ impl VehicleService {
     // Vehicle Document Operations
     // ============================
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_vehicle_document(
         &self,
         vehicle_id: Uuid,

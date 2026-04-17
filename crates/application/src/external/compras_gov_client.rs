@@ -37,7 +37,7 @@ fn extract_host(url: &str) -> Option<&str> {
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
     let end = rest
-        .find(|c| c == '/' || c == ':' || c == '?' || c == '#')
+        .find(['/', ':', '?', '#'])
         .unwrap_or(rest.len());
     let host = &rest[..end];
     if host.is_empty() { None } else { Some(host) }
