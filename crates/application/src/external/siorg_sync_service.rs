@@ -751,20 +751,29 @@ impl SiorgSyncService {
 
             let unit_type_id = *types_cache.get(tipo_ref).unwrap();
             let category_id = *cats_cache.get(cat_ref).unwrap();
+            let contact_info = self.map_contact(&siorg_unit);
 
             let payload = SiorgUpsertPayload {
                 organization_id: org_id,
                 parent_id: siorg_unit
                     .parent_siorg_code()
                     .and_then(|c| id_lookup.get(&c).cloned()),
-                category_id,  // <--- Agora usa a categoria real do SIORG!
-                unit_type_id, // <--- Agora usa o tipo real do SIORG!
-                internal_type: self.map_internal_type(&siorg_unit.base.codigo_tipo_unidade), // O Enum continua heurístico
+                category_id,
+                unit_type_id,
+                internal_type: self.map_internal_type(&siorg_unit.base.codigo_tipo_unidade),
                 name: siorg_unit.base.nome.clone(),
+                formal_name: Some(siorg_unit.base.nome.clone()), // SIORG costuma usar o mesmo
                 acronym: siorg_unit.base.sigla.clone(),
                 siorg_code,
+                siorg_parent_code: siorg_unit.parent_siorg_code(),
+                siorg_url: Some(format!(
+                    "https://servicos.siorg.paineis.gestao.gov.br/api/v1/unidade/{}",
+                    siorg_code
+                )),
+                siorg_last_version: None, // Pode vir da resposta da API de versão
+                contact_info,
                 activity_area: match siorg_unit.area_atuacao.as_deref() {
-                    Some("FIM") | Some("CORE") => ActivityArea::Core,
+                    Some("FIM") => ActivityArea::Core,
                     _ => ActivityArea::Support,
                 },
                 is_active: !siorg_unit.base.is_exclusao(),
@@ -860,73 +869,45 @@ impl SiorgSyncService {
     // Helpers
     // ========================================================================
 
-    async fn find_or_create_category(
-        &self,
-        name: &str,
-    ) -> Result<OrganizationalUnitCategoryDto, SyncError> {
-        // Direct lookup by name — avoids the limit-10 list pagination issue
-        if let Some(category) = self
-            .category_repo
-            .find_by_name(name)
-            .await
-            .map_err(|e| SyncError::DatabaseError(e.to_string()))?
-        {
-            return Ok(category);
-        }
-
-        let payload = CreateOrganizationalUnitCategoryPayload {
-            name: name.to_string(),
-            description: Some("Auto-created from SIORG sync".to_string()),
-            siorg_code: None,
-            display_order: 0,
-            is_active: true,
-        };
-
-        match self.category_repo.create(payload).await {
-            Ok(category) => Ok(category),
-            Err(e) => {
-                // Unique constraint violation: was created between our find and create.
-                // Retry the lookup.
-                let err_str = e.to_string();
-                if err_str.contains("unicidade")
-                    || err_str.contains("unique")
-                    || err_str.contains("duplicate")
-                {
-                    self.category_repo
-                        .find_by_name(name)
-                        .await
-                        .map_err(|e2| SyncError::DatabaseError(e2.to_string()))?
-                        .ok_or_else(|| {
-                            SyncError::DatabaseError(format!(
-                                "Category '{}' unique violation but not found on retry: {}",
-                                name, err_str
-                            ))
-                        })
-                } else {
-                    Err(SyncError::DatabaseError(err_str))
-                }
-            }
-        }
-    }
-
     async fn find_or_create_type(
         &self,
-        code: &str,
+        id_or_uri: &str,
     ) -> Result<OrganizationalUnitTypeDto, SyncError> {
-        if let Some(unit_type) = self
+        // 1. Extrai o ID numérico da URI (ex: "https://.../1" -> 1)
+        let siorg_id: i32 = id_or_uri
+            .rsplit('/')
+            .next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        // 2. Tenta localizar pelo código SIORG (mais confiável que o código de string)
+        if let Some(u_type) = self
             .type_repo
-            .find_by_code(code)
+            .find_by_siorg_code(siorg_id)
             .await
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?
         {
-            return Ok(unit_type);
+            return Ok(u_type);
         }
 
+        // 3. Se não existe, busca o nome amigável na API para não salvar a URL no campo 'name'
+        // Se a busca falhar, usamos uma string formatada como fallback
+        let real_name = self
+            .siorg_client
+            .get_unit_type_metadata(id_or_uri)
+            .await
+            .unwrap_or_else(|_| format!("Tipo {}", siorg_id));
+
+        info!(
+            "Cadastrando novo tipo de unidade SIORG: {} (ID: {})",
+            real_name, siorg_id
+        );
+
         let payload = CreateOrganizationalUnitTypePayload {
-            code: code.to_string(),
-            name: code.to_string(),
-            description: Some("Auto-created from SIORG sync".to_string()),
-            siorg_code: None,
+            code: siorg_id.to_string(), // Usamos o ID como código estável
+            name: real_name,
+            description: Some("Importado automaticamente do SIORG".to_string()),
+            siorg_code: Some(siorg_id),
             is_active: true,
         };
 
@@ -936,12 +917,75 @@ impl SiorgSyncService {
             .map_err(|e| SyncError::DatabaseError(e.to_string()))
     }
 
-    /// Check SIORG API health
-    pub async fn check_health(&self) -> Result<bool, SyncError> {
-        self.siorg_client
-            .health_check()
+    async fn find_or_create_category(
+        &self,
+        id_or_uri: &str,
+    ) -> Result<OrganizationalUnitCategoryDto, SyncError> {
+        // Extrai o ID numérico da URL (ex: "63")
+        let siorg_id: i32 = id_or_uri
+            .rsplit('/')
+            .next()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        if let Some(cat) = self
+            .category_repo
+            .find_by_siorg_code(siorg_id)
             .await
-            .map_err(|e| SyncError::ApiError(format!("{:#}", e)))
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?
+        {
+            return Ok(cat);
+        }
+
+        let real_name = self
+            .siorg_client
+            .get_category_metadata(id_or_uri)
+            .await
+            .unwrap_or_else(|_| format!("Categoria {}", siorg_id));
+
+        self.category_repo
+            .create(CreateOrganizationalUnitCategoryPayload {
+                name: real_name,
+                siorg_code: Some(siorg_id),
+                description: Some("Importado do SIORG".to_string()),
+                display_order: 0,
+                is_active: true, // Preenchido explicitamente em vez do ..Default::default()
+            })
+            .await
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))
+    }
+
+    // Ajuste no mapeamento de contato (Agrega as listas da API)
+    fn map_contact(&self, siorg: &SiorgUnidadeCompleta) -> serde_json::Value {
+        let mut info = ContactInfo::default();
+
+        // 1. Processa Contatos (Corrigindo o erro de iteração do Option)
+        if let Some(contatos) = siorg.contato.as_deref() {
+            for c in contatos {
+                if let Some(tels) = &c.telefone {
+                    info.phones.extend(tels.clone());
+                }
+                if let Some(emails) = &c.email {
+                    info.emails.extend(emails.clone());
+                }
+            }
+        }
+
+        // 2. Concatena endereço formatado
+        if let Some(ends) = siorg.endereco.as_deref() {
+            if let Some(e) = ends.first() {
+                info.address = Some(format!(
+                    "{}, {} - {}, {}",
+                    e.logradouro.as_deref().unwrap_or(""),
+                    e.numero.as_deref().unwrap_or("S/N"),
+                    e.bairro.as_deref().unwrap_or(""),
+                    e.municipio.as_deref().unwrap_or("")
+                ));
+            }
+        }
+
+        // 3. O Pulo do Gato: Transforma a struct em serde_json::Value
+        serde_json::to_value(info).unwrap_or(serde_json::json!({}))
     }
 }
 

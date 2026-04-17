@@ -10,9 +10,7 @@ use std::time::Duration;
 
 /// Deserializa `Option<Vec<String>>` onde cada elemento pode ser string ou inteiro.
 /// Usado para `telefone` e `email` em `SiorgContato` que às vezes vêm como inteiros.
-fn deserialize_opt_vec_strings<'de, D>(
-    d: D,
-) -> std::result::Result<Option<Vec<String>>, D::Error>
+fn deserialize_opt_vec_strings<'de, D>(d: D) -> std::result::Result<Option<Vec<String>>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -45,9 +43,7 @@ where
                     mut seq: A,
                 ) -> std::result::Result<Vec<String>, A::Error> {
                     let mut items = Vec::new();
-                    while let Some(val) =
-                        seq.next_element::<serde_json::Value>()?
-                    {
+                    while let Some(val) = seq.next_element::<serde_json::Value>()? {
                         let s = match val {
                             serde_json::Value::String(s) => s,
                             serde_json::Value::Number(n) => n.to_string(),
@@ -64,7 +60,6 @@ where
     }
     d.deserialize_option(OptVec)
 }
-
 
 fn deserialize_string_or_int<'de, D>(d: D) -> std::result::Result<String, D::Error>
 where
@@ -93,9 +88,7 @@ where
     d.deserialize_any(V)
 }
 
-fn deserialize_opt_string_or_int<'de, D>(
-    d: D,
-) -> std::result::Result<Option<String>, D::Error>
+fn deserialize_opt_string_or_int<'de, D>(d: D) -> std::result::Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -181,7 +174,11 @@ fn extract_host(url: &str) -> Option<&str> {
         .find(|c| c == '/' || c == ':' || c == '?' || c == '#')
         .unwrap_or(rest.len());
     let host = &rest[..end];
-    if host.is_empty() { None } else { Some(host) }
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
 }
 
 fn is_private_host(host: &str) -> bool {
@@ -256,7 +253,9 @@ impl SiorgUnidade {
 
     /// Converte `codigo_unidade_pai` para i32, suportando tanto inteiros quanto URIs.
     pub fn parent_siorg_code(&self) -> Option<i32> {
-        self.codigo_unidade_pai.as_ref().and_then(|s| Self::extract_id(s))
+        self.codigo_unidade_pai
+            .as_ref()
+            .and_then(|s| Self::extract_id(s))
     }
 
     /// Retorna true se a operação indicar extinção/remoção da unidade.
@@ -361,7 +360,10 @@ fn extract_units_from_value(
     let mut units = Vec::with_capacity(units_array.len());
     for (i, item) in units_array.into_iter().enumerate() {
         let unit: SiorgUnidadeCompleta = serde_json::from_value(item).with_context(|| {
-            format!("Failed to parse unit at index {}. Body: {}", i, body_preview)
+            format!(
+                "Failed to parse unit at index {}. Body: {}",
+                i, body_preview
+            )
         })?;
         units.push(unit);
     }
@@ -480,11 +482,11 @@ impl SiorgClient {
     /// A resposta contém a própria unidade solicitada como primeiro elemento (ou identificada
     /// pelo `codigoUnidade`) seguida de todas as unidades-filha na hierarquia.
     /// Retorna `None` se a unidade não existir (HTTP 404).
-    pub async fn get_unit_complete(
-        &self,
-        codigo: i32,
-    ) -> Result<Option<SiorgUnidadeCompleta>> {
-        let url = format!("{}/unidade-organizacional/{}/completa", self.base_url, codigo);
+    pub async fn get_unit_complete(&self, codigo: i32) -> Result<Option<SiorgUnidadeCompleta>> {
+        let url = format!(
+            "{}/unidade-organizacional/{}/completa",
+            self.base_url, codigo
+        );
 
         let response = self
             .client
@@ -509,7 +511,10 @@ impl SiorgClient {
         let preview: String = body.chars().take(2000).collect();
 
         let v: serde_json::Value = serde_json::from_str(&body).with_context(|| {
-            format!("Failed to parse SIORG unit response as JSON. Body: {}", preview)
+            format!(
+                "Failed to parse SIORG unit response as JSON. Body: {}",
+                preview
+            )
         })?;
 
         let units = extract_units_from_value(&v, &preview)?;
@@ -606,13 +611,12 @@ impl SiorgClient {
             .await
             .context("Failed to read SIORG changes response body")?;
 
-        let parsed = serde_json::from_str::<SiorgAlteracoesResponse>(&body)
-            .with_context(|| {
-                format!(
-                    "Failed to parse SIORG changes response. Body (first 500 chars): {}",
-                    body.chars().take(2000).collect::<String>()
-                )
-            })?;
+        let parsed = serde_json::from_str::<SiorgAlteracoesResponse>(&body).with_context(|| {
+            format!(
+                "Failed to parse SIORG changes response. Body (first 500 chars): {}",
+                body.chars().take(2000).collect::<String>()
+            )
+        })?;
 
         Ok(parsed.unidades)
     }
@@ -628,7 +632,10 @@ impl SiorgClient {
     /// Usado para verificar se há mudanças desde o último sync sem precisar
     /// baixar toda a estrutura. Se `versao_consulta` local == API, não há nada a fazer.
     pub async fn get_versao(&self, org_code: i32) -> Result<SiorgTipoVersao> {
-        let url = format!("{}/unidade-organizacional/{}/versao", self.base_url, org_code);
+        let url = format!(
+            "{}/unidade-organizacional/{}/versao",
+            self.base_url, org_code
+        );
 
         let response = self
             .client
@@ -648,7 +655,10 @@ impl SiorgClient {
 
         let preview: String = body.chars().take(2000).collect();
         let v: serde_json::Value = serde_json::from_str(&body).with_context(|| {
-            format!("Failed to parse SIORG version response as JSON. Body: {}", preview)
+            format!(
+                "Failed to parse SIORG version response as JSON. Body: {}",
+                preview
+            )
         })?;
 
         // The API may return either:
@@ -716,13 +726,12 @@ impl SiorgClient {
             .await
             .context("Failed to read SIORG changed units response body")?;
 
-        let parsed = serde_json::from_str::<SiorgAlteradasResponse>(&body)
-            .with_context(|| {
-                format!(
-                    "Failed to parse SIORG changed units response. Body (first 500 chars): {}",
-                    body.chars().take(2000).collect::<String>()
-                )
-            })?;
+        let parsed = serde_json::from_str::<SiorgAlteradasResponse>(&body).with_context(|| {
+            format!(
+                "Failed to parse SIORG changed units response. Body (first 500 chars): {}",
+                body.chars().take(2000).collect::<String>()
+            )
+        })?;
 
         Ok(parsed.unidades)
     }
@@ -745,6 +754,28 @@ impl SiorgClient {
 
         Ok(response.status().is_success())
     }
+
+    // Busca o nome legível de uma categoria pelo código/URI
+    pub async fn get_category_metadata(&self, id_or_uri: &str) -> Result<String> {
+        let id = id_or_uri.rsplit('/').next().unwrap_or(id_or_uri);
+        let url = format!("{}/categoria-unidade/{}", self.base_url, id);
+        let resp: serde_json::Value = self.client.get(&url).send().await?.json().await?;
+        Ok(resp["nome"]
+            .as_str()
+            .unwrap_or("Categoria Desconhecida")
+            .to_string())
+    }
+
+    // Busca o nome legível de um tipo de unidade
+    pub async fn get_unit_type_metadata(&self, id_or_uri: &str) -> Result<String> {
+        let id = id_or_uri.rsplit('/').next().unwrap_or(id_or_uri);
+        let url = format!("{}/tipo-unidade/{}", self.base_url, id);
+        let resp: serde_json::Value = self.client.get(&url).send().await?.json().await?;
+        Ok(resp["nome"]
+            .as_str()
+            .unwrap_or("Tipo Desconhecido")
+            .to_string())
+    }
 }
 
 // ============================================================================
@@ -760,10 +791,7 @@ impl MockSiorgClient {
         Self
     }
 
-    pub async fn get_unit_complete(
-        &self,
-        codigo: i32,
-    ) -> Result<Option<SiorgUnidadeCompleta>> {
+    pub async fn get_unit_complete(&self, codigo: i32) -> Result<Option<SiorgUnidadeCompleta>> {
         Ok(Some(SiorgUnidadeCompleta {
             base: SiorgUnidade {
                 codigo_unidade: codigo.to_string(),

@@ -1428,32 +1428,45 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             INSERT INTO organizational_units (
                 organization_id, parent_id, category_id, unit_type_id, internal_type,
-                name, acronym, siorg_code, activity_area, is_active, updated_at
+                name, formal_name, acronym, siorg_code, siorg_parent_code, 
+                siorg_url, siorg_last_version, contact_info, activity_area, is_active, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
             ON CONFLICT (siorg_code) 
             DO UPDATE SET 
                 parent_id = EXCLUDED.parent_id,
                 category_id = EXCLUDED.category_id,
                 unit_type_id = EXCLUDED.unit_type_id,
+                internal_type = EXCLUDED.internal_type,
                 name = EXCLUDED.name,
+                formal_name = EXCLUDED.formal_name,
                 acronym = EXCLUDED.acronym,
+                siorg_parent_code = EXCLUDED.siorg_parent_code,
+                siorg_url = EXCLUDED.siorg_url,
+                siorg_last_version = EXCLUDED.siorg_last_version,
+                contact_info = EXCLUDED.contact_info,
+                activity_area = EXCLUDED.activity_area,
                 is_active = EXCLUDED.is_active,
                 updated_at = NOW()
             RETURNING *
             "#,
         )
-        .bind(p.organization_id)
-        .bind(p.parent_id)
-        .bind(p.category_id)
-        .bind(p.unit_type_id)
-        .bind(p.internal_type)
-        .bind(p.name)
-        .bind(p.acronym)
-        .bind(p.siorg_code)
-        .bind(p.activity_area)
-        .bind(p.is_active)
-        .fetch_one(&mut **tx) // Executa dentro da transação
+        .bind(p.organization_id) // $1
+        .bind(p.parent_id) // $2
+        .bind(p.category_id) // $3
+        .bind(p.unit_type_id) // $4
+        .bind(p.internal_type) // $5
+        .bind(p.name) // $6
+        .bind(p.formal_name) // $7
+        .bind(p.acronym) // $8
+        .bind(p.siorg_code) // $9
+        .bind(p.siorg_parent_code) // $10
+        .bind(p.siorg_url) // $11
+        .bind(p.siorg_last_version) // $12
+        .bind(p.contact_info) // $13
+        .bind(p.activity_area) // $14
+        .bind(p.is_active) // $15
+        .fetch_one(&mut **tx)
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))?;
 

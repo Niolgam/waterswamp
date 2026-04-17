@@ -89,13 +89,18 @@ pub struct SyncSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SiorgUpsertPayload {
     pub organization_id: Uuid,
+    pub parent_id: Option<Uuid>,
     pub category_id: Uuid,
     pub unit_type_id: Uuid,
-    pub siorg_code: i32,
-    pub parent_id: Option<Uuid>,
-    pub name: String,
-    pub acronym: Option<String>,
     pub internal_type: InternalUnitType,
+    pub name: String,
+    pub formal_name: Option<String>,
+    pub acronym: Option<String>,
+    pub siorg_code: i32,
+    pub siorg_parent_code: Option<i32>,
+    pub siorg_url: Option<String>,
+    pub siorg_last_version: Option<String>,
+    pub contact_info: serde_json::Value,
     pub activity_area: ActivityArea,
     pub is_active: bool,
 }
