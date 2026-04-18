@@ -84,7 +84,9 @@ async fn create_test_warehouse(pool: &PgPool) -> Uuid {
     warehouse_id
 }
 
-/// Creates a test requisition directly in the database
+/// Creates a test requisition directly in the database.
+/// Automatically fills approved_by/approved_at for statuses that require it,
+/// and fulfilled_by/fulfilled_at for FULFILLED/PARTIALLY_FULFILLED.
 async fn create_test_requisition(
     pool: &PgPool,
     warehouse_id: Uuid,
@@ -93,15 +95,32 @@ async fn create_test_requisition(
 ) -> Uuid {
     let requisition_id = Uuid::new_v4();
     let requisition_number = format!("REQ{}", &requisition_id.to_string()[..12]);
-    let destination_unit_id = Uuid::new_v4(); // Required NOT NULL field
+    let destination_unit_id = Uuid::new_v4();
+
+    let needs_approval = matches!(
+        status,
+        "APPROVED" | "PROCESSING" | "FULFILLED" | "PARTIALLY_FULFILLED"
+    );
+    let needs_fulfillment = matches!(status, "FULFILLED" | "PARTIALLY_FULFILLED");
+
+    let approved_by: Option<Uuid> = if needs_approval { Some(requester_id) } else { None };
+    let fulfilled_by: Option<Uuid> = if needs_fulfillment { Some(requester_id) } else { None };
 
     sqlx::query(
         r#"
         INSERT INTO requisitions (
             id, requisition_number, warehouse_id, destination_unit_id, requester_id,
-            status, priority, request_date, created_at, updated_at
+            status, priority, request_date,
+            approved_by, approved_at,
+            fulfilled_by, fulfilled_at,
+            created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6::requisition_status_enum, 'NORMAL', CURRENT_DATE, NOW(), NOW())
+        VALUES (
+            $1, $2, $3, $4, $5, $6::requisition_status_enum, 'NORMAL', CURRENT_DATE,
+            $7, CASE WHEN $7::uuid IS NOT NULL THEN NOW() ELSE NULL END,
+            $8, CASE WHEN $8::uuid IS NOT NULL THEN NOW() ELSE NULL END,
+            NOW(), NOW()
+        )
         "#,
     )
     .bind(requisition_id)
@@ -110,6 +129,8 @@ async fn create_test_requisition(
     .bind(destination_unit_id)
     .bind(requester_id)
     .bind(status)
+    .bind(approved_by)
+    .bind(fulfilled_by)
     .execute(pool)
     .await
     .expect("Failed to create test requisition");
@@ -802,4 +823,457 @@ async fn test_add_item_requires_catalog_item_id() {
         "expected 400/422 got {}",
         response.status_code()
     );
+}
+
+// ============================================================================
+// START-PROCESSING / FULFILL HELPERS AND TESTS (RF-013, RF-014)
+// ============================================================================
+
+/// Inserts a requisition item and returns its ID.
+/// Also upserts a warehouse_stock row so unit_value lookup works.
+async fn add_requisition_item(
+    pool: &PgPool,
+    requisition_id: Uuid,
+    warehouse_id: Uuid,
+    catalog_item_id: Uuid,
+    requested_qty: f64,
+    approved_qty: Option<f64>,
+) -> Uuid {
+    sqlx::query(
+        "INSERT INTO warehouse_stocks
+         (warehouse_id, catalog_item_id, quantity, reserved_quantity, average_unit_value)
+         VALUES ($1, $2, 500.0, 0.0, 10.00)
+         ON CONFLICT (warehouse_id, catalog_item_id) DO UPDATE SET quantity = 500.0",
+    )
+    .bind(warehouse_id)
+    .bind(catalog_item_id)
+    .execute(pool)
+    .await
+    .expect("warehouse_stock upsert");
+
+    let item_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO requisition_items
+         (id, requisition_id, catalog_item_id, requested_quantity, approved_quantity, unit_value, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 10.00, NOW(), NOW())",
+    )
+    .bind(item_id)
+    .bind(requisition_id)
+    .bind(catalog_item_id)
+    .bind(requested_qty)
+    .bind(approved_qty)
+    .execute(pool)
+    .await
+    .expect("requisition_item insert");
+
+    item_id
+}
+
+#[tokio::test]
+async fn test_start_processing_approved_requisition() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "APPROVED").await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/start-processing", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "body: {}",
+        response.text()
+    );
+    let body: Value = response.json();
+    assert_eq!(body["status"].as_str().unwrap(), "Processing");
+}
+
+#[tokio::test]
+async fn test_start_processing_with_notes() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "APPROVED").await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/start-processing", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({ "notes": "Iniciando separação física dos itens" }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::OK);
+    let body: Value = response.json();
+    assert_eq!(body["status"].as_str().unwrap(), "Processing");
+}
+
+#[tokio::test]
+async fn test_start_processing_wrong_status_pending() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PENDING").await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/start-processing", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_start_processing_wrong_status_draft() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "DRAFT").await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/start-processing", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_start_processing_not_found() {
+    let app = common::spawn_app().await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/start-processing", Uuid::new_v4()))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_start_processing_requires_auth() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "APPROVED").await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/start-processing", req_id))
+        .json(&json!({}))
+        .await;
+
+    assert!(
+        response.status_code() == StatusCode::UNAUTHORIZED
+            || response.status_code() == StatusCode::FORBIDDEN
+    );
+}
+
+#[tokio::test]
+async fn test_fulfill_requisition_total() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PROCESSING").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+    let item_id = add_requisition_item(
+        &app.db_auth,
+        req_id,
+        warehouse_id,
+        catalog_item_id,
+        5.0,
+        Some(5.0),
+    )
+    .await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [
+                {
+                    "requisition_item_id": item_id,
+                    "fulfilled_quantity": "5.0000"
+                }
+            ]
+        }))
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "body: {}",
+        response.text()
+    );
+    let body: Value = response.json();
+    assert_eq!(body["status"].as_str().unwrap(), "Fulfilled");
+}
+
+#[tokio::test]
+async fn test_fulfill_requisition_partial_with_cut_reason() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PROCESSING").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+    let item_id = add_requisition_item(
+        &app.db_auth,
+        req_id,
+        warehouse_id,
+        catalog_item_id,
+        10.0,
+        Some(10.0),
+    )
+    .await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [
+                {
+                    "requisition_item_id": item_id,
+                    "fulfilled_quantity": "6.0000",
+                    "cut_reason": "Estoque insuficiente no momento do atendimento"
+                }
+            ]
+        }))
+        .await;
+
+    assert_eq!(
+        response.status_code(),
+        StatusCode::OK,
+        "body: {}",
+        response.text()
+    );
+    let body: Value = response.json();
+    assert_eq!(body["status"].as_str().unwrap(), "PartiallyFulfilled");
+}
+
+#[tokio::test]
+async fn test_fulfill_partial_without_cut_reason_fails() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PROCESSING").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+    let item_id = add_requisition_item(
+        &app.db_auth,
+        req_id,
+        warehouse_id,
+        catalog_item_id,
+        10.0,
+        Some(10.0),
+    )
+    .await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [
+                {
+                    "requisition_item_id": item_id,
+                    "fulfilled_quantity": "3.0000"
+                    // cut_reason missing
+                }
+            ]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_fulfill_partial_with_empty_cut_reason_fails() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PROCESSING").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+    let item_id = add_requisition_item(
+        &app.db_auth,
+        req_id,
+        warehouse_id,
+        catalog_item_id,
+        10.0,
+        Some(10.0),
+    )
+    .await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [
+                {
+                    "requisition_item_id": item_id,
+                    "fulfilled_quantity": "3.0000",
+                    "cut_reason": "   "
+                }
+            ]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_fulfill_wrong_status_approved() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "APPROVED").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+    let item_id =
+        add_requisition_item(&app.db_auth, req_id, warehouse_id, catalog_item_id, 2.0, Some(2.0))
+            .await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [{ "requisition_item_id": item_id, "fulfilled_quantity": "2.0000" }]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_fulfill_empty_items_list_fails() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PROCESSING").await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({ "items": [] }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_fulfill_not_found() {
+    let app = common::spawn_app().await;
+    let fake_item_id = Uuid::new_v4();
+
+    let response = app
+        .api
+        .post(&format!(
+            "/api/admin/requisitions/{}/fulfill",
+            Uuid::new_v4()
+        ))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [{ "requisition_item_id": fake_item_id, "fulfilled_quantity": "1.0" }]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_fulfill_exceeds_approved_quantity() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PROCESSING").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+    let item_id =
+        add_requisition_item(&app.db_auth, req_id, warehouse_id, catalog_item_id, 5.0, Some(5.0))
+            .await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [{ "requisition_item_id": item_id, "fulfilled_quantity": "10.0000" }]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_fulfill_zero_quantity_fails() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "PROCESSING").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+    let item_id =
+        add_requisition_item(&app.db_auth, req_id, warehouse_id, catalog_item_id, 5.0, Some(5.0))
+            .await;
+
+    let response = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [{ "requisition_item_id": item_id, "fulfilled_quantity": "0.0000" }]
+        }))
+        .await;
+
+    assert_eq!(response.status_code(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_full_approved_to_fulfilled_flow() {
+    let app = common::spawn_app().await;
+    let admin_id = get_admin_user_id(&app.db_auth).await;
+    let warehouse_id = create_test_warehouse(&app.db_auth).await;
+    let req_id = create_test_requisition(&app.db_auth, warehouse_id, admin_id, "APPROVED").await;
+    let catalog_item_id = create_test_catalog_item_for_req(&app.db_auth).await;
+    let item_id = add_requisition_item(
+        &app.db_auth,
+        req_id,
+        warehouse_id,
+        catalog_item_id,
+        3.0,
+        Some(3.0),
+    )
+    .await;
+
+    // Step 1: start-processing
+    let r1 = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/start-processing", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({}))
+        .await;
+    assert_eq!(r1.status_code(), StatusCode::OK, "body: {}", r1.text());
+    assert_eq!(r1.json::<Value>()["status"].as_str().unwrap(), "Processing");
+
+    // Step 2: fulfill totally
+    let r2 = app
+        .api
+        .post(&format!("/api/admin/requisitions/{}/fulfill", req_id))
+        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .json(&json!({
+            "items": [{ "requisition_item_id": item_id, "fulfilled_quantity": "3.0000" }]
+        }))
+        .await;
+    assert_eq!(r2.status_code(), StatusCode::OK, "body: {}", r2.text());
+    assert_eq!(r2.json::<Value>()["status"].as_str().unwrap(), "Fulfilled");
 }
