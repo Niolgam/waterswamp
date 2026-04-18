@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS organizational_units (
     -- Classification
     category_id UUID NOT NULL REFERENCES organizational_unit_categories(id) ON DELETE RESTRICT,
     unit_type_id UUID NOT NULL REFERENCES organizational_unit_types(id) ON DELETE RESTRICT,
+    internal_type internal_unit_type_enum NOT NULL DEFAULT 'SECTOR',
 
     -- Identification
     name VARCHAR(255) NOT NULL,
@@ -73,6 +74,7 @@ CREATE INDEX idx_org_units_active ON organizational_units(is_active) WHERE is_ac
 CREATE INDEX idx_org_units_path ON organizational_units USING GIN(path_ids);
 CREATE INDEX idx_org_units_sync_status ON organizational_units(siorg_sync_status)
     WHERE siorg_sync_status IN ('PENDING', 'CONFLICT');
+CREATE INDEX idx_org_units_internal_type ON organizational_units(internal_type);
 
 CREATE TRIGGER update_org_units_updated_at
     BEFORE UPDATE ON organizational_units
