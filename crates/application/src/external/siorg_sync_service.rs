@@ -1,10 +1,9 @@
 use super::siorg_client::{SiorgClient, SiorgUnidadeCompleta};
 pub use domain::models::{
     ActivityArea, ContactInfo, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
-    CreateOrganizationalUnitTypePayload, CreateSystemSettingPayload, InternalUnitType,
-    OrganizationDto, OrganizationalUnitCategoryDto, OrganizationalUnitDto,
-    OrganizationalUnitTypeDto, SiorgUpsertPayload, SyncSummary, UpdateOrganizationPayload,
-    UpdateSystemSettingPayload,
+    CreateOrganizationalUnitTypePayload, CreateSystemSettingPayload, OrganizationDto,
+    OrganizationalUnitCategoryDto, OrganizationalUnitDto, OrganizationalUnitTypeDto,
+    SiorgUpsertPayload, SyncSummary, UpdateOrganizationPayload, UpdateSystemSettingPayload,
 };
 use domain::ports::*;
 use std::collections::{hash_map::Entry, HashMap};
@@ -404,7 +403,6 @@ impl SiorgSyncService {
                 None,
                 None,
                 None,
-                None,
                 1,
                 0,
             )
@@ -575,7 +573,6 @@ impl SiorgSyncService {
                     .and_then(|c| id_lookup.get(&c).cloned()),
                 category_id,
                 unit_type_id,
-                internal_type: self.map_internal_type(&siorg_unit.base.codigo_tipo_unidade),
                 name: siorg_unit.base.nome.clone(),
                 formal_name: Some(siorg_unit.base.nome.clone()), // SIORG costuma usar o mesmo
                 acronym: siorg_unit.base.sigla.clone(),
@@ -616,14 +613,6 @@ impl SiorgSyncService {
         Ok(summary)
     }
 
-    fn map_internal_type(&self, code: &Option<String>) -> InternalUnitType {
-        match code.as_deref() {
-            Some("DEPARTMENT") => InternalUnitType::Department,
-            Some("LABORATORY") => InternalUnitType::Laboratory,
-            Some("COORDINATION") => InternalUnitType::Coordination,
-            _ => InternalUnitType::Sector,
-        }
-    }
     // ========================================================================
     // Version Storage (via SystemSettings)
     // ========================================================================

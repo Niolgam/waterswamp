@@ -40,11 +40,3 @@ CREATE TRIGGER update_org_unit_categories_updated_at
 
 COMMENT ON TABLE organizational_unit_categories IS 'Categorias de unidades conforme classificação SIORG (ex: Órgão Colegiado, Unidade Administrativa)';
 
--- Seed: Default SIORG categories
-INSERT INTO organizational_unit_categories (name, description, is_siorg_managed, display_order) VALUES
-('Órgão Colegiado', 'Conselhos e câmaras deliberativas', FALSE, 1),
-('Unidade Administrativa', 'Unidades de gestão e apoio', FALSE, 2),
-('Unidade Acadêmica', 'Institutos, faculdades e departamentos', FALSE, 3),
-('Unidade de Pesquisa', 'Centros e grupos de pesquisa', FALSE, 4),
-('Unidade de Extensão', 'Coordenações de extensão e cultura', FALSE, 5)
-ON CONFLICT (name) DO NOTHING;

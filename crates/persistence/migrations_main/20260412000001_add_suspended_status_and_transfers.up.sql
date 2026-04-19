@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS stock_transfer_items (
 -- 5. Trigger: atualizar updated_at em stock_transfers
 CREATE TRIGGER set_timestamp_stock_transfers
 BEFORE UPDATE ON stock_transfers
-FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- 6. Trigger: gerar transfer_number automaticamente
 CREATE OR REPLACE FUNCTION fn_generate_transfer_number()

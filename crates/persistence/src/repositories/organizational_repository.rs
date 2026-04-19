@@ -2,7 +2,7 @@ use domain::errors::RepositoryError;
 use domain::models::{
     ActivityArea, ContactInfo, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
     CreateOrganizationalUnitPayload, CreateOrganizationalUnitTypePayload,
-    CreateSystemSettingPayload, InternalUnitType, OrganizationDto, OrganizationalUnitCategoryDto,
+    CreateSystemSettingPayload, OrganizationDto, OrganizationalUnitCategoryDto,
     OrganizationalUnitDto, OrganizationalUnitTreeNode, OrganizationalUnitTypeDto,
     OrganizationalUnitWithDetailsDto, SiorgUpsertPayload, SystemSettingDto,
     UpdateOrganizationPayload, UpdateOrganizationalUnitCategoryPayload,
@@ -875,7 +875,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
                 activity_area,
@@ -903,7 +902,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 ou.id, ou.organization_id, ou.parent_id, ou.category_id, ou.unit_type_id,
-                ou.internal_type,
                 ou.name, ou.formal_name, ou.acronym,
                 ou.siorg_code, ou.siorg_parent_code, ou.siorg_url, ou.siorg_last_version, ou.is_siorg_managed,
                 ou.activity_area,
@@ -934,7 +932,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
                 parent_id: r.get("parent_id"),
                 category_id: r.get("category_id"),
                 unit_type_id: r.get("unit_type_id"),
-                internal_type: r.get("internal_type"),
                 name: r.get("name"),
                 formal_name: r.get("formal_name"),
                 acronym: r.get("acronym"),
@@ -974,7 +971,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
                 activity_area,
@@ -1001,7 +997,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         category_id: Option<Uuid>,
         unit_type_id: Option<Uuid>,
         activity_area: Option<ActivityArea>,
-        internal_type: Option<InternalUnitType>,
         is_active: Option<bool>,
         is_siorg_managed: Option<bool>,
         search: Option<&str>,
@@ -1014,7 +1009,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 ou.id, ou.organization_id, ou.parent_id, ou.category_id, ou.unit_type_id,
-                ou.internal_type,
                 ou.name, ou.formal_name, ou.acronym,
                 ou.siorg_code, ou.siorg_parent_code, ou.siorg_url, ou.siorg_last_version, ou.is_siorg_managed,
                 ou.activity_area,
@@ -1035,12 +1029,11 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
               AND ($3::UUID IS NULL OR ou.category_id = $3)
               AND ($4::UUID IS NULL OR ou.unit_type_id = $4)
               AND ($5::activity_area_enum IS NULL OR ou.activity_area = $5)
-              AND ($6::internal_unit_type_enum IS NULL OR ou.internal_type = $6)
-              AND ($7::BOOLEAN IS NULL OR ou.is_active = $7)
-              AND ($8::BOOLEAN IS NULL OR ou.is_siorg_managed = $8)
-              AND ($9::TEXT IS NULL OR ou.name ILIKE $9 OR ou.acronym ILIKE $9 OR ou.formal_name ILIKE $9)
+              AND ($6::BOOLEAN IS NULL OR ou.is_active = $6)
+              AND ($7::BOOLEAN IS NULL OR ou.is_siorg_managed = $7)
+              AND ($8::TEXT IS NULL OR ou.name ILIKE $8 OR ou.acronym ILIKE $8 OR ou.formal_name ILIKE $8)
             ORDER BY ou.level, ou.name
-            LIMIT $10 OFFSET $11
+            LIMIT $9 OFFSET $10
             "#
         )
         .bind(organization_id)
@@ -1048,7 +1041,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .bind(category_id)
         .bind(unit_type_id)
         .bind(activity_area as Option<ActivityArea>)
-        .bind(internal_type as Option<InternalUnitType>)
         .bind(is_active)
         .bind(is_siorg_managed)
         .bind(&search_pattern)
@@ -1067,10 +1059,9 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
               AND ($3::UUID IS NULL OR ou.category_id = $3)
               AND ($4::UUID IS NULL OR ou.unit_type_id = $4)
               AND ($5::activity_area_enum IS NULL OR ou.activity_area = $5)
-              AND ($6::internal_unit_type_enum IS NULL OR ou.internal_type = $6)
-              AND ($7::BOOLEAN IS NULL OR ou.is_active = $7)
-              AND ($8::BOOLEAN IS NULL OR ou.is_siorg_managed = $8)
-              AND ($9::TEXT IS NULL OR ou.name ILIKE $9 OR ou.acronym ILIKE $9 OR ou.formal_name ILIKE $9)
+              AND ($6::BOOLEAN IS NULL OR ou.is_active = $6)
+              AND ($7::BOOLEAN IS NULL OR ou.is_siorg_managed = $7)
+              AND ($8::TEXT IS NULL OR ou.name ILIKE $8 OR ou.acronym ILIKE $8 OR ou.formal_name ILIKE $8)
             "#
         )
         .bind(organization_id)
@@ -1078,7 +1069,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .bind(category_id)
         .bind(unit_type_id)
         .bind(activity_area as Option<ActivityArea>)
-        .bind(internal_type as Option<InternalUnitType>)
         .bind(is_active)
         .bind(is_siorg_managed)
         .bind(&search_pattern)
@@ -1095,7 +1085,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
                     parent_id: r.get("parent_id"),
                     category_id: r.get("category_id"),
                     unit_type_id: r.get("unit_type_id"),
-                    internal_type: r.get("internal_type"),
                     name: r.get("name"),
                     formal_name: r.get("formal_name"),
                     acronym: r.get("acronym"),
@@ -1138,7 +1127,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
                 activity_area,
@@ -1188,7 +1176,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
             r#"
             SELECT
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
                 activity_area,
@@ -1248,13 +1235,12 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         let result = sqlx::query_as::<_, OrganizationalUnitDto>(
             r#"
             INSERT INTO organizational_units (
-                organization_id, parent_id, category_id, unit_type_id, internal_type,
+                organization_id, parent_id, category_id, unit_type_id,
                 name, formal_name, acronym, siorg_code, activity_area, contact_info, is_active
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
                 activity_area,
@@ -1268,7 +1254,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .bind(payload.parent_id)
         .bind(payload.category_id)
         .bind(payload.unit_type_id)
-        .bind(payload.internal_type as InternalUnitType)
         .bind(payload.name)
         .bind(payload.formal_name)
         .bind(payload.acronym)
@@ -1300,19 +1285,17 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
                 parent_id = COALESCE($2, parent_id),
                 category_id = COALESCE($3, category_id),
                 unit_type_id = COALESCE($4, unit_type_id),
-                internal_type = COALESCE($5, internal_type),
-                name = COALESCE($6, name),
-                formal_name = COALESCE($7, formal_name),
-                acronym = COALESCE($8, acronym),
-                activity_area = COALESCE($9, activity_area),
-                contact_info = COALESCE($10, contact_info),
-                is_active = COALESCE($11, is_active),
-                deactivation_reason = COALESCE($12, deactivation_reason),
+                name = COALESCE($5, name),
+                formal_name = COALESCE($6, formal_name),
+                acronym = COALESCE($7, acronym),
+                activity_area = COALESCE($8, activity_area),
+                contact_info = COALESCE($9, contact_info),
+                is_active = COALESCE($10, is_active),
+                deactivation_reason = COALESCE($11, deactivation_reason),
                 updated_at = NOW()
             WHERE id = $1
             RETURNING
                 id, organization_id, parent_id, category_id, unit_type_id,
-                internal_type,
                 name, formal_name, acronym,
                 siorg_code, siorg_parent_code, siorg_url, siorg_last_version, is_siorg_managed,
                 activity_area,
@@ -1326,7 +1309,6 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .bind(payload.parent_id)
         .bind(payload.category_id)
         .bind(payload.unit_type_id)
-        .bind(payload.internal_type as Option<InternalUnitType>)
         .bind(payload.name)
         .bind(payload.formal_name)
         .bind(payload.acronym)
@@ -1427,17 +1409,16 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         let result = sqlx::query_as::<_, OrganizationalUnitDto>(
             r#"
             INSERT INTO organizational_units (
-                organization_id, parent_id, category_id, unit_type_id, internal_type,
-                name, formal_name, acronym, siorg_code, siorg_parent_code, 
+                organization_id, parent_id, category_id, unit_type_id,
+                name, formal_name, acronym, siorg_code, siorg_parent_code,
                 siorg_url, siorg_last_version, contact_info, activity_area, is_active, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
-            ON CONFLICT (siorg_code) 
-            DO UPDATE SET 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+            ON CONFLICT (siorg_code)
+            DO UPDATE SET
                 parent_id = EXCLUDED.parent_id,
                 category_id = EXCLUDED.category_id,
                 unit_type_id = EXCLUDED.unit_type_id,
-                internal_type = EXCLUDED.internal_type,
                 name = EXCLUDED.name,
                 formal_name = EXCLUDED.formal_name,
                 acronym = EXCLUDED.acronym,
@@ -1455,17 +1436,16 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .bind(p.parent_id) // $2
         .bind(p.category_id) // $3
         .bind(p.unit_type_id) // $4
-        .bind(p.internal_type) // $5
-        .bind(p.name) // $6
-        .bind(p.formal_name) // $7
-        .bind(p.acronym) // $8
-        .bind(p.siorg_code) // $9
-        .bind(p.siorg_parent_code) // $10
-        .bind(p.siorg_url) // $11
-        .bind(p.siorg_last_version) // $12
-        .bind(p.contact_info) // $13
-        .bind(p.activity_area) // $14
-        .bind(p.is_active) // $15
+        .bind(p.name) // $5
+        .bind(p.formal_name) // $6
+        .bind(p.acronym) // $7
+        .bind(p.siorg_code) // $8
+        .bind(p.siorg_parent_code) // $9
+        .bind(p.siorg_url) // $10
+        .bind(p.siorg_last_version) // $11
+        .bind(p.contact_info) // $12
+        .bind(p.activity_area) // $13
+        .bind(p.is_active) // $14
         .fetch_one(&mut **tx)
         .await
         .map_err(|e| RepositoryError::Database(e.to_string()))?;

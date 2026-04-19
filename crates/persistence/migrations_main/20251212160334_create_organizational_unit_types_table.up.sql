@@ -39,16 +39,3 @@ CREATE TRIGGER update_unit_types_updated_at
 
 COMMENT ON TABLE organizational_unit_types IS 'Tipos de unidades conforme nomenclatura SIORG';
 
--- Seed: Default types
-INSERT INTO organizational_unit_types (code, name, description) VALUES
-('reitoria', 'Reitoria', 'Gabinete do Reitor e órgãos de assessoramento direto'),
-('pro-reitoria', 'Pró-Reitoria', 'Órgão executivo de nível estratégico'),
-('secretaria', 'Secretaria', 'Unidade de apoio administrativo'),
-('instituto', 'Instituto', 'Unidade acadêmica de ensino e pesquisa'),
-('faculdade', 'Faculdade', 'Unidade acadêmica de ensino'),
-('departamento', 'Departamento', 'Subdivisão de instituto ou faculdade'),
-('coordenacao', 'Coordenação', 'Unidade de coordenação de atividades'),
-('setor', 'Setor', 'Subdivisão administrativa'),
-('laboratorio', 'Laboratório', 'Unidade de pesquisa ou ensino prático'),
-('conselho', 'Conselho', 'Órgão colegiado deliberativo')
-ON CONFLICT (code) DO NOTHING;

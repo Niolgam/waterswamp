@@ -95,7 +95,7 @@ pub async fn list_drivers(
         .await
         .map(|(data, total)| {
             Json(DriversListResponse {
-                data,
+                drivers: data,
                 total,
                 limit: query.limit,
                 offset: query.offset,

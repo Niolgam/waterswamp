@@ -100,7 +100,6 @@ SELECT
     ou.level,
     ou.path_names,
     ou.activity_area,
-    ou.internal_type,
     ou.is_active,
     ou.is_siorg_managed,
 

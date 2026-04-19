@@ -5,7 +5,7 @@ pub use domain::models::driver::{CreateDriverPayload, DriverDto, DriverType, Upd
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct DriversListResponse {
-    pub data: Vec<DriverDto>,
+    pub drivers: Vec<DriverDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

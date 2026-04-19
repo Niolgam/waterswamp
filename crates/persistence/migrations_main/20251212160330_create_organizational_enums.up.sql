@@ -9,18 +9,6 @@ CREATE TYPE activity_area_enum AS ENUM (
     'CORE'      -- Área fim (acadêmico/pesquisa)
 );
 
--- Tipo interno de unidade (classificação local)
-CREATE TYPE internal_unit_type_enum AS ENUM (
-    'ADMINISTRATION',  -- Reitoria, Pró-reitorias
-    'DEPARTMENT',      -- Departamentos acadêmicos
-    'LABORATORY',      -- Laboratórios de pesquisa/ensino
-    'SECTOR',          -- Setores administrativos menores
-    'COUNCIL',         -- Conselhos deliberativos
-    'COORDINATION',    -- Coordenações de curso
-    'CENTER',          -- Centros de pesquisa/extensão
-    'DIVISION'         -- Divisões administrativas
-);
-
 -- Tipo de entidade no SIORG
 CREATE TYPE siorg_entity_type_enum AS ENUM (
     'ORGANIZATION',  -- Órgão raiz (ex: UFMT)
@@ -58,7 +46,6 @@ CREATE TYPE mapping_status_enum AS ENUM (
 );
 
 COMMENT ON TYPE activity_area_enum IS 'Classifica se a unidade é área meio (suporte) ou fim (core)';
-COMMENT ON TYPE internal_unit_type_enum IS 'Classificação interna de tipos de unidades organizacionais';
 COMMENT ON TYPE siorg_entity_type_enum IS 'Tipos de entidades no Sistema SIORG';
 COMMENT ON TYPE siorg_change_type_enum IS 'Tipos de mudanças registradas no histórico SIORG';
 COMMENT ON TYPE sync_status_enum IS 'Status de processamento de sincronização';

@@ -1,4 +1,4 @@
-//! Integration tests for DRS stock transfer endpoints (RF-018)
+//! Integration tests for stock transfer endpoints (RF-018)
 //!
 //! Covers the two-step transfer lifecycle (RN-011):
 //! - POST /warehouses/{warehouse_id}/transfers — initiate (step 1)
@@ -30,7 +30,7 @@ use uuid::Uuid;
 async fn create_test_city(pool: &PgPool) -> Uuid {
     let country_id: Uuid = sqlx::query_scalar(
         "INSERT INTO countries (name, iso2, bacen_code)
-         VALUES ('DRS TRF Country', 'DT', 555501)
+         VALUES ('TRF Country', 'DT', 555501)
          ON CONFLICT (bacen_code) DO UPDATE SET name = countries.name
          RETURNING id",
     )
@@ -40,7 +40,7 @@ async fn create_test_city(pool: &PgPool) -> Uuid {
 
     let state_id: Uuid = sqlx::query_scalar(
         "INSERT INTO states (country_id, name, abbreviation, ibge_code)
-         VALUES ($1, 'DRS TRF State', 'DT', 555501)
+         VALUES ($1, 'TRF State', 'DT', 555501)
          ON CONFLICT (ibge_code) DO UPDATE SET name = states.name
          RETURNING id",
     )
@@ -51,7 +51,7 @@ async fn create_test_city(pool: &PgPool) -> Uuid {
 
     sqlx::query_scalar(
         "INSERT INTO cities (state_id, name, ibge_code)
-         VALUES ($1, 'DRS TRF City', 5555010)
+         VALUES ($1, 'TRF City', 5555010)
          ON CONFLICT (ibge_code) DO UPDATE SET name = cities.name
          RETURNING id",
     )
@@ -71,7 +71,7 @@ async fn create_test_warehouse(pool: &PgPool) -> Uuid {
          VALUES ($1, $2, 'SECTOR', $3, true, true)
          RETURNING id",
     )
-    .bind(format!("DRS TRF WH {}", &uid.to_string()[..8]))
+    .bind(format!("TRF WH {}", &uid.to_string()[..8]))
     .bind(code)
     .bind(city_id)
     .fetch_one(pool)
@@ -135,7 +135,6 @@ async fn create_catalog_item_with_stock(pool: &PgPool, warehouse_id: Uuid) -> (U
     .await
     .expect("item");
 
-    // Pre-load enough stock for transfer operations
     sqlx::query(
         "INSERT INTO warehouse_stocks
          (warehouse_id, catalog_item_id, quantity, reserved_quantity, average_unit_value)
@@ -375,7 +374,6 @@ async fn test_confirm_transfer_partial() {
     let transfer_id = transfer["id"].as_str().unwrap();
     let transfer_item_id = transfer["items"][0]["id"].as_str().unwrap();
 
-    // Confirm only 7 of the 10 requested
     let response = app
         .api
         .post(&format!("/api/admin/transfers/{}/confirm", transfer_id))
@@ -410,7 +408,6 @@ async fn test_confirm_transfer_exceeds_requested_fails() {
     let transfer_id = transfer["id"].as_str().unwrap();
     let transfer_item_id = transfer["items"][0]["id"].as_str().unwrap();
 
-    // Try to confirm 10 when only 5 were requested
     let response = app
         .api
         .post(&format!("/api/admin/transfers/{}/confirm", transfer_id))
@@ -436,14 +433,12 @@ async fn test_confirm_transfer_already_confirmed_fails() {
     let transfer_id = transfer["id"].as_str().unwrap();
     let transfer_item_id = transfer["items"][0]["id"].as_str().unwrap();
 
-    // First confirm
     app.api
         .post(&format!("/api/admin/transfers/{}/confirm", transfer_id))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "items": [{ "transfer_item_id": transfer_item_id, "quantity_confirmed": "5.0" }] }))
         .await;
 
-    // Second confirm — should fail
     let response = app
         .api
         .post(&format!("/api/admin/transfers/{}/confirm", transfer_id))
@@ -523,14 +518,12 @@ async fn test_reject_already_confirmed_fails() {
     let transfer_id = transfer["id"].as_str().unwrap();
     let transfer_item_id = transfer["items"][0]["id"].as_str().unwrap();
 
-    // Confirm first
     app.api
         .post(&format!("/api/admin/transfers/{}/confirm", transfer_id))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "items": [{ "transfer_item_id": transfer_item_id, "quantity_confirmed": "5.0" }] }))
         .await;
 
-    // Then reject — should fail because status is now CONFIRMED
     let response = app
         .api
         .post(&format!("/api/admin/transfers/{}/reject", transfer_id))
@@ -548,7 +541,6 @@ async fn test_reject_transfer_restores_source_stock() {
     let dst = create_test_warehouse(&app.db_auth).await;
     let (item_id, unit_id) = create_catalog_item_with_stock(&app.db_auth, src).await;
 
-    // Record initial quantity
     let initial_qty: rust_decimal::Decimal = sqlx::query_scalar(
         "SELECT quantity FROM warehouse_stocks WHERE warehouse_id = $1 AND catalog_item_id = $2",
     )
@@ -558,11 +550,9 @@ async fn test_reject_transfer_restores_source_stock() {
     .await
     .expect("initial qty");
 
-    // Initiate (deducts from source)
     let transfer = initiate_transfer(&app, src, dst, item_id, unit_id, "10.0000").await;
     let transfer_id = transfer["id"].as_str().unwrap();
 
-    // Reject (should restore to source)
     app.api
         .post(&format!("/api/admin/transfers/{}/reject", transfer_id))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
@@ -650,14 +640,12 @@ async fn test_cancel_already_confirmed_fails() {
     let transfer_id = transfer["id"].as_str().unwrap();
     let transfer_item_id = transfer["items"][0]["id"].as_str().unwrap();
 
-    // Confirm first
     app.api
         .post(&format!("/api/admin/transfers/{}/confirm", transfer_id))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({ "items": [{ "transfer_item_id": transfer_item_id, "quantity_confirmed": "5.0" }] }))
         .await;
 
-    // Cancel — should fail
     let response = app
         .api
         .post(&format!("/api/admin/transfers/{}/cancel", transfer_id))
@@ -829,13 +817,11 @@ async fn test_full_transfer_lifecycle_initiate_confirm() {
     .await
     .expect("src initial qty");
 
-    // Step 1: initiate
     let transfer = initiate_transfer(&app, src, dst, item_id, unit_id, "15.0000").await;
     let transfer_id = transfer["id"].as_str().unwrap();
     let transfer_item_id = transfer["items"][0]["id"].as_str().unwrap();
     assert_eq!(transfer["status"].as_str().unwrap(), "PENDING");
 
-    // Source stock should have decreased
     let src_after_initiate: rust_decimal::Decimal = sqlx::query_scalar(
         "SELECT quantity FROM warehouse_stocks WHERE warehouse_id = $1 AND catalog_item_id = $2",
     )
@@ -846,7 +832,6 @@ async fn test_full_transfer_lifecycle_initiate_confirm() {
     .expect("src after initiate");
     assert!(src_after_initiate < src_initial, "source qty must decrease after initiate");
 
-    // Step 2: confirm
     let confirm_response = app
         .api
         .post(&format!("/api/admin/transfers/{}/confirm", transfer_id))
@@ -861,7 +846,6 @@ async fn test_full_transfer_lifecycle_initiate_confirm() {
         "CONFIRMED"
     );
 
-    // Destination should now have the items
     let dst_qty: Option<rust_decimal::Decimal> = sqlx::query_scalar(
         "SELECT quantity FROM warehouse_stocks WHERE warehouse_id = $1 AND catalog_item_id = $2",
     )

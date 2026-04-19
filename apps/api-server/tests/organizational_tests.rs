@@ -140,7 +140,6 @@ async fn create_organizational_unit(
         "organization_id": organization_id,
         "category_id": category_id,
         "unit_type_id": unit_type_id,
-        "internal_type": "Sector",
         "name": random_name("Unit"),
         "activity_area": "Support",
         "is_active": true
@@ -538,7 +537,6 @@ async fn test_create_organizational_unit_success() {
             "organization_id": organization["id"].as_str().unwrap(),
             "category_id": category["id"].as_str().unwrap(),
             "unit_type_id": unit_type["id"].as_str().unwrap(),
-            "internal_type": "Sector",
             "name": random_name("Unit"),
             "activity_area": "Support",
             "is_active": true

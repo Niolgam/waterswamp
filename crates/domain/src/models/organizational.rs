@@ -16,22 +16,6 @@ pub enum ActivityArea {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
 #[sqlx(
-    type_name = "internal_unit_type_enum",
-    rename_all = "SCREAMING_SNAKE_CASE"
-)]
-pub enum InternalUnitType {
-    Administration,
-    Department,
-    Laboratory,
-    Sector,
-    Council,
-    Coordination,
-    Center,
-    Division,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
-#[sqlx(
     type_name = "siorg_entity_type_enum",
     rename_all = "SCREAMING_SNAKE_CASE"
 )]
@@ -92,7 +76,6 @@ pub struct SiorgUpsertPayload {
     pub parent_id: Option<Uuid>,
     pub category_id: Uuid,
     pub unit_type_id: Uuid,
-    pub internal_type: InternalUnitType,
     pub name: String,
     pub formal_name: Option<String>,
     pub acronym: Option<String>,
@@ -313,7 +296,6 @@ pub struct OrganizationalUnitDto {
     pub parent_id: Option<Uuid>,
     pub category_id: Uuid,
     pub unit_type_id: Uuid,
-    pub internal_type: InternalUnitType,
     pub name: String,
     pub formal_name: Option<String>,
     pub acronym: Option<String>,
@@ -366,7 +348,6 @@ pub struct CreateOrganizationalUnitPayload {
     pub parent_id: Option<Uuid>,
     pub category_id: Uuid,
     pub unit_type_id: Uuid,
-    pub internal_type: InternalUnitType,
     pub name: String,
     pub formal_name: Option<String>,
     pub acronym: Option<String>,
@@ -383,7 +364,6 @@ pub struct UpdateOrganizationalUnitPayload {
     pub parent_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
     pub unit_type_id: Option<Uuid>,
-    pub internal_type: Option<InternalUnitType>,
     pub name: Option<String>,
     pub formal_name: Option<String>,
     pub acronym: Option<String>,
