@@ -810,7 +810,7 @@ impl VehicleRepositoryPort for VehicleRepository {
                 v.fleet_code, v.cost_sharing, v.initial_mileage, v.fuel_tank_capacity,
                 v.acquisition_type, v.acquisition_date, v.purchase_value,
                 v.patrimony_number, v.department_id,
-                v.status, v.notes,
+                v.operational_status, v.allocation_status, v.status, v.notes,
                 v.last_odometer_km, v.last_odometer_date, v.last_fueling_id,
                 v.created_at, v.updated_at
             FROM vehicles v
@@ -858,6 +858,8 @@ impl VehicleRepositoryPort for VehicleRepository {
             purchase_value: r.get("purchase_value"),
             patrimony_number: r.get("patrimony_number"),
             department_id: r.get("department_id"),
+            operational_status: r.get("operational_status"),
+            allocation_status: r.get("allocation_status"),
             status: r.get("status"),
             notes: r.get("notes"),
             last_odometer_km: r.get("last_odometer_km"),
@@ -1142,7 +1144,7 @@ impl VehicleRepositoryPort for VehicleRepository {
                 v.fleet_code, v.cost_sharing, v.initial_mileage, v.fuel_tank_capacity,
                 v.acquisition_type, v.acquisition_date, v.purchase_value,
                 v.patrimony_number, v.department_id,
-                v.status, v.notes,
+                v.operational_status, v.allocation_status, v.status, v.notes,
                 v.last_odometer_km, v.last_odometer_date, v.last_fueling_id,
                 v.created_at, v.updated_at
             FROM vehicles v
@@ -1204,6 +1206,8 @@ impl VehicleRepositoryPort for VehicleRepository {
             purchase_value: r.get("purchase_value"),
             patrimony_number: r.get("patrimony_number"),
             department_id: r.get("department_id"),
+            operational_status: r.get("operational_status"),
+            allocation_status: r.get("allocation_status"),
             status: r.get("status"),
             notes: r.get("notes"),
             last_odometer_km: r.get("last_odometer_km"),
