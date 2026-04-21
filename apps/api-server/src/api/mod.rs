@@ -10,6 +10,7 @@ pub mod catalog;
 pub mod email_verification;
 pub mod fleet;
 pub mod trips;
+pub mod maintenance;
 pub mod geo_regions;
 pub mod suppliers;
 pub mod drivers;

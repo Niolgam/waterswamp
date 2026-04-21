@@ -23,6 +23,7 @@ pub mod warehouse;
 pub mod odometer;
 pub mod asset_management;
 pub mod trip;
+pub mod maintenance;
 
 pub use audit::*;
 pub use auth::*;
@@ -49,3 +50,4 @@ pub use warehouse::*;
 pub use odometer::*;
 pub use asset_management::*;
 pub use trip::*;
+pub use maintenance::*;

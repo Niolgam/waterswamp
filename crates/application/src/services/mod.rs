@@ -21,3 +21,4 @@ pub mod warehouse_service;
 pub mod odometer_service;
 pub mod asset_management_service;
 pub mod trip_service;
+pub mod maintenance_service;

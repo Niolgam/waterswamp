@@ -24,6 +24,7 @@ use application::services::warehouse_service::WarehouseService;
 use application::services::odometer_service::OdometerService;
 use application::services::asset_management_service::AssetManagementService;
 use application::services::trip_service::TripService;
+use application::services::maintenance_service::MaintenanceService;
 use application::external::SiorgSyncService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
@@ -78,6 +79,7 @@ pub struct AppState {
     pub odometer_service: Arc<OdometerService>,
     pub asset_management_service: Arc<AssetManagementService>,
     pub trip_service: Arc<TripService>,
+    pub maintenance_service: Arc<MaintenanceService>,
     pub config: Arc<Config>,
     /// AES-256-GCM key for field-level encryption (email, MFA secrets).
     pub field_encryption_key: [u8; 32],

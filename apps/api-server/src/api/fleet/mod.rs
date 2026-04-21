@@ -89,6 +89,9 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/incidents", axum::routing::post(handlers::open_incident).get(handlers::list_incidents))
         // RF-AST-09/10: Processo de baixa
         .route("/{id}/disposal", axum::routing::post(handlers::open_disposal).get(handlers::get_disposal_by_vehicle))
+        // RF-MNT: Manutenção (atalho por veículo)
+        .route("/{id}/maintenance", axum::routing::post(handlers::open_maintenance_order).get(handlers::list_maintenance_orders))
+        .route("/{id}/maintenance/cost", get(handlers::get_maintenance_cost_summary))
         .route(
             "/{id}/documents",
             get(handlers::list_vehicle_documents).post(handlers::upload_vehicle_document),

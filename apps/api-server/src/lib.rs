@@ -27,6 +27,7 @@ use application::services::{
     odometer_service::OdometerService,
     asset_management_service::AssetManagementService,
     trip_service::TripService,
+    maintenance_service::MaintenanceService,
     stock_movement_service::StockMovementService,
     stock_transfer_service::StockTransferService,
     supplier_service::SupplierService,
@@ -37,7 +38,7 @@ use application::services::{
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
-    OdometerReadingRepositoryPort, VehicleTripRepositoryPort,
+    OdometerReadingRepositoryPort, VehicleTripRepositoryPort, MaintenanceOrderRepositoryPort,
     VehicleDepartmentTransferRepositoryPort, DepreciationConfigRepositoryPort,
     VehicleIncidentRepositoryPort, VehicleDisposalRepositoryPort,
     FleetFuelCatalogRepositoryPort, FleetMaintenanceServiceRepositoryPort,
@@ -97,6 +98,7 @@ use persistence::repositories::{
     warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
     odometer_repository::OdometerReadingRepository,
     trip_repository::VehicleTripRepository,
+    maintenance_repository::MaintenanceOrderRepository,
     asset_management_repository::{
         VehicleDepartmentTransferRepository,
         DepreciationConfigRepository,
@@ -482,6 +484,19 @@ pub fn build_application_state(
         status_history_for_trips,
     ));
 
+    // Maintenance service (RF-MNT-01/02/03/04)
+    let maint_order_repo: Arc<dyn MaintenanceOrderRepositoryPort> =
+        Arc::new(MaintenanceOrderRepository::new(pool_auth.clone()));
+    let vehicle_repo_for_maint: Arc<dyn VehicleRepositoryPort> =
+        Arc::new(VehicleRepository::new(pool_auth.clone()));
+    let status_history_for_maint: Arc<dyn VehicleStatusHistoryRepositoryPort> =
+        Arc::new(VehicleStatusHistoryRepository::new(pool_auth.clone()));
+    let maintenance_service = Arc::new(MaintenanceService::new(
+        maint_order_repo,
+        vehicle_repo_for_maint,
+        status_history_for_maint,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -524,6 +539,7 @@ pub fn build_application_state(
         odometer_service,
         asset_management_service,
         trip_service,
+        maintenance_service,
         config,
         field_encryption_key: enc_key,
 

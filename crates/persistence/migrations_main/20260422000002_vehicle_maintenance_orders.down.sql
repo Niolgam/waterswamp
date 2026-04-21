@@ -1,0 +1,9 @@
+DROP INDEX IF EXISTS idx_vmaint_items_order;
+DROP INDEX IF EXISTS idx_vmaint_incident;
+DROP INDEX IF EXISTS idx_vmaint_fornecedor;
+DROP INDEX IF EXISTS idx_vmaint_status;
+DROP INDEX IF EXISTS idx_vmaint_vehicle_id;
+DROP TABLE IF EXISTS vehicle_maintenance_order_items;
+DROP TABLE IF EXISTS vehicle_maintenance_orders;
+DROP TYPE IF EXISTS maintenance_order_type_enum;
+DROP TYPE IF EXISTS maintenance_order_status_enum;

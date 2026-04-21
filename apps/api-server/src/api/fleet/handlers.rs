@@ -1264,3 +1264,67 @@ pub async fn list_checklist_items(
         .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
     Ok(Json(serde_json::json!({ "data": items })))
 }
+
+// ── RF-MNT: Manutenção (atalhos via /fleet/vehicles/{id}/maintenance) ──
+
+use domain::models::maintenance::{
+    CreateMaintenanceOrderPayload, MaintenanceCostSummaryDto, MaintenanceOrderStatus,
+};
+
+#[derive(Debug, serde::Deserialize)]
+pub struct MaintenanceListQuery {
+    pub status: Option<MaintenanceOrderStatus>,
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
+
+pub async fn open_maintenance_order(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(vehicle_id): Path<Uuid>,
+    Json(payload): Json<CreateMaintenanceOrderPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.maintenance_service.open_order(vehicle_id, payload, Some(user.id)).await {
+        Ok(o) => (StatusCode::CREATED, Json(o)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "optimistic-lock-failure",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        ).into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+pub async fn list_maintenance_orders(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(vehicle_id): Path<Uuid>,
+    Query(q): Query<MaintenanceListQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let (orders, total) = state
+        .maintenance_service
+        .list_orders(Some(vehicle_id), q.status, q.limit, q.offset)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": orders, "total": total })))
+}
+
+pub async fn get_maintenance_cost_summary(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(vehicle_id): Path<Uuid>,
+) -> Result<Json<MaintenanceCostSummaryDto>, (StatusCode, String)> {
+    state
+        .maintenance_service
+        .cost_summary(vehicle_id)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}

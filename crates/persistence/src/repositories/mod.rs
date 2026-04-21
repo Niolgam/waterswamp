@@ -23,3 +23,4 @@ pub mod warehouse_repository;
 pub mod odometer_repository;
 pub mod asset_management_repository;
 pub mod trip_repository;
+pub mod maintenance_repository;
