@@ -22,6 +22,7 @@ pub mod odometer;
 pub mod asset_management;
 pub mod trip;
 pub mod maintenance;
+pub mod report;
 
 pub use auth::*;
 pub use budget_classifications::*;
@@ -47,3 +48,4 @@ pub use odometer::*;
 pub use asset_management::*;
 pub use trip::*;
 pub use maintenance::*;
+pub use report::*;

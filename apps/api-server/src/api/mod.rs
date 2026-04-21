@@ -20,5 +20,4 @@ pub mod locations;
 pub mod mfa;
 pub mod organizational;
 pub mod users;
-
-
+pub mod reports;

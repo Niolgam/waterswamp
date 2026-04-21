@@ -28,6 +28,7 @@ use application::services::{
     asset_management_service::AssetManagementService,
     trip_service::TripService,
     maintenance_service::MaintenanceService,
+    fleet_report_service::FleetReportService,
     stock_movement_service::StockMovementService,
     stock_transfer_service::StockTransferService,
     supplier_service::SupplierService,
@@ -39,6 +40,7 @@ use application::services::{
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
     OdometerReadingRepositoryPort, VehicleTripRepositoryPort, MaintenanceOrderRepositoryPort,
+    FleetReportRepositoryPort,
     VehicleDepartmentTransferRepositoryPort, DepreciationConfigRepositoryPort,
     VehicleIncidentRepositoryPort, VehicleDisposalRepositoryPort,
     FleetFuelCatalogRepositoryPort, FleetMaintenanceServiceRepositoryPort,
@@ -99,6 +101,7 @@ use persistence::repositories::{
     odometer_repository::OdometerReadingRepository,
     trip_repository::VehicleTripRepository,
     maintenance_repository::MaintenanceOrderRepository,
+    report_repository::FleetReportRepository,
     asset_management_repository::{
         VehicleDepartmentTransferRepository,
         DepreciationConfigRepository,
@@ -497,6 +500,16 @@ pub fn build_application_state(
         status_history_for_maint,
     ));
 
+    // Fleet report service (RF-REL-01/02/03)
+    let report_repo: Arc<dyn FleetReportRepositoryPort> =
+        Arc::new(FleetReportRepository::new(pool_auth.clone()));
+    let vehicle_repo_for_reports: Arc<dyn VehicleRepositoryPort> =
+        Arc::new(VehicleRepository::new(pool_auth.clone()));
+    let fleet_report_service = Arc::new(FleetReportService::new(
+        report_repo,
+        vehicle_repo_for_reports,
+    ));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -540,6 +553,7 @@ pub fn build_application_state(
         asset_management_service,
         trip_service,
         maintenance_service,
+        fleet_report_service,
         config,
         field_encryption_key: enc_key,
 
