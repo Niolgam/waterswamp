@@ -69,7 +69,7 @@ impl AssetManagementService {
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Veículo não encontrado".to_string()))?;
 
-        if vehicle.department_id == Some(payload.dept_destino_id) {
+        if vehicle.department_id == Some(payload.target_dept_id) {
             return Err(ServiceError::BadRequest(
                 "Destino igual ao departamento atual".to_string(),
             ));
@@ -79,9 +79,9 @@ impl AssetManagementService {
             .create(
                 vehicle_id,
                 vehicle.department_id,
-                payload.dept_destino_id,
-                payload.data_efetiva,
-                &payload.motivo,
+                payload.target_dept_id,
+                payload.effective_date,
+                &payload.reason,
                 payload.documento_sei.as_deref(),
                 payload.notes.as_deref(),
                 created_by,
@@ -98,7 +98,7 @@ impl AssetManagementService {
                 None, None,
                 None, None, None, None,
                 None, None, None,
-                None, Some(payload.dept_destino_id),
+                None, Some(payload.target_dept_id),
                 None, None,
                 created_by,
                 None,
@@ -284,12 +284,12 @@ impl AssetManagementService {
         self.incident_repo
             .create(
                 vehicle_id,
-                payload.tipo,
-                payload.data_ocorrencia,
-                payload.local_ocorrencia.as_deref(),
-                &payload.numero_bo,
-                payload.numero_seguradora.as_deref(),
-                payload.descricao.as_deref(),
+                payload.incident_type,
+                payload.occurred_at,
+                payload.location.as_deref(),
+                &payload.police_report_number,
+                payload.insurance_number.as_deref(),
+                payload.description.as_deref(),
                 created_by,
             )
             .await
@@ -312,8 +312,8 @@ impl AssetManagementService {
             .update_status(
                 id,
                 payload.status,
-                payload.notas_resolucao.as_deref(),
-                payload.numero_seguradora.as_deref(),
+                payload.resolution_notes.as_deref(),
+                payload.insurance_number.as_deref(),
                 updated_by,
                 payload.version,
             )
@@ -361,7 +361,7 @@ impl AssetManagementService {
 
         // Verifica se já existe processo de baixa ativo
         if let Some(existing) = self.disposal_repo.find_by_vehicle(vehicle_id).await.map_err(ServiceError::from)? {
-            if !matches!(existing.status, DisposalStatus::Concluido | DisposalStatus::Cancelado) {
+            if !matches!(existing.status, DisposalStatus::Completed | DisposalStatus::Cancelled) {
                 return Err(ServiceError::Conflict(
                     "Já existe um processo de baixa ativo para este veículo".to_string(),
                 ));
@@ -392,9 +392,9 @@ impl AssetManagementService {
         self.disposal_repo
             .create(
                 vehicle_id,
-                payload.destino,
-                &payload.justificativa,
-                &payload.numero_laudo,
+                payload.destination,
+                &payload.justification,
+                &payload.report_number,
                 payload.documento_sei.as_deref(),
                 created_by,
             )
@@ -416,9 +416,9 @@ impl AssetManagementService {
 
         // FSM: INICIADO → EM_ANDAMENTO → CONCLUIDO | CANCELADO
         let valid = match (&disposal.status, &payload.new_status) {
-            (DisposalStatus::Iniciado, DisposalStatus::EmAndamento) => true,
-            (DisposalStatus::EmAndamento, DisposalStatus::Concluido) => true,
-            (DisposalStatus::Iniciado | DisposalStatus::EmAndamento, DisposalStatus::Cancelado) => true,
+            (DisposalStatus::Initiated, DisposalStatus::InProgress) => true,
+            (DisposalStatus::InProgress, DisposalStatus::Completed) => true,
+            (DisposalStatus::Initiated | DisposalStatus::InProgress, DisposalStatus::Cancelled) => true,
             _ => false,
         };
         if !valid {
@@ -427,22 +427,22 @@ impl AssetManagementService {
             )));
         }
 
-        if payload.new_status == DisposalStatus::Cancelado && payload.motivo_cancelamento.is_none() {
+        if payload.new_status == DisposalStatus::Cancelled && payload.cancellation_reason.is_none() {
             return Err(ServiceError::BadRequest(
                 "Motivo de cancelamento obrigatório".to_string(),
             ));
         }
 
-        let concluido_por = if payload.new_status == DisposalStatus::Concluido { updated_by } else { None };
-        let cancelado_por = if payload.new_status == DisposalStatus::Cancelado { updated_by } else { None };
+        let completed_by = if payload.new_status == DisposalStatus::Completed { updated_by } else { None };
+        let cancelled_by = if payload.new_status == DisposalStatus::Cancelled { updated_by } else { None };
 
         self.disposal_repo
             .advance_status(
                 disposal_id,
                 payload.new_status,
-                concluido_por,
-                cancelado_por,
-                payload.motivo_cancelamento.as_deref(),
+                completed_by,
+                cancelled_by,
+                payload.cancellation_reason.as_deref(),
                 payload.version,
             )
             .await
@@ -461,7 +461,7 @@ impl AssetManagementService {
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Processo de baixa não encontrado".to_string()))?;
 
-        if matches!(disposal.status, DisposalStatus::Concluido | DisposalStatus::Cancelado) {
+        if matches!(disposal.status, DisposalStatus::Completed | DisposalStatus::Cancelled) {
             return Err(ServiceError::BadRequest(
                 "Não é possível adicionar etapas a um processo finalizado".to_string(),
             ));
@@ -470,9 +470,9 @@ impl AssetManagementService {
         self.disposal_repo
             .add_step(
                 disposal_id,
-                &payload.descricao,
+                &payload.description,
                 &payload.documento_sei,
-                payload.data_execucao,
+                payload.execution_date,
                 payload.responsavel_id,
                 payload.notes.as_deref(),
                 created_by,
@@ -520,9 +520,9 @@ impl AssetManagementService {
     ) -> Result<FleetFuelCatalogDto, ServiceError> {
         self.fuel_catalog_repo
             .create(
-                &payload.nome,
+                &payload.name,
                 payload.catmat_item_id,
-                payload.unidade.as_deref().unwrap_or("LITRO"),
+                payload.unit.as_deref().unwrap_or("LITRO"),
                 payload.notes.as_deref(),
                 created_by,
             )
@@ -545,10 +545,10 @@ impl AssetManagementService {
         self.fuel_catalog_repo
             .update(
                 id,
-                payload.nome.as_deref(),
+                payload.name.as_deref(),
                 payload.catmat_item_id.map(Some),
-                payload.unidade.as_deref(),
-                payload.ativo,
+                payload.unit.as_deref(),
+                payload.active,
                 payload.notes.as_deref(),
                 updated_by,
             )
@@ -569,7 +569,7 @@ impl AssetManagementService {
     ) -> Result<FleetMaintenanceServiceDto, ServiceError> {
         self.maintenance_service_repo
             .create(
-                &payload.nome,
+                &payload.name,
                 payload.catser_item_id,
                 payload.notes.as_deref(),
                 created_by,
@@ -593,9 +593,9 @@ impl AssetManagementService {
         self.maintenance_service_repo
             .update(
                 id,
-                payload.nome.as_deref(),
+                payload.name.as_deref(),
                 payload.catser_item_id.map(Some),
-                payload.ativo,
+                payload.active,
                 payload.notes.as_deref(),
                 updated_by,
             )
@@ -619,9 +619,9 @@ impl AssetManagementService {
     ) -> Result<FleetSystemParamDto, ServiceError> {
         self.system_param_repo
             .upsert(
-                &payload.chave,
-                &payload.valor,
-                payload.descricao.as_deref(),
+                &payload.key,
+                &payload.value,
+                payload.description.as_deref(),
                 updated_by,
             )
             .await
@@ -640,7 +640,7 @@ impl AssetManagementService {
         created_by: Option<Uuid>,
     ) -> Result<FleetChecklistTemplateDto, ServiceError> {
         self.checklist_repo
-            .create(&payload.nome, payload.descricao.as_deref(), created_by)
+            .create(&payload.name, payload.description.as_deref(), created_by)
             .await
             .map_err(ServiceError::from)
     }
@@ -666,9 +666,9 @@ impl AssetManagementService {
         self.checklist_repo
             .add_item(
                 template_id,
-                &payload.descricao,
-                payload.obrigatorio.unwrap_or(true),
-                payload.ordem.unwrap_or(0),
+                &payload.description,
+                payload.required.unwrap_or(true),
+                payload.order_index.unwrap_or(0),
             )
             .await
             .map_err(ServiceError::from)

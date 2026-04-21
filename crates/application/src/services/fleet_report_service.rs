@@ -24,11 +24,11 @@ impl FleetReportService {
     pub async fn fuel_consumption(
         &self,
         vehicle_id: Option<Uuid>,
-        data_inicio: Option<DateTime<Utc>>,
-        data_fim: Option<DateTime<Utc>>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
     ) -> Result<Vec<FuelConsumptionDto>, ServiceError> {
         self.report_repo
-            .fuel_consumption(vehicle_id, data_inicio, data_fim)
+            .fuel_consumption(vehicle_id, start_date, end_date)
             .await
             .map_err(ServiceError::from)
     }
@@ -36,8 +36,8 @@ impl FleetReportService {
     pub async fn vehicle_dashboard(
         &self,
         vehicle_id: Uuid,
-        data_inicio: Option<DateTime<Utc>>,
-        data_fim: Option<DateTime<Utc>>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
     ) -> Result<VehicleDashboardDto, ServiceError> {
         self.vehicle_repo
             .find_by_id(vehicle_id)
@@ -46,18 +46,18 @@ impl FleetReportService {
             .ok_or_else(|| ServiceError::NotFound("Veículo não encontrado".to_string()))?;
 
         self.report_repo
-            .vehicle_dashboard(vehicle_id, data_inicio, data_fim)
+            .vehicle_dashboard(vehicle_id, start_date, end_date)
             .await
             .map_err(ServiceError::from)
     }
 
     pub async fn fleet_summary(
         &self,
-        data_inicio: Option<DateTime<Utc>>,
-        data_fim: Option<DateTime<Utc>>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
     ) -> Result<FleetSummaryDto, ServiceError> {
         self.report_repo
-            .fleet_summary(data_inicio, data_fim)
+            .fleet_summary(start_date, end_date)
             .await
             .map_err(ServiceError::from)
     }

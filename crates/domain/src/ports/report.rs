@@ -6,26 +6,26 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait FleetReportRepositoryPort: Send + Sync {
-    /// RF-REL-01: Consumo de combustível por veículo num intervalo de datas.
+    /// RF-REL-01: Fuel consumption per vehicle over a date range.
     async fn fuel_consumption(
         &self,
         vehicle_id: Option<Uuid>,
-        data_inicio: Option<DateTime<Utc>>,
-        data_fim: Option<DateTime<Utc>>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
     ) -> Result<Vec<FuelConsumptionDto>, RepositoryError>;
 
-    /// RF-REL-02: Dashboard consolidado de um único veículo.
+    /// RF-REL-02: Consolidated dashboard for a single vehicle.
     async fn vehicle_dashboard(
         &self,
         vehicle_id: Uuid,
-        data_inicio: Option<DateTime<Utc>>,
-        data_fim: Option<DateTime<Utc>>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
     ) -> Result<VehicleDashboardDto, RepositoryError>;
 
-    /// RF-REL-03: Resumo consolidado de toda a frota no mês corrente (ou intervalo).
+    /// RF-REL-03: Consolidated summary for the entire fleet over an interval.
     async fn fleet_summary(
         &self,
-        data_inicio: Option<DateTime<Utc>>,
-        data_fim: Option<DateTime<Utc>>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
     ) -> Result<FleetSummaryDto, RepositoryError>;
 }

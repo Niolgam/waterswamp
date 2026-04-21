@@ -30,7 +30,7 @@ impl TripService {
         Self { trip_repo, vehicle_repo, odometer_repo, status_history_repo }
     }
 
-    // ── RF-USO-01: Solicitar viagem ─────────────────────────────────────────
+    // ── RF-USO-01: Request trip ─────────────────────────────────────────────
 
     pub async fn request_trip(
         &self,
@@ -60,11 +60,11 @@ impl TripService {
                 payload.vehicle_id,
                 payload.driver_id,
                 requester_id,
-                &payload.destino,
-                &payload.finalidade,
-                payload.passageiros.unwrap_or(0),
-                payload.data_saida_prevista,
-                payload.data_retorno_prevista,
+                &payload.destination,
+                &payload.purpose,
+                payload.passengers.unwrap_or(0),
+                payload.planned_departure,
+                payload.planned_return,
                 payload.notes.as_deref(),
                 requester_id,
             )
@@ -72,7 +72,7 @@ impl TripService {
             .map_err(ServiceError::from)
     }
 
-    // ── RF-USO-01: Aprovar / Rejeitar ───────────────────────────────────────
+    // ── RF-USO-01: Approve / Reject ─────────────────────────────────────────
 
     pub async fn review_trip(
         &self,
@@ -86,9 +86,9 @@ impl TripService {
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
 
-        if trip.status != TripStatus::Pendente {
+        if trip.status != TripStatus::Pending {
             return Err(ServiceError::BadRequest(
-                "Apenas viagens PENDENTE podem ser revisadas".to_string(),
+                "Apenas viagens PENDING podem ser revisadas".to_string(),
             ));
         }
 
@@ -98,11 +98,11 @@ impl TripService {
                 .await
                 .map_err(ServiceError::from)
         } else {
-            let motivo = payload.motivo_rejeicao.ok_or_else(|| {
+            let reason = payload.rejection_reason.ok_or_else(|| {
                 ServiceError::BadRequest("Motivo de rejeição obrigatório".to_string())
             })?;
             self.trip_repo
-                .reject(trip_id, &motivo, reviewer_id, payload.version)
+                .reject(trip_id, &reason, reviewer_id, payload.version)
                 .await
                 .map_err(ServiceError::from)
         }
@@ -122,17 +122,17 @@ impl TripService {
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
 
-        if trip.status != TripStatus::Aprovada {
+        if trip.status != TripStatus::Approved {
             return Err(ServiceError::BadRequest(
-                "Checkin só é possível em viagens APROVADAS".to_string(),
+                "Checkin só é possível em viagens APPROVED".to_string(),
             ));
         }
 
-        // Registra leitura de hodômetro (fonte: CHECKIN_GESTOR, sempre VALIDADO)
+        // Register odometer reading (source: CHECKIN_GESTOR, always VALIDATED)
         let odometer = self.odometer_repo
             .create(
                 trip.vehicle_id,
-                Decimal::from(payload.km_saida),
+                Decimal::from(payload.odometer_departure),
                 FonteLeitura::CheckinGestor,
                 Some(trip_id),
                 Utc::now(),
@@ -144,7 +144,7 @@ impl TripService {
             .await
             .map_err(ServiceError::from)?;
 
-        // allocation_status → EM_USO (OCC sobre veículo)
+        // allocation_status → EM_USO (OCC on vehicle)
         let _ = self.vehicle_repo
             .change_allocation_status(
                 trip.vehicle_id,
@@ -159,7 +159,7 @@ impl TripService {
             .checkin(
                 trip_id,
                 payload.driver_id,
-                payload.km_saida,
+                payload.odometer_departure,
                 Some(odometer.id),
                 user_id,
                 payload.version,
@@ -188,20 +188,20 @@ impl TripService {
             ));
         }
 
-        if let Some(km_saida) = trip.checkin_km {
-            if payload.km_retorno < km_saida {
+        if let Some(km_departure) = trip.checkin_km {
+            if payload.odometer_return < km_departure {
                 return Err(ServiceError::BadRequest(format!(
-                    "km_retorno ({}) deve ser >= km_saida ({})",
-                    payload.km_retorno, km_saida
+                    "odometer_return ({}) deve ser >= odometer_departure ({})",
+                    payload.odometer_return, km_departure
                 )));
             }
         }
 
-        // Registra leitura de hodômetro (fonte: CHECKOUT_CONDUTOR, sempre VALIDADO)
+        // Register odometer reading (source: CHECKOUT_CONDUTOR, always VALIDATED)
         let odometer = self.odometer_repo
             .create(
                 trip.vehicle_id,
-                Decimal::from(payload.km_retorno),
+                Decimal::from(payload.odometer_return),
                 FonteLeitura::CheckoutCondutor,
                 Some(trip_id),
                 Utc::now(),
@@ -213,7 +213,7 @@ impl TripService {
             .await
             .map_err(ServiceError::from)?;
 
-        // allocation_status → LIVRE (OCC sobre veículo)
+        // allocation_status → LIVRE (OCC on vehicle)
         let _ = self.vehicle_repo
             .change_allocation_status(
                 trip.vehicle_id,
@@ -227,7 +227,7 @@ impl TripService {
         self.trip_repo
             .checkout(
                 trip_id,
-                payload.km_retorno,
+                payload.odometer_return,
                 Some(odometer.id),
                 user_id,
                 payload.notes.as_deref(),
@@ -237,7 +237,7 @@ impl TripService {
             .map_err(ServiceError::from)
     }
 
-    // ── RF-USO-04: Cancelar ─────────────────────────────────────────────────
+    // ── RF-USO-04: Cancel ───────────────────────────────────────────────────
 
     pub async fn cancel_trip(
         &self,
@@ -251,19 +251,19 @@ impl TripService {
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
 
-        if !matches!(trip.status, TripStatus::Pendente | TripStatus::Aprovada) {
+        if !matches!(trip.status, TripStatus::Pending | TripStatus::Approved) {
             return Err(ServiceError::BadRequest(
-                "Cancelamento só é possível em viagens PENDENTE ou APROVADA".to_string(),
+                "Cancelamento só é possível em viagens PENDING ou APPROVED".to_string(),
             ));
         }
 
         self.trip_repo
-            .cancel(trip_id, &payload.motivo_cancelamento, user_id, payload.version)
+            .cancel(trip_id, &payload.cancellation_reason, user_id, payload.version)
             .await
             .map_err(ServiceError::from)
     }
 
-    // ── RF-USO-04: Busca e listagem ─────────────────────────────────────────
+    // ── RF-USO-04: Fetch and list ───────────────────────────────────────────
 
     pub async fn get_trip(&self, id: Uuid) -> Result<VehicleTripDto, ServiceError> {
         self.trip_repo

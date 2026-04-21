@@ -27,11 +27,11 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
         vehicle_id: Uuid,
         driver_id: Option<Uuid>,
         requester_id: Option<Uuid>,
-        destino: &str,
-        finalidade: &str,
-        passageiros: i32,
-        data_saida_prevista: DateTime<Utc>,
-        data_retorno_prevista: Option<DateTime<Utc>>,
+        destination: &str,
+        purpose: &str,
+        passengers: i32,
+        planned_departure: DateTime<Utc>,
+        planned_return: Option<DateTime<Utc>>,
         notes: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<VehicleTripDto, RepositoryError> {
@@ -48,11 +48,11 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
         .bind(vehicle_id)
         .bind(driver_id)
         .bind(requester_id)
-        .bind(destino)
-        .bind(finalidade)
-        .bind(passageiros)
-        .bind(data_saida_prevista)
-        .bind(data_retorno_prevista)
+        .bind(destination)
+        .bind(purpose)
+        .bind(passengers)
+        .bind(planned_departure)
+        .bind(planned_return)
         .bind(notes)
         .bind(created_by)
         .fetch_one(&self.pool)
@@ -71,7 +71,7 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
     async fn approve(
         &self,
         id: Uuid,
-        aprovado_por: Uuid,
+        approved_by: Uuid,
         version: i32,
     ) -> Result<VehicleTripDto, RepositoryError> {
         let result = sqlx::query_as::<_, VehicleTripDto>(
@@ -88,7 +88,7 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
             "#,
         )
         .bind(id)
-        .bind(aprovado_por)
+        .bind(approved_by)
         .bind(version)
         .fetch_optional(&self.pool)
         .await
@@ -100,8 +100,8 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
     async fn reject(
         &self,
         id: Uuid,
-        motivo_rejeicao: &str,
-        rejeitado_por: Uuid,
+        rejection_reason: &str,
+        rejected_by: Uuid,
         version: i32,
     ) -> Result<VehicleTripDto, RepositoryError> {
         let result = sqlx::query_as::<_, VehicleTripDto>(
@@ -119,8 +119,8 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
             "#,
         )
         .bind(id)
-        .bind(motivo_rejeicao)
-        .bind(rejeitado_por)
+        .bind(rejection_reason)
+        .bind(rejected_by)
         .bind(version)
         .fetch_optional(&self.pool)
         .await
@@ -133,9 +133,9 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
         &self,
         id: Uuid,
         driver_id: Uuid,
-        km_saida: i64,
+        odometer_departure: i64,
         checkin_odometer_id: Option<Uuid>,
-        checkin_por: Uuid,
+        checkin_by: Uuid,
         version: i32,
     ) -> Result<VehicleTripDto, RepositoryError> {
         let result = sqlx::query_as::<_, VehicleTripDto>(
@@ -156,9 +156,9 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
         )
         .bind(id)
         .bind(driver_id)
-        .bind(km_saida)
+        .bind(odometer_departure)
         .bind(checkin_odometer_id)
-        .bind(checkin_por)
+        .bind(checkin_by)
         .bind(version)
         .fetch_optional(&self.pool)
         .await
@@ -170,9 +170,9 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
     async fn checkout(
         &self,
         id: Uuid,
-        km_retorno: i64,
+        odometer_return: i64,
         checkout_odometer_id: Option<Uuid>,
-        checkout_por: Uuid,
+        checkout_by: Uuid,
         notes: Option<&str>,
         version: i32,
     ) -> Result<VehicleTripDto, RepositoryError> {
@@ -193,9 +193,9 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
             "#,
         )
         .bind(id)
-        .bind(km_retorno)
+        .bind(odometer_return)
         .bind(checkout_odometer_id)
-        .bind(checkout_por)
+        .bind(checkout_by)
         .bind(notes)
         .bind(version)
         .fetch_optional(&self.pool)
@@ -208,8 +208,8 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
     async fn cancel(
         &self,
         id: Uuid,
-        motivo: &str,
-        cancelado_por: Uuid,
+        reason: &str,
+        cancelled_by: Uuid,
         version: i32,
     ) -> Result<VehicleTripDto, RepositoryError> {
         let result = sqlx::query_as::<_, VehicleTripDto>(
@@ -227,8 +227,8 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
             "#,
         )
         .bind(id)
-        .bind(motivo)
-        .bind(cancelado_por)
+        .bind(reason)
+        .bind(cancelled_by)
         .bind(version)
         .fetch_optional(&self.pool)
         .await

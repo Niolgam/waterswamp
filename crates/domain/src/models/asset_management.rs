@@ -13,10 +13,14 @@ use uuid::Uuid;
 pub struct VehicleDepartmentTransferDto {
     pub id: Uuid,
     pub vehicle_id: Uuid,
-    pub dept_origem_id: Option<Uuid>,
-    pub dept_destino_id: Uuid,
-    pub data_efetiva: NaiveDate,
-    pub motivo: String,
+    #[sqlx(rename = "dept_origem_id")]
+    pub source_dept_id: Option<Uuid>,
+    #[sqlx(rename = "dept_destino_id")]
+    pub target_dept_id: Uuid,
+    #[sqlx(rename = "data_efetiva")]
+    pub effective_date: NaiveDate,
+    #[sqlx(rename = "motivo")]
+    pub reason: String,
     pub documento_sei: Option<String>,
     pub notes: Option<String>,
     pub created_by: Option<Uuid>,
@@ -26,9 +30,9 @@ pub struct VehicleDepartmentTransferDto {
 /// Payload para registrar uma transferência departamental.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateVehicleDepartmentTransferPayload {
-    pub dept_destino_id: Uuid,
-    pub data_efetiva: NaiveDate,
-    pub motivo: String,
+    pub target_dept_id: Uuid,
+    pub effective_date: NaiveDate,
+    pub reason: String,
     pub documento_sei: Option<String>,
     pub notes: Option<String>,
 }
@@ -87,22 +91,32 @@ pub struct DepreciationCalculationDto {
 #[sqlx(type_name = "vehicle_incident_type_enum", rename_all = "SCREAMING_SNAKE_CASE")]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum VehicleIncidentType {
-    Acidente,
-    RouboFurto,
-    Incendio,
-    Alagamento,
-    Vandalismo,
-    Outro,
+    #[sqlx(rename = "ACIDENTE")]
+    Accident,
+    #[sqlx(rename = "ROUBO_FURTO")]
+    TheftRobbery,
+    #[sqlx(rename = "INCENDIO")]
+    Fire,
+    #[sqlx(rename = "ALAGAMENTO")]
+    Flood,
+    #[sqlx(rename = "VANDALISMO")]
+    Vandalism,
+    #[sqlx(rename = "OUTRO")]
+    Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
 #[sqlx(type_name = "vehicle_incident_status_enum", rename_all = "SCREAMING_SNAKE_CASE")]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum VehicleIncidentStatus {
-    Aberto,
-    EmApuracao,
-    EncerrradoRecuperado,
-    EncerradoPerdaTotal,
+    #[sqlx(rename = "ABERTO")]
+    Open,
+    #[sqlx(rename = "EM_APURACAO")]
+    UnderInvestigation,
+    #[sqlx(rename = "ENCERRADO_RECUPERADO")]
+    ClosedRecovered,
+    #[sqlx(rename = "ENCERRADO_PERDA_TOTAL")]
+    ClosedTotalLoss,
 }
 
 /// Registro de sinistro de veículo (RF-AST-12).
@@ -110,17 +124,27 @@ pub enum VehicleIncidentStatus {
 pub struct VehicleIncidentDto {
     pub id: Uuid,
     pub vehicle_id: Uuid,
-    pub tipo: VehicleIncidentType,
+    #[sqlx(rename = "tipo")]
+    pub incident_type: VehicleIncidentType,
     pub status: VehicleIncidentStatus,
-    pub data_ocorrencia: DateTime<Utc>,
-    pub local_ocorrencia: Option<String>,
-    pub numero_bo: String,
-    pub numero_seguradora: Option<String>,
-    pub apolice_id: Option<Uuid>,
-    pub descricao: Option<String>,
-    pub notas_resolucao: Option<String>,
-    pub encerrado_em: Option<DateTime<Utc>>,
-    pub encerrado_por: Option<Uuid>,
+    #[sqlx(rename = "data_ocorrencia")]
+    pub occurred_at: DateTime<Utc>,
+    #[sqlx(rename = "local_ocorrencia")]
+    pub location: Option<String>,
+    #[sqlx(rename = "numero_bo")]
+    pub police_report_number: String,
+    #[sqlx(rename = "numero_seguradora")]
+    pub insurance_number: Option<String>,
+    #[sqlx(rename = "apolice_id")]
+    pub policy_id: Option<Uuid>,
+    #[sqlx(rename = "descricao")]
+    pub description: Option<String>,
+    #[sqlx(rename = "notas_resolucao")]
+    pub resolution_notes: Option<String>,
+    #[sqlx(rename = "encerrado_em")]
+    pub closed_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "encerrado_por")]
+    pub closed_by: Option<Uuid>,
     pub version: i32,
     pub created_by: Option<Uuid>,
     pub updated_by: Option<Uuid>,
@@ -131,13 +155,13 @@ pub struct VehicleIncidentDto {
 /// Payload para registrar um sinistro. Aciona `operational_status → INDISPONIVEL`.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateVehicleIncidentPayload {
-    pub tipo: VehicleIncidentType,
-    pub data_ocorrencia: DateTime<Utc>,
-    pub local_ocorrencia: Option<String>,
+    pub incident_type: VehicleIncidentType,
+    pub occurred_at: DateTime<Utc>,
+    pub location: Option<String>,
     /// Número do Boletim de Ocorrência — obrigatório (RF-AST-12).
-    pub numero_bo: String,
-    pub numero_seguradora: Option<String>,
-    pub descricao: Option<String>,
+    pub police_report_number: String,
+    pub insurance_number: Option<String>,
+    pub description: Option<String>,
     /// Versão atual do veículo para OCC.
     pub vehicle_version: i32,
 }
@@ -146,8 +170,8 @@ pub struct CreateVehicleIncidentPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateVehicleIncidentPayload {
     pub status: VehicleIncidentStatus,
-    pub notas_resolucao: Option<String>,
-    pub numero_seguradora: Option<String>,
+    pub resolution_notes: Option<String>,
+    pub insurance_number: Option<String>,
     pub version: i32,
 }
 
@@ -159,21 +183,30 @@ pub struct UpdateVehicleIncidentPayload {
 #[sqlx(type_name = "disposal_status_enum", rename_all = "SCREAMING_SNAKE_CASE")]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DisposalStatus {
-    Iniciado,
-    EmAndamento,
-    Concluido,
-    Cancelado,
+    #[sqlx(rename = "INICIADO")]
+    Initiated,
+    #[sqlx(rename = "EM_ANDAMENTO")]
+    InProgress,
+    #[sqlx(rename = "CONCLUIDO")]
+    Completed,
+    #[sqlx(rename = "CANCELADO")]
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
 #[sqlx(type_name = "disposal_destination_enum", rename_all = "SCREAMING_SNAKE_CASE")]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DisposalDestination {
-    Doacao,
-    Leilao,
-    Sucata,
+    #[sqlx(rename = "DOACAO")]
+    Donation,
+    #[sqlx(rename = "LEILAO")]
+    Auction,
+    #[sqlx(rename = "SUCATA")]
+    Scrap,
+    #[sqlx(rename = "TRANSFERENCIA_OUTRO_ORGAO")]
     TransferenciaOutroOrgao,
-    Outro,
+    #[sqlx(rename = "OUTRO")]
+    Other,
 }
 
 /// Processo de baixa patrimonial de veículo (RF-AST-09/10).
@@ -182,15 +215,23 @@ pub struct VehicleDisposalProcessDto {
     pub id: Uuid,
     pub vehicle_id: Uuid,
     pub status: DisposalStatus,
-    pub destino: DisposalDestination,
-    pub justificativa: String,
-    pub numero_laudo: String,
+    #[sqlx(rename = "destino")]
+    pub destination: DisposalDestination,
+    #[sqlx(rename = "justificativa")]
+    pub justification: String,
+    #[sqlx(rename = "numero_laudo")]
+    pub report_number: String,
     pub documento_sei: Option<String>,
-    pub concluido_em: Option<DateTime<Utc>>,
-    pub concluido_por: Option<Uuid>,
-    pub cancelado_em: Option<DateTime<Utc>>,
-    pub cancelado_por: Option<Uuid>,
-    pub motivo_cancelamento: Option<String>,
+    #[sqlx(rename = "concluido_em")]
+    pub completed_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "concluido_por")]
+    pub completed_by: Option<Uuid>,
+    #[sqlx(rename = "cancelado_em")]
+    pub cancelled_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "cancelado_por")]
+    pub cancelled_by: Option<Uuid>,
+    #[sqlx(rename = "motivo_cancelamento")]
+    pub cancellation_reason: Option<String>,
     pub version: i32,
     pub created_by: Option<Uuid>,
     pub updated_by: Option<Uuid>,
@@ -201,10 +242,10 @@ pub struct VehicleDisposalProcessDto {
 /// Payload para iniciar um processo de baixa (RF-AST-09).
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateDisposalProcessPayload {
-    pub destino: DisposalDestination,
-    pub justificativa: String,
+    pub destination: DisposalDestination,
+    pub justification: String,
     /// Número do laudo técnico — obrigatório (RF-AST-09).
-    pub numero_laudo: String,
+    pub report_number: String,
     pub documento_sei: Option<String>,
     /// Versão atual do veículo para OCC (aciona INDISPONIVEL + suspende depreciação).
     pub vehicle_version: i32,
@@ -214,7 +255,7 @@ pub struct CreateDisposalProcessPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AdvanceDisposalPayload {
     pub new_status: DisposalStatus,
-    pub motivo_cancelamento: Option<String>,
+    pub cancellation_reason: Option<String>,
     pub version: i32,
 }
 
@@ -223,9 +264,11 @@ pub struct AdvanceDisposalPayload {
 pub struct VehicleDisposalStepDto {
     pub id: Uuid,
     pub disposal_id: Uuid,
-    pub descricao: String,
+    #[sqlx(rename = "descricao")]
+    pub description: String,
     pub documento_sei: String,
-    pub data_execucao: NaiveDate,
+    #[sqlx(rename = "data_execucao")]
+    pub execution_date: NaiveDate,
     pub responsavel_id: Option<Uuid>,
     pub notes: Option<String>,
     pub created_by: Option<Uuid>,
@@ -235,10 +278,10 @@ pub struct VehicleDisposalStepDto {
 /// Payload para adicionar uma etapa ao processo de baixa.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateDisposalStepPayload {
-    pub descricao: String,
+    pub description: String,
     /// Documento SEI obrigatório por etapa (RF-AST-10).
     pub documento_sei: String,
-    pub data_execucao: NaiveDate,
+    pub execution_date: NaiveDate,
     pub responsavel_id: Option<Uuid>,
     pub notes: Option<String>,
 }
@@ -250,10 +293,13 @@ pub struct CreateDisposalStepPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct FleetFuelCatalogDto {
     pub id: Uuid,
-    pub nome: String,
+    #[sqlx(rename = "nome")]
+    pub name: String,
     pub catmat_item_id: Option<Uuid>,
-    pub unidade: String,
-    pub ativo: bool,
+    #[sqlx(rename = "unidade")]
+    pub unit: String,
+    #[sqlx(rename = "ativo")]
+    pub active: bool,
     pub notes: Option<String>,
     pub created_by: Option<Uuid>,
     pub updated_by: Option<Uuid>,
@@ -263,18 +309,18 @@ pub struct FleetFuelCatalogDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateFleetFuelCatalogPayload {
-    pub nome: String,
+    pub name: String,
     pub catmat_item_id: Option<Uuid>,
-    pub unidade: Option<String>,
+    pub unit: Option<String>,
     pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateFleetFuelCatalogPayload {
-    pub nome: Option<String>,
+    pub name: Option<String>,
     pub catmat_item_id: Option<Uuid>,
-    pub unidade: Option<String>,
-    pub ativo: Option<bool>,
+    pub unit: Option<String>,
+    pub active: Option<bool>,
     pub notes: Option<String>,
 }
 
@@ -285,9 +331,11 @@ pub struct UpdateFleetFuelCatalogPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct FleetMaintenanceServiceDto {
     pub id: Uuid,
-    pub nome: String,
+    #[sqlx(rename = "nome")]
+    pub name: String,
     pub catser_item_id: Option<Uuid>,
-    pub ativo: bool,
+    #[sqlx(rename = "ativo")]
+    pub active: bool,
     pub notes: Option<String>,
     pub created_by: Option<Uuid>,
     pub updated_by: Option<Uuid>,
@@ -297,16 +345,16 @@ pub struct FleetMaintenanceServiceDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateFleetMaintenanceServicePayload {
-    pub nome: String,
+    pub name: String,
     pub catser_item_id: Option<Uuid>,
     pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpdateFleetMaintenanceServicePayload {
-    pub nome: Option<String>,
+    pub name: Option<String>,
     pub catser_item_id: Option<Uuid>,
-    pub ativo: Option<bool>,
+    pub active: Option<bool>,
     pub notes: Option<String>,
 }
 
@@ -317,26 +365,32 @@ pub struct UpdateFleetMaintenanceServicePayload {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct FleetSystemParamDto {
     pub id: Uuid,
-    pub chave: String,
-    pub valor: String,
-    pub descricao: Option<String>,
+    #[sqlx(rename = "chave")]
+    pub key: String,
+    #[sqlx(rename = "valor")]
+    pub value: String,
+    #[sqlx(rename = "descricao")]
+    pub description: Option<String>,
     pub updated_by: Option<Uuid>,
     pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UpsertFleetSystemParamPayload {
-    pub chave: String,
-    pub valor: String,
-    pub descricao: Option<String>,
+    pub key: String,
+    pub value: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct FleetChecklistTemplateDto {
     pub id: Uuid,
-    pub nome: String,
-    pub descricao: Option<String>,
-    pub ativo: bool,
+    #[sqlx(rename = "nome")]
+    pub name: String,
+    #[sqlx(rename = "descricao")]
+    pub description: Option<String>,
+    #[sqlx(rename = "ativo")]
+    pub active: bool,
     pub created_by: Option<Uuid>,
     pub updated_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
@@ -345,23 +399,26 @@ pub struct FleetChecklistTemplateDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateFleetChecklistTemplatePayload {
-    pub nome: String,
-    pub descricao: Option<String>,
+    pub name: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct FleetChecklistItemDto {
     pub id: Uuid,
     pub template_id: Uuid,
-    pub descricao: String,
-    pub obrigatorio: bool,
-    pub ordem: i32,
+    #[sqlx(rename = "descricao")]
+    pub description: String,
+    #[sqlx(rename = "obrigatorio")]
+    pub required: bool,
+    #[sqlx(rename = "ordem")]
+    pub order_index: i32,
     pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateFleetChecklistItemPayload {
-    pub descricao: String,
-    pub obrigatorio: Option<bool>,
-    pub ordem: Option<i32>,
+    pub description: String,
+    pub required: Option<bool>,
+    pub order_index: Option<i32>,
 }

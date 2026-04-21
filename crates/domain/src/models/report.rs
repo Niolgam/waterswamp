@@ -10,12 +10,18 @@ use uuid::Uuid;
 pub struct FuelConsumptionDto {
     pub vehicle_id: Uuid,
     pub license_plate: Option<String>,
-    pub total_abastecimentos: i64,
-    pub total_litros: Option<Decimal>,
-    pub total_custo: Option<Decimal>,
-    pub media_consumo_l100km: Option<Decimal>,
-    pub custo_por_km: Option<Decimal>,
-    pub km_total_percorrido: Option<i64>,
+    #[sqlx(rename = "total_fuelings")]
+    pub total_fuelings: i64,
+    #[sqlx(rename = "total_liters")]
+    pub total_liters: Option<Decimal>,
+    #[sqlx(rename = "total_cost")]
+    pub total_cost: Option<Decimal>,
+    #[sqlx(rename = "avg_consumption_l100km")]
+    pub avg_consumption_l100km: Option<Decimal>,
+    #[sqlx(rename = "cost_per_km")]
+    pub cost_per_km: Option<Decimal>,
+    #[sqlx(rename = "total_km_driven")]
+    pub total_km_driven: Option<i64>,
 }
 
 // ── RF-REL-02: Dashboard por veículo ────────────────────────────────────────
@@ -28,36 +34,54 @@ pub struct VehicleDashboardDto {
     pub model_name: Option<String>,
     pub operational_status: String,
     pub allocation_status: String,
-    pub total_viagens: i64,
-    pub km_total_viagens: Option<i64>,
-    pub custo_total_manutencao: Option<Decimal>,
-    pub custo_total_combustivel: Option<Decimal>,
-    pub os_abertas: i64,
-    pub total_sinistros: i64,
+    #[sqlx(rename = "total_trips")]
+    pub total_trips: i64,
+    #[sqlx(rename = "total_km_trips")]
+    pub total_km_trips: Option<i64>,
+    #[sqlx(rename = "total_maintenance_cost")]
+    pub total_maintenance_cost: Option<Decimal>,
+    #[sqlx(rename = "total_fuel_cost")]
+    pub total_fuel_cost: Option<Decimal>,
+    #[sqlx(rename = "open_orders")]
+    pub open_orders: i64,
+    #[sqlx(rename = "total_incidents")]
+    pub total_incidents: i64,
 }
 
 // ── RF-REL-03: Resumo consolidado da frota ───────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
 pub struct FleetSummaryDto {
-    pub total_veiculos: i64,
-    pub veiculos_ativos: i64,
-    pub veiculos_manutencao: i64,
-    pub veiculos_indisponiveis: i64,
-    pub veiculos_em_uso: i64,
-    pub veiculos_livres: i64,
-    pub percentual_disponibilidade: Option<Decimal>,
-    pub total_viagens_mes: i64,
-    pub km_total_mes: Option<i64>,
-    pub custo_total_combustivel_mes: Option<Decimal>,
-    pub custo_total_manutencao_mes: Option<Decimal>,
-    pub custo_total_frota_mes: Option<Decimal>,
+    #[sqlx(rename = "total_vehicles")]
+    pub total_vehicles: i64,
+    #[sqlx(rename = "active_vehicles")]
+    pub active_vehicles: i64,
+    #[sqlx(rename = "vehicles_in_maintenance")]
+    pub vehicles_in_maintenance: i64,
+    #[sqlx(rename = "unavailable_vehicles")]
+    pub unavailable_vehicles: i64,
+    #[sqlx(rename = "vehicles_in_use")]
+    pub vehicles_in_use: i64,
+    #[sqlx(rename = "available_vehicles")]
+    pub available_vehicles: i64,
+    #[sqlx(rename = "availability_percentage")]
+    pub availability_percentage: Option<Decimal>,
+    #[sqlx(rename = "monthly_trips")]
+    pub monthly_trips: i64,
+    #[sqlx(rename = "monthly_km")]
+    pub monthly_km: Option<i64>,
+    #[sqlx(rename = "monthly_fuel_cost")]
+    pub monthly_fuel_cost: Option<Decimal>,
+    #[sqlx(rename = "monthly_maintenance_cost")]
+    pub monthly_maintenance_cost: Option<Decimal>,
+    #[sqlx(rename = "monthly_fleet_cost")]
+    pub monthly_fleet_cost: Option<Decimal>,
 }
 
 // ── Filtros de data para relatórios ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct ReportDateFilter {
-    pub data_inicio: Option<DateTime<Utc>>,
-    pub data_fim: Option<DateTime<Utc>>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
 }

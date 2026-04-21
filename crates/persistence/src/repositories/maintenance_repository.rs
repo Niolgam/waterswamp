@@ -26,18 +26,18 @@ impl MaintenanceOrderRepositoryPort for MaintenanceOrderRepository {
     async fn create(
         &self,
         vehicle_id: Uuid,
-        tipo: MaintenanceOrderType,
-        titulo: &str,
-        descricao: Option<&str>,
-        fornecedor_id: Option<Uuid>,
-        data_abertura: NaiveDate,
-        data_prevista_conclusao: Option<NaiveDate>,
-        km_abertura: Option<i64>,
-        custo_previsto: Option<Decimal>,
-        numero_os_externo: Option<&str>,
+        order_type: MaintenanceOrderType,
+        title: &str,
+        description: Option<&str>,
+        supplier_id: Option<Uuid>,
+        opened_date: NaiveDate,
+        expected_completion_date: Option<NaiveDate>,
+        odometer_at_opening: Option<i64>,
+        estimated_cost: Option<Decimal>,
+        external_order_number: Option<&str>,
         documento_sei: Option<&str>,
         incident_id: Option<Uuid>,
-        notas: Option<&str>,
+        notes: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<MaintenanceOrderDto, RepositoryError> {
         sqlx::query_as::<_, MaintenanceOrderDto>(
@@ -52,18 +52,18 @@ impl MaintenanceOrderRepositoryPort for MaintenanceOrderRepository {
             "#,
         )
         .bind(vehicle_id)
-        .bind(tipo)
-        .bind(titulo)
-        .bind(descricao)
-        .bind(fornecedor_id)
-        .bind(data_abertura)
-        .bind(data_prevista_conclusao)
-        .bind(km_abertura)
-        .bind(custo_previsto)
-        .bind(numero_os_externo)
+        .bind(order_type)
+        .bind(title)
+        .bind(description)
+        .bind(supplier_id)
+        .bind(opened_date)
+        .bind(expected_completion_date)
+        .bind(odometer_at_opening)
+        .bind(estimated_cost)
+        .bind(external_order_number)
         .bind(documento_sei)
         .bind(incident_id)
-        .bind(notas)
+        .bind(notes)
         .bind(created_by)
         .fetch_one(&self.pool)
         .await
@@ -84,16 +84,16 @@ impl MaintenanceOrderRepositoryPort for MaintenanceOrderRepository {
         &self,
         id: Uuid,
         new_status: MaintenanceOrderStatus,
-        custo_real: Option<Decimal>,
-        data_conclusao: Option<NaiveDate>,
-        notas: Option<&str>,
-        motivo_cancelamento: Option<&str>,
-        concluido_por: Option<Uuid>,
-        cancelado_por: Option<Uuid>,
+        actual_cost: Option<Decimal>,
+        completion_date: Option<NaiveDate>,
+        notes: Option<&str>,
+        cancellation_reason: Option<&str>,
+        completed_by: Option<Uuid>,
+        cancelled_by: Option<Uuid>,
         version: i32,
     ) -> Result<MaintenanceOrderDto, RepositoryError> {
-        let is_concluida = new_status == MaintenanceOrderStatus::Concluida;
-        let is_cancelada = new_status == MaintenanceOrderStatus::Cancelada;
+        let is_completed = new_status == MaintenanceOrderStatus::Completed;
+        let is_cancelled = new_status == MaintenanceOrderStatus::Cancelled;
 
         let result = sqlx::query_as::<_, MaintenanceOrderDto>(
             r#"
@@ -115,13 +115,13 @@ impl MaintenanceOrderRepositoryPort for MaintenanceOrderRepository {
         )
         .bind(id)
         .bind(new_status)
-        .bind(custo_real)
-        .bind(data_conclusao)
-        .bind(notas)
-        .bind(motivo_cancelamento)
-        .bind(concluido_por.or(cancelado_por))
-        .bind(is_concluida)
-        .bind(is_cancelada)
+        .bind(actual_cost)
+        .bind(completion_date)
+        .bind(notes)
+        .bind(cancellation_reason)
+        .bind(completed_by.or(cancelled_by))
+        .bind(is_completed)
+        .bind(is_cancelled)
         .bind(version)
         .fetch_optional(&self.pool)
         .await
@@ -196,9 +196,9 @@ impl MaintenanceOrderRepositoryPort for MaintenanceOrderRepository {
         &self,
         order_id: Uuid,
         service_id: Option<Uuid>,
-        descricao: &str,
-        quantidade: Decimal,
-        custo_unitario: Option<Decimal>,
+        description: &str,
+        quantity: Decimal,
+        unit_cost: Option<Decimal>,
         created_by: Option<Uuid>,
     ) -> Result<MaintenanceOrderItemDto, RepositoryError> {
         sqlx::query_as::<_, MaintenanceOrderItemDto>(
@@ -211,9 +211,9 @@ impl MaintenanceOrderRepositoryPort for MaintenanceOrderRepository {
         )
         .bind(order_id)
         .bind(service_id)
-        .bind(descricao)
-        .bind(quantidade)
-        .bind(custo_unitario)
+        .bind(description)
+        .bind(quantity)
+        .bind(unit_cost)
         .bind(created_by)
         .fetch_one(&self.pool)
         .await

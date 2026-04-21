@@ -11,15 +11,15 @@ use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct DateRangeQuery {
-    pub data_inicio: Option<DateTime<Utc>>,
-    pub data_fim: Option<DateTime<Utc>>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
 }
 
 #[derive(Deserialize)]
 pub struct FuelConsumptionQuery {
     pub vehicle_id: Option<Uuid>,
-    pub data_inicio: Option<DateTime<Utc>>,
-    pub data_fim: Option<DateTime<Utc>>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
 }
 
 // RF-REL-01: GET /fleet/reports/fuel-consumption
@@ -29,7 +29,7 @@ pub async fn get_fuel_consumption(
 ) -> impl IntoResponse {
     match state
         .fleet_report_service
-        .fuel_consumption(q.vehicle_id, q.data_inicio, q.data_fim)
+        .fuel_consumption(q.vehicle_id, q.start_date, q.end_date)
         .await
     {
         Ok(data) => Json(data).into_response(),
@@ -45,7 +45,7 @@ pub async fn get_vehicle_dashboard(
 ) -> impl IntoResponse {
     match state
         .fleet_report_service
-        .vehicle_dashboard(vehicle_id, q.data_inicio, q.data_fim)
+        .vehicle_dashboard(vehicle_id, q.start_date, q.end_date)
         .await
     {
         Ok(data) => Json(data).into_response(),
@@ -67,7 +67,7 @@ pub async fn get_fleet_summary(
 ) -> impl IntoResponse {
     match state
         .fleet_report_service
-        .fleet_summary(q.data_inicio, q.data_fim)
+        .fleet_summary(q.start_date, q.end_date)
         .await
     {
         Ok(data) => Json(data).into_response(),

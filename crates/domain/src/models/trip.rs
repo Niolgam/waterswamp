@@ -14,12 +14,17 @@ use uuid::Uuid;
 #[sqlx(type_name = "trip_status_enum", rename_all = "SCREAMING_SNAKE_CASE")]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TripStatus {
-    Pendente,
-    Aprovada,
-    Rejeitada,
+    #[sqlx(rename = "PENDENTE")]
+    Pending,
+    #[sqlx(rename = "APROVADA")]
+    Approved,
+    #[sqlx(rename = "REJEITADA")]
+    Rejected,
     Checkin,
-    Concluida,
-    Cancelada,
+    #[sqlx(rename = "CONCLUIDA")]
+    Completed,
+    #[sqlx(rename = "CANCELADA")]
+    Cancelled,
 }
 
 /// Viagem/uso de veículo (RF-USO-01/02/03).
@@ -29,32 +34,48 @@ pub struct VehicleTripDto {
     pub vehicle_id: Uuid,
     pub driver_id: Option<Uuid>,
     pub requester_id: Option<Uuid>,
-    pub destino: String,
-    pub finalidade: String,
-    pub passageiros: i32,
-    pub data_saida_prevista: DateTime<Utc>,
-    pub data_retorno_prevista: Option<DateTime<Utc>>,
+    #[sqlx(rename = "destino")]
+    pub destination: String,
+    #[sqlx(rename = "finalidade")]
+    pub purpose: String,
+    #[sqlx(rename = "passageiros")]
+    pub passengers: i32,
+    #[sqlx(rename = "data_saida_prevista")]
+    pub planned_departure: DateTime<Utc>,
+    #[sqlx(rename = "data_retorno_prevista")]
+    pub planned_return: Option<DateTime<Utc>>,
     pub notes: Option<String>,
     pub status: TripStatus,
     // Aprovação
-    pub aprovado_por: Option<Uuid>,
-    pub aprovado_em: Option<DateTime<Utc>>,
-    pub motivo_rejeicao: Option<String>,
+    #[sqlx(rename = "aprovado_por")]
+    pub approved_by: Option<Uuid>,
+    #[sqlx(rename = "aprovado_em")]
+    pub approved_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "motivo_rejeicao")]
+    pub rejection_reason: Option<String>,
     // Checkin
-    pub checkin_em: Option<DateTime<Utc>>,
-    pub checkin_por: Option<Uuid>,
+    #[sqlx(rename = "checkin_em")]
+    pub checkin_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "checkin_por")]
+    pub checkin_by: Option<Uuid>,
     pub checkin_km: Option<i64>,
     pub checkin_odometer_id: Option<Uuid>,
     // Checkout
-    pub checkout_em: Option<DateTime<Utc>>,
-    pub checkout_por: Option<Uuid>,
+    #[sqlx(rename = "checkout_em")]
+    pub checkout_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "checkout_por")]
+    pub checkout_by: Option<Uuid>,
     pub checkout_km: Option<i64>,
     pub checkout_odometer_id: Option<Uuid>,
-    pub km_percorridos: Option<i64>,
+    #[sqlx(rename = "km_percorridos")]
+    pub km_traveled: Option<i64>,
     // Cancelamento
-    pub cancelado_por: Option<Uuid>,
-    pub cancelado_em: Option<DateTime<Utc>>,
-    pub motivo_cancelamento: Option<String>,
+    #[sqlx(rename = "cancelado_por")]
+    pub cancelled_by: Option<Uuid>,
+    #[sqlx(rename = "cancelado_em")]
+    pub cancelled_at: Option<DateTime<Utc>>,
+    #[sqlx(rename = "motivo_cancelamento")]
+    pub cancellation_reason: Option<String>,
     // OCC + audit
     pub version: i32,
     pub created_by: Option<Uuid>,
@@ -68,11 +89,11 @@ pub struct VehicleTripDto {
 pub struct CreateTripPayload {
     pub vehicle_id: Uuid,
     pub driver_id: Option<Uuid>,
-    pub destino: String,
-    pub finalidade: String,
-    pub passageiros: Option<i32>,
-    pub data_saida_prevista: DateTime<Utc>,
-    pub data_retorno_prevista: Option<DateTime<Utc>>,
+    pub destination: String,
+    pub purpose: String,
+    pub passengers: Option<i32>,
+    pub planned_departure: DateTime<Utc>,
+    pub planned_return: Option<DateTime<Utc>>,
     pub notes: Option<String>,
 }
 
@@ -81,7 +102,7 @@ pub struct CreateTripPayload {
 pub struct ReviewTripPayload {
     /// `true` = APROVADA; `false` = REJEITADA.
     pub approved: bool,
-    pub motivo_rejeicao: Option<String>,
+    pub rejection_reason: Option<String>,
     pub version: i32,
 }
 
@@ -91,7 +112,7 @@ pub struct CheckinPayload {
     /// Condutor que realiza o checkin (pode diferir do planejado).
     pub driver_id: Uuid,
     /// Leitura do hodômetro no momento da saída.
-    pub km_saida: i64,
+    pub odometer_departure: i64,
     /// Versão atual do veículo para OCC (muda allocation_status → EM_USO).
     pub vehicle_version: i32,
     pub version: i32,
@@ -101,7 +122,7 @@ pub struct CheckinPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CheckoutPayload {
     /// Leitura do hodômetro no retorno.
-    pub km_retorno: i64,
+    pub odometer_return: i64,
     pub notes: Option<String>,
     /// Versão atual do veículo para OCC (muda allocation_status → LIVRE).
     pub vehicle_version: i32,
@@ -111,7 +132,7 @@ pub struct CheckoutPayload {
 /// Cancela uma viagem antes do checkin.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CancelTripPayload {
-    pub motivo_cancelamento: String,
+    pub cancellation_reason: String,
     pub version: i32,
 }
 

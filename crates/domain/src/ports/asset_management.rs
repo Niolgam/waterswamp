@@ -14,10 +14,10 @@ pub trait VehicleDepartmentTransferRepositoryPort: Send + Sync {
     async fn create(
         &self,
         vehicle_id: Uuid,
-        dept_origem_id: Option<Uuid>,
-        dept_destino_id: Uuid,
-        data_efetiva: NaiveDate,
-        motivo: &str,
+        source_dept_id: Option<Uuid>,
+        target_dept_id: Uuid,
+        effective_date: NaiveDate,
+        reason: &str,
         documento_sei: Option<&str>,
         notes: Option<&str>,
         created_by: Option<Uuid>,
@@ -67,12 +67,12 @@ pub trait VehicleIncidentRepositoryPort: Send + Sync {
     async fn create(
         &self,
         vehicle_id: Uuid,
-        tipo: VehicleIncidentType,
-        data_ocorrencia: chrono::DateTime<chrono::Utc>,
-        local_ocorrencia: Option<&str>,
-        numero_bo: &str,
-        numero_seguradora: Option<&str>,
-        descricao: Option<&str>,
+        incident_type: VehicleIncidentType,
+        occurred_at: chrono::DateTime<chrono::Utc>,
+        location: Option<&str>,
+        police_report_number: &str,
+        insurance_number: Option<&str>,
+        description: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<VehicleIncidentDto, RepositoryError>;
 
@@ -82,9 +82,9 @@ pub trait VehicleIncidentRepositoryPort: Send + Sync {
         &self,
         id: Uuid,
         status: VehicleIncidentStatus,
-        notas_resolucao: Option<&str>,
-        numero_seguradora: Option<&str>,
-        encerrado_por: Option<Uuid>,
+        resolution_notes: Option<&str>,
+        insurance_number: Option<&str>,
+        closed_by: Option<Uuid>,
         version: i32,
     ) -> Result<VehicleIncidentDto, RepositoryError>;
 
@@ -104,9 +104,9 @@ pub trait VehicleDisposalRepositoryPort: Send + Sync {
     async fn create(
         &self,
         vehicle_id: Uuid,
-        destino: DisposalDestination,
-        justificativa: &str,
-        numero_laudo: &str,
+        destination: DisposalDestination,
+        justification: &str,
+        report_number: &str,
         documento_sei: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<VehicleDisposalProcessDto, RepositoryError>;
@@ -119,9 +119,9 @@ pub trait VehicleDisposalRepositoryPort: Send + Sync {
         &self,
         id: Uuid,
         new_status: DisposalStatus,
-        concluido_por: Option<Uuid>,
-        cancelado_por: Option<Uuid>,
-        motivo_cancelamento: Option<&str>,
+        completed_by: Option<Uuid>,
+        cancelled_by: Option<Uuid>,
+        cancellation_reason: Option<&str>,
         version: i32,
     ) -> Result<VehicleDisposalProcessDto, RepositoryError>;
 
@@ -131,9 +131,9 @@ pub trait VehicleDisposalRepositoryPort: Send + Sync {
     async fn add_step(
         &self,
         disposal_id: Uuid,
-        descricao: &str,
+        description: &str,
         documento_sei: &str,
-        data_execucao: chrono::NaiveDate,
+        execution_date: chrono::NaiveDate,
         responsavel_id: Option<Uuid>,
         notes: Option<&str>,
         created_by: Option<Uuid>,
@@ -150,9 +150,9 @@ pub trait VehicleDisposalRepositoryPort: Send + Sync {
 pub trait FleetFuelCatalogRepositoryPort: Send + Sync {
     async fn create(
         &self,
-        nome: &str,
+        name: &str,
         catmat_item_id: Option<Uuid>,
-        unidade: &str,
+        unit: &str,
         notes: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<FleetFuelCatalogDto, RepositoryError>;
@@ -162,10 +162,10 @@ pub trait FleetFuelCatalogRepositoryPort: Send + Sync {
     async fn update(
         &self,
         id: Uuid,
-        nome: Option<&str>,
+        name: Option<&str>,
         catmat_item_id: Option<Option<Uuid>>,
-        unidade: Option<&str>,
-        ativo: Option<bool>,
+        unit: Option<&str>,
+        active: Option<bool>,
         notes: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<FleetFuelCatalogDto, RepositoryError>;
@@ -181,7 +181,7 @@ pub trait FleetFuelCatalogRepositoryPort: Send + Sync {
 pub trait FleetMaintenanceServiceRepositoryPort: Send + Sync {
     async fn create(
         &self,
-        nome: &str,
+        name: &str,
         catser_item_id: Option<Uuid>,
         notes: Option<&str>,
         created_by: Option<Uuid>,
@@ -192,9 +192,9 @@ pub trait FleetMaintenanceServiceRepositoryPort: Send + Sync {
     async fn update(
         &self,
         id: Uuid,
-        nome: Option<&str>,
+        name: Option<&str>,
         catser_item_id: Option<Option<Uuid>>,
-        ativo: Option<bool>,
+        active: Option<bool>,
         notes: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<FleetMaintenanceServiceDto, RepositoryError>;
@@ -208,13 +208,13 @@ pub trait FleetMaintenanceServiceRepositoryPort: Send + Sync {
 
 #[async_trait]
 pub trait FleetSystemParamRepositoryPort: Send + Sync {
-    async fn find_by_key(&self, chave: &str) -> Result<Option<FleetSystemParamDto>, RepositoryError>;
+    async fn find_by_key(&self, key: &str) -> Result<Option<FleetSystemParamDto>, RepositoryError>;
 
     async fn upsert(
         &self,
-        chave: &str,
-        valor: &str,
-        descricao: Option<&str>,
+        key: &str,
+        value: &str,
+        description: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<FleetSystemParamDto, RepositoryError>;
 
@@ -229,8 +229,8 @@ pub trait FleetSystemParamRepositoryPort: Send + Sync {
 pub trait FleetChecklistTemplateRepositoryPort: Send + Sync {
     async fn create(
         &self,
-        nome: &str,
-        descricao: Option<&str>,
+        name: &str,
+        description: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<FleetChecklistTemplateDto, RepositoryError>;
 
@@ -241,9 +241,9 @@ pub trait FleetChecklistTemplateRepositoryPort: Send + Sync {
     async fn add_item(
         &self,
         template_id: Uuid,
-        descricao: &str,
-        obrigatorio: bool,
-        ordem: i32,
+        description: &str,
+        required: bool,
+        order_index: i32,
     ) -> Result<FleetChecklistItemDto, RepositoryError>;
 
     async fn list_items(&self, template_id: Uuid) -> Result<Vec<FleetChecklistItemDto>, RepositoryError>;

@@ -30,10 +30,10 @@ impl VehicleDepartmentTransferRepositoryPort for VehicleDepartmentTransferReposi
     async fn create(
         &self,
         vehicle_id: Uuid,
-        dept_origem_id: Option<Uuid>,
-        dept_destino_id: Uuid,
-        data_efetiva: NaiveDate,
-        motivo: &str,
+        source_dept_id: Option<Uuid>,
+        target_dept_id: Uuid,
+        effective_date: NaiveDate,
+        reason: &str,
         documento_sei: Option<&str>,
         notes: Option<&str>,
         created_by: Option<Uuid>,
@@ -48,10 +48,10 @@ impl VehicleDepartmentTransferRepositoryPort for VehicleDepartmentTransferReposi
             "#,
         )
         .bind(vehicle_id)
-        .bind(dept_origem_id)
-        .bind(dept_destino_id)
-        .bind(data_efetiva)
-        .bind(motivo)
+        .bind(source_dept_id)
+        .bind(target_dept_id)
+        .bind(effective_date)
+        .bind(reason)
         .bind(documento_sei)
         .bind(notes)
         .bind(created_by)
@@ -180,12 +180,12 @@ impl VehicleIncidentRepositoryPort for VehicleIncidentRepository {
     async fn create(
         &self,
         vehicle_id: Uuid,
-        tipo: VehicleIncidentType,
-        data_ocorrencia: DateTime<Utc>,
-        local_ocorrencia: Option<&str>,
-        numero_bo: &str,
-        numero_seguradora: Option<&str>,
-        descricao: Option<&str>,
+        incident_type: VehicleIncidentType,
+        occurred_at: DateTime<Utc>,
+        location: Option<&str>,
+        police_report_number: &str,
+        insurance_number: Option<&str>,
+        description: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<VehicleIncidentDto, RepositoryError> {
         sqlx::query_as::<_, VehicleIncidentDto>(
@@ -198,12 +198,12 @@ impl VehicleIncidentRepositoryPort for VehicleIncidentRepository {
             "#,
         )
         .bind(vehicle_id)
-        .bind(tipo)
-        .bind(data_ocorrencia)
-        .bind(local_ocorrencia)
-        .bind(numero_bo)
-        .bind(numero_seguradora)
-        .bind(descricao)
+        .bind(incident_type)
+        .bind(occurred_at)
+        .bind(location)
+        .bind(police_report_number)
+        .bind(insurance_number)
+        .bind(description)
         .bind(created_by)
         .fetch_one(&self.pool)
         .await
@@ -224,14 +224,14 @@ impl VehicleIncidentRepositoryPort for VehicleIncidentRepository {
         &self,
         id: Uuid,
         status: VehicleIncidentStatus,
-        notas_resolucao: Option<&str>,
-        numero_seguradora: Option<&str>,
-        encerrado_por: Option<Uuid>,
+        resolution_notes: Option<&str>,
+        insurance_number: Option<&str>,
+        closed_by: Option<Uuid>,
         version: i32,
     ) -> Result<VehicleIncidentDto, RepositoryError> {
         let is_closing = matches!(
             status,
-            VehicleIncidentStatus::EncerrradoRecuperado | VehicleIncidentStatus::EncerradoPerdaTotal
+            VehicleIncidentStatus::ClosedRecovered | VehicleIncidentStatus::ClosedTotalLoss
         );
 
         let result = sqlx::query_as::<_, VehicleIncidentDto>(
@@ -250,9 +250,9 @@ impl VehicleIncidentRepositoryPort for VehicleIncidentRepository {
         )
         .bind(id)
         .bind(status)
-        .bind(notas_resolucao)
-        .bind(numero_seguradora)
-        .bind(encerrado_por)
+        .bind(resolution_notes)
+        .bind(insurance_number)
+        .bind(closed_by)
         .bind(is_closing)
         .bind(version)
         .fetch_optional(&self.pool)
@@ -304,9 +304,9 @@ impl VehicleDisposalRepositoryPort for VehicleDisposalRepository {
     async fn create(
         &self,
         vehicle_id: Uuid,
-        destino: DisposalDestination,
-        justificativa: &str,
-        numero_laudo: &str,
+        destination: DisposalDestination,
+        justification: &str,
+        report_number: &str,
         documento_sei: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<VehicleDisposalProcessDto, RepositoryError> {
@@ -319,9 +319,9 @@ impl VehicleDisposalRepositoryPort for VehicleDisposalRepository {
             "#,
         )
         .bind(vehicle_id)
-        .bind(destino)
-        .bind(justificativa)
-        .bind(numero_laudo)
+        .bind(destination)
+        .bind(justification)
+        .bind(report_number)
         .bind(documento_sei)
         .bind(created_by)
         .fetch_one(&self.pool)
@@ -353,13 +353,13 @@ impl VehicleDisposalRepositoryPort for VehicleDisposalRepository {
         &self,
         id: Uuid,
         new_status: DisposalStatus,
-        concluido_por: Option<Uuid>,
-        cancelado_por: Option<Uuid>,
-        motivo_cancelamento: Option<&str>,
+        completed_by: Option<Uuid>,
+        cancelled_by: Option<Uuid>,
+        cancellation_reason: Option<&str>,
         version: i32,
     ) -> Result<VehicleDisposalProcessDto, RepositoryError> {
-        let is_concluido = new_status == DisposalStatus::Concluido;
-        let is_cancelado = new_status == DisposalStatus::Cancelado;
+        let is_concluido = new_status == DisposalStatus::Completed;
+        let is_cancelado = new_status == DisposalStatus::Cancelled;
 
         let result = sqlx::query_as::<_, VehicleDisposalProcessDto>(
             r#"
@@ -378,11 +378,11 @@ impl VehicleDisposalRepositoryPort for VehicleDisposalRepository {
         )
         .bind(id)
         .bind(new_status)
-        .bind(concluido_por)
-        .bind(cancelado_por)
+        .bind(completed_by)
+        .bind(cancelled_by)
         .bind(is_concluido)
         .bind(is_cancelado)
-        .bind(motivo_cancelamento)
+        .bind(cancellation_reason)
         .bind(version)
         .fetch_optional(&self.pool)
         .await
@@ -408,9 +408,9 @@ impl VehicleDisposalRepositoryPort for VehicleDisposalRepository {
     async fn add_step(
         &self,
         disposal_id: Uuid,
-        descricao: &str,
+        description: &str,
         documento_sei: &str,
-        data_execucao: NaiveDate,
+        execution_date: NaiveDate,
         responsavel_id: Option<Uuid>,
         notes: Option<&str>,
         created_by: Option<Uuid>,
@@ -424,9 +424,9 @@ impl VehicleDisposalRepositoryPort for VehicleDisposalRepository {
             "#,
         )
         .bind(disposal_id)
-        .bind(descricao)
+        .bind(description)
         .bind(documento_sei)
-        .bind(data_execucao)
+        .bind(execution_date)
         .bind(responsavel_id)
         .bind(notes)
         .bind(created_by)
@@ -464,9 +464,9 @@ impl FleetFuelCatalogRepository {
 impl FleetFuelCatalogRepositoryPort for FleetFuelCatalogRepository {
     async fn create(
         &self,
-        nome: &str,
+        name: &str,
         catmat_item_id: Option<Uuid>,
-        unidade: &str,
+        unit: &str,
         notes: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<FleetFuelCatalogDto, RepositoryError> {
@@ -477,9 +477,9 @@ impl FleetFuelCatalogRepositoryPort for FleetFuelCatalogRepository {
             RETURNING *
             "#,
         )
-        .bind(nome)
+        .bind(name)
         .bind(catmat_item_id)
-        .bind(unidade)
+        .bind(unit)
         .bind(notes)
         .bind(created_by)
         .fetch_one(&self.pool)
@@ -498,10 +498,10 @@ impl FleetFuelCatalogRepositoryPort for FleetFuelCatalogRepository {
     async fn update(
         &self,
         id: Uuid,
-        nome: Option<&str>,
+        name: Option<&str>,
         catmat_item_id: Option<Option<Uuid>>,
-        unidade: Option<&str>,
-        ativo: Option<bool>,
+        unit: Option<&str>,
+        active: Option<bool>,
         notes: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<FleetFuelCatalogDto, RepositoryError> {
@@ -520,10 +520,10 @@ impl FleetFuelCatalogRepositoryPort for FleetFuelCatalogRepository {
             "#,
         )
         .bind(id)
-        .bind(nome)
+        .bind(name)
         .bind(catmat_item_id.flatten())
-        .bind(unidade)
-        .bind(ativo)
+        .bind(unit)
+        .bind(active)
         .bind(notes)
         .bind(updated_by)
         .fetch_one(&self.pool)
@@ -560,7 +560,7 @@ impl FleetMaintenanceServiceRepository {
 impl FleetMaintenanceServiceRepositoryPort for FleetMaintenanceServiceRepository {
     async fn create(
         &self,
-        nome: &str,
+        name: &str,
         catser_item_id: Option<Uuid>,
         notes: Option<&str>,
         created_by: Option<Uuid>,
@@ -572,7 +572,7 @@ impl FleetMaintenanceServiceRepositoryPort for FleetMaintenanceServiceRepository
             RETURNING *
             "#,
         )
-        .bind(nome)
+        .bind(name)
         .bind(catser_item_id)
         .bind(notes)
         .bind(created_by)
@@ -594,9 +594,9 @@ impl FleetMaintenanceServiceRepositoryPort for FleetMaintenanceServiceRepository
     async fn update(
         &self,
         id: Uuid,
-        nome: Option<&str>,
+        name: Option<&str>,
         catser_item_id: Option<Option<Uuid>>,
-        ativo: Option<bool>,
+        active: Option<bool>,
         notes: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<FleetMaintenanceServiceDto, RepositoryError> {
@@ -614,9 +614,9 @@ impl FleetMaintenanceServiceRepositoryPort for FleetMaintenanceServiceRepository
             "#,
         )
         .bind(id)
-        .bind(nome)
+        .bind(name)
         .bind(catser_item_id.flatten())
-        .bind(ativo)
+        .bind(active)
         .bind(notes)
         .bind(updated_by)
         .fetch_one(&self.pool)
@@ -651,11 +651,11 @@ impl FleetSystemParamRepository {
 
 #[async_trait]
 impl FleetSystemParamRepositoryPort for FleetSystemParamRepository {
-    async fn find_by_key(&self, chave: &str) -> Result<Option<FleetSystemParamDto>, RepositoryError> {
+    async fn find_by_key(&self, key: &str) -> Result<Option<FleetSystemParamDto>, RepositoryError> {
         sqlx::query_as::<_, FleetSystemParamDto>(
             "SELECT * FROM fleet_system_params WHERE chave = $1",
         )
-        .bind(chave)
+        .bind(key)
         .fetch_optional(&self.pool)
         .await
         .map_err(map_db_error)
@@ -663,9 +663,9 @@ impl FleetSystemParamRepositoryPort for FleetSystemParamRepository {
 
     async fn upsert(
         &self,
-        chave: &str,
-        valor: &str,
-        descricao: Option<&str>,
+        key: &str,
+        value: &str,
+        description: Option<&str>,
         updated_by: Option<Uuid>,
     ) -> Result<FleetSystemParamDto, RepositoryError> {
         sqlx::query_as::<_, FleetSystemParamDto>(
@@ -680,9 +680,9 @@ impl FleetSystemParamRepositoryPort for FleetSystemParamRepository {
             RETURNING *
             "#,
         )
-        .bind(chave)
-        .bind(valor)
-        .bind(descricao)
+        .bind(key)
+        .bind(value)
+        .bind(description)
         .bind(updated_by)
         .fetch_one(&self.pool)
         .await
@@ -717,8 +717,8 @@ impl FleetChecklistTemplateRepository {
 impl FleetChecklistTemplateRepositoryPort for FleetChecklistTemplateRepository {
     async fn create(
         &self,
-        nome: &str,
-        descricao: Option<&str>,
+        name: &str,
+        description: Option<&str>,
         created_by: Option<Uuid>,
     ) -> Result<FleetChecklistTemplateDto, RepositoryError> {
         sqlx::query_as::<_, FleetChecklistTemplateDto>(
@@ -728,8 +728,8 @@ impl FleetChecklistTemplateRepositoryPort for FleetChecklistTemplateRepository {
             RETURNING *
             "#,
         )
-        .bind(nome)
-        .bind(descricao)
+        .bind(name)
+        .bind(description)
         .bind(created_by)
         .fetch_one(&self.pool)
         .await
@@ -759,9 +759,9 @@ impl FleetChecklistTemplateRepositoryPort for FleetChecklistTemplateRepository {
     async fn add_item(
         &self,
         template_id: Uuid,
-        descricao: &str,
-        obrigatorio: bool,
-        ordem: i32,
+        description: &str,
+        required: bool,
+        order_index: i32,
     ) -> Result<FleetChecklistItemDto, RepositoryError> {
         sqlx::query_as::<_, FleetChecklistItemDto>(
             r#"
@@ -771,9 +771,9 @@ impl FleetChecklistTemplateRepositoryPort for FleetChecklistTemplateRepository {
             "#,
         )
         .bind(template_id)
-        .bind(descricao)
-        .bind(obrigatorio)
-        .bind(ordem)
+        .bind(description)
+        .bind(required)
+        .bind(order_index)
         .fetch_one(&self.pool)
         .await
         .map_err(map_db_error)
