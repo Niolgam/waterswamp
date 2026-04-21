@@ -850,3 +850,153 @@ pub async fn resolve_odometer_quarantine(
         Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
     }
 }
+
+// ============================
+// Asset Management Handlers (RF-AST-06/11/12)
+// ============================
+
+use domain::models::asset_management::{
+    CreateVehicleDepartmentTransferPayload, UpsertDepreciationConfigPayload,
+    CreateVehicleIncidentPayload, UpdateVehicleIncidentPayload, VehicleIncidentStatus,
+};
+
+// ── RF-AST-06: Transferência Departamental ──
+
+pub async fn register_department_transfer(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<CreateVehicleDepartmentTransferPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.asset_management_service.transfer_department(id, payload, Some(user.id)).await {
+        Ok(t) => (StatusCode::CREATED, Json(t)).into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+pub async fn list_department_transfers(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let transfers = state
+        .asset_management_service
+        .list_transfers(id)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": transfers })))
+}
+
+// ── RF-AST-11: Depreciação ──
+
+pub async fn upsert_depreciation_config(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<UpsertDepreciationConfigPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.asset_management_service.upsert_depreciation_config(payload, Some(user.id)).await {
+        Ok(c) => (StatusCode::OK, Json(c)).into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+pub async fn list_depreciation_configs(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let configs = state
+        .asset_management_service
+        .list_depreciation_configs()
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": configs })))
+}
+
+pub async fn get_vehicle_depreciation(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let calc = state
+        .asset_management_service
+        .calculate_depreciation(id)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::to_value(&calc).unwrap()))
+}
+
+// ── RF-AST-12: Sinistros ──
+
+pub async fn open_incident(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<CreateVehicleIncidentPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.asset_management_service.open_incident(id, payload, Some(user.id)).await {
+        Ok(inc) => (StatusCode::CREATED, Json(inc)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "optimistic-lock-failure",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        ).into_response(),
+        Err(ServiceError::Conflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "vehicle-not-allocatable",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        ).into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct IncidentListQuery {
+    pub status: Option<VehicleIncidentStatus>,
+}
+
+pub async fn list_incidents(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<IncidentListQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let incidents = state
+        .asset_management_service
+        .list_incidents(id, query.status)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": incidents })))
+}
+
+pub async fn update_incident(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(incident_id): Path<Uuid>,
+    Json(payload): Json<UpdateVehicleIncidentPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.asset_management_service.update_incident(incident_id, payload, Some(user.id)).await {
+        Ok(inc) => (StatusCode::OK, Json(inc)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "optimistic-lock-failure",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        ).into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
