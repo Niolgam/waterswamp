@@ -26,6 +26,7 @@ use application::services::{
     requisition_service::RequisitionService,
     odometer_service::OdometerService,
     asset_management_service::AssetManagementService,
+    trip_service::TripService,
     stock_movement_service::StockMovementService,
     stock_transfer_service::StockTransferService,
     supplier_service::SupplierService,
@@ -36,7 +37,7 @@ use application::services::{
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
-    OdometerReadingRepositoryPort,
+    OdometerReadingRepositoryPort, VehicleTripRepositoryPort,
     VehicleDepartmentTransferRepositoryPort, DepreciationConfigRepositoryPort,
     VehicleIncidentRepositoryPort, VehicleDisposalRepositoryPort,
     FleetFuelCatalogRepositoryPort, FleetMaintenanceServiceRepositoryPort,
@@ -95,6 +96,7 @@ use persistence::repositories::{
     },
     warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
     odometer_repository::OdometerReadingRepository,
+    trip_repository::VehicleTripRepository,
     asset_management_repository::{
         VehicleDepartmentTransferRepository,
         DepreciationConfigRepository,
@@ -464,7 +466,21 @@ pub fn build_application_state(
         Arc::new(OdometerReadingRepository::new(pool_auth.clone()));
     let vehicle_repo_for_odometer: Arc<dyn VehicleRepositoryPort> =
         Arc::new(VehicleRepository::new(pool_auth.clone()));
-    let odometer_service = Arc::new(OdometerService::new(odometer_repo, vehicle_repo_for_odometer));
+    let odometer_service = Arc::new(OdometerService::new(odometer_repo.clone(), vehicle_repo_for_odometer));
+
+    // Trip service (RF-USO-01/02/03/04)
+    let trip_repo: Arc<dyn VehicleTripRepositoryPort> =
+        Arc::new(VehicleTripRepository::new(pool_auth.clone()));
+    let vehicle_repo_for_trips: Arc<dyn VehicleRepositoryPort> =
+        Arc::new(VehicleRepository::new(pool_auth.clone()));
+    let status_history_for_trips: Arc<dyn VehicleStatusHistoryRepositoryPort> =
+        Arc::new(VehicleStatusHistoryRepository::new(pool_auth.clone()));
+    let trip_service = Arc::new(TripService::new(
+        trip_repo,
+        vehicle_repo_for_trips,
+        odometer_repo,
+        status_history_for_trips,
+    ));
 
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
@@ -507,6 +523,7 @@ pub fn build_application_state(
         warehouse_service,
         odometer_service,
         asset_management_service,
+        trip_service,
         config,
         field_encryption_key: enc_key,
 

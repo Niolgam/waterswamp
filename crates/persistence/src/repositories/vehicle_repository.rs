@@ -1138,6 +1138,37 @@ impl VehicleRepositoryPort for VehicleRepository {
         result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle:{}", id)))
     }
 
+    async fn change_allocation_status(
+        &self,
+        id: Uuid,
+        new_status: AllocationStatus,
+        version: i32,
+        updated_by: Option<Uuid>,
+    ) -> Result<VehicleDto, RepositoryError> {
+        let result = sqlx::query_as::<_, VehicleDto>(
+            r#"
+            UPDATE vehicles
+            SET allocation_status = $2,
+                version           = version + 1,
+                updated_by        = $3,
+                updated_at        = NOW()
+            WHERE id = $1
+              AND version = $4
+              AND is_deleted = false
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(new_status)
+        .bind(updated_by)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+
+        result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle:{}", id)))
+    }
+
     async fn soft_delete(&self, id: Uuid, deleted_by: Option<Uuid>) -> Result<bool, RepositoryError> {
         let result = sqlx::query(
             "UPDATE vehicles SET is_deleted = true, deleted_at = NOW(), deleted_by = $2, updated_at = NOW() WHERE id = $1 AND is_deleted = false"

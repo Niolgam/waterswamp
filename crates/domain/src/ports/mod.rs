@@ -20,6 +20,7 @@ pub mod invoice_adjustment;
 pub mod warehouse;
 pub mod odometer;
 pub mod asset_management;
+pub mod trip;
 
 pub use auth::*;
 pub use budget_classifications::*;
@@ -43,3 +44,4 @@ pub use invoice_adjustment::*;
 pub use warehouse::*;
 pub use odometer::*;
 pub use asset_management::*;
+pub use trip::*;
