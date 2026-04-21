@@ -18,6 +18,7 @@ pub mod vehicle_fine;
 pub mod invoice;
 pub mod invoice_adjustment;
 pub mod warehouse;
+pub mod odometer;
 
 pub use auth::*;
 pub use budget_classifications::*;
@@ -39,3 +40,4 @@ pub use vehicle_fine::*;
 pub use invoice::*;
 pub use invoice_adjustment::*;
 pub use warehouse::*;
+pub use odometer::*;

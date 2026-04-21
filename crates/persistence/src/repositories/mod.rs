@@ -20,3 +20,4 @@ pub mod vehicle_fine_repository;
 pub mod invoice_repository;
 pub mod invoice_adjustment_repository;
 pub mod warehouse_repository;
+pub mod odometer_repository;
