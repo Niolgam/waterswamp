@@ -3,15 +3,15 @@ use utoipa::ToSchema;
 
 // Re-export domain types for API use
 pub use domain::models::vehicle::{
-    AcquisitionType, ChangeVehicleStatusPayload, CreateVehicleCategoryPayload,
-    CreateVehicleColorPayload, CreateVehicleFuelTypePayload, CreateVehicleMakePayload,
-    CreateVehicleModelPayload, CreateVehiclePayload, CreateVehicleTransmissionTypePayload,
-    DocumentType, UpdateVehicleCategoryPayload, UpdateVehicleColorPayload,
-    UpdateVehicleFuelTypePayload, UpdateVehicleMakePayload, UpdateVehicleModelPayload,
-    UpdateVehiclePayload, UpdateVehicleTransmissionTypePayload, VehicleCategoryDto,
-    VehicleColorDto, VehicleDocumentDto, VehicleDto, VehicleFuelTypeDto, VehicleMakeDto,
-    VehicleModelDto, VehicleModelWithDetailsDto, VehicleStatus, VehicleStatusHistoryDto,
-    VehicleTransmissionTypeDto, VehicleWithDetailsDto,
+    AcquisitionType, AllocationStatus, ChangeOperationalStatusPayload, ChangeVehicleStatusPayload,
+    CreateVehicleCategoryPayload, CreateVehicleColorPayload, CreateVehicleFuelTypePayload,
+    CreateVehicleMakePayload, CreateVehicleModelPayload, CreateVehiclePayload,
+    CreateVehicleTransmissionTypePayload, DocumentType, OperationalStatus,
+    UpdateVehicleCategoryPayload, UpdateVehicleColorPayload, UpdateVehicleFuelTypePayload,
+    UpdateVehicleMakePayload, UpdateVehicleModelPayload, UpdateVehiclePayload,
+    UpdateVehicleTransmissionTypePayload, VehicleCategoryDto, VehicleColorDto, VehicleDocumentDto,
+    VehicleDto, VehicleFuelTypeDto, VehicleMakeDto, VehicleModelDto, VehicleModelWithDetailsDto,
+    VehicleStatus, VehicleStatusHistoryDto, VehicleTransmissionTypeDto, VehicleWithDetailsDto,
 };
 
 // ============================

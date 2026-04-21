@@ -26,6 +26,10 @@ pub enum ServiceError {
 
     #[error("Repository error: {0}")]
     RepositoryError(String),
+
+    /// Optimistic concurrency conflict — HTTP 409 (DRS 4.2 / RNF-01)
+    #[error("Optimistic lock conflict: {0}")]
+    OptimisticLockConflict(String),
 }
 
 impl ServiceError {
@@ -39,6 +43,7 @@ impl ServiceError {
             ServiceError::Repository(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
             ServiceError::RepositoryError(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
             ServiceError::Internal(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
+            ServiceError::OptimisticLockConflict(_) => http::StatusCode::CONFLICT,
         }
     }
 }
@@ -58,6 +63,7 @@ impl From<RepositoryError> for ServiceError {
             RepositoryError::ForeignKey(msg) => ServiceError::BadRequest(format!("Foreign key constraint: {}", msg)),
             RepositoryError::InvalidData(msg) => ServiceError::BadRequest(msg),
             RepositoryError::Transaction(msg) => ServiceError::Internal(format!("Transaction error: {}", msg)),
+            RepositoryError::OptimisticLockConflict(msg) => ServiceError::OptimisticLockConflict(msg),
         }
     }
 }

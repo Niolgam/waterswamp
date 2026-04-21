@@ -6,6 +6,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use application::errors::ServiceError;
 use domain::models::vehicle::VehicleStatus;
 use serde::Deserialize;
 use utoipa::IntoParams;
@@ -610,6 +611,39 @@ pub async fn change_vehicle_status(
         .await
         .map(Json)
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+pub async fn change_operational_status(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ChangeOperationalStatusPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.vehicle_service.change_operational_status(id, payload, Some(user.id)).await {
+        Ok(vehicle) => (StatusCode::OK, Json(vehicle)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "optimistic-lock-failure",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        )
+            .into_response(),
+        Err(ServiceError::Conflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "vehicle-not-allocatable",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        )
+            .into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
 }
 
 pub async fn search_vehicles(

@@ -77,6 +77,7 @@ pub fn router() -> Router<AppState> {
                 .delete(handlers::delete_vehicle),
         )
         .route("/{id}/status", axum::routing::put(handlers::change_vehicle_status))
+        .route("/{id}/operational-status", axum::routing::put(handlers::change_operational_status))
         .route("/{id}/history", get(handlers::get_vehicle_status_history))
         .route(
             "/{id}/documents",

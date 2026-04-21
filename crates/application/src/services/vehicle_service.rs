@@ -572,6 +572,7 @@ impl VehicleService {
                 payload.status,
                 payload.notes.as_deref(),
                 updated_by,
+                payload.version,
             )
             .await
             .map_err(ServiceError::from)?;
@@ -621,9 +622,58 @@ impl VehicleService {
                 Some(payload.status),                       // status
                 None,                                       // notes
                 changed_by,                                 // updated_by
+                None,                                       // version — sem OCC no endpoint legado
             )
             .await
             .map_err(ServiceError::from)?;
+
+        self.get_vehicle(id).await
+    }
+
+    /// Transiciona `operational_status` com OCC (DRS 4.2) e valida RN-FSM-01/03.
+    pub async fn change_operational_status(
+        &self,
+        id: Uuid,
+        payload: ChangeOperationalStatusPayload,
+        changed_by: Option<Uuid>,
+    ) -> Result<VehicleWithDetailsDto, ServiceError> {
+        let current = self.vehicle_repo
+            .find_by_id(id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or_else(|| ServiceError::NotFound("Veículo não encontrado".to_string()))?;
+
+        if current.operational_status == payload.operational_status {
+            return Err(ServiceError::BadRequest("Veículo já está neste status operacional".to_string()));
+        }
+
+        // RN-FSM-01 / RN-FSM-03: MANUTENCAO e INDISPONIVEL só permitidos se allocation_status = LIVRE
+        match &payload.operational_status {
+            OperationalStatus::Manutencao | OperationalStatus::Indisponivel => {
+                if current.allocation_status != AllocationStatus::Livre {
+                    return Err(ServiceError::Conflict(format!(
+                        "Veículo não pode ir para {:?}: allocation_status atual é {:?}. Cancele a viagem antes (RN-FSM-03).",
+                        payload.operational_status, current.allocation_status
+                    )));
+                }
+            }
+            OperationalStatus::Ativo => {}
+        }
+
+        let legacy_status = match &payload.operational_status {
+            OperationalStatus::Ativo => VehicleStatus::Active,
+            OperationalStatus::Manutencao => VehicleStatus::InMaintenance,
+            OperationalStatus::Indisponivel => VehicleStatus::Inactive,
+        };
+
+        self.vehicle_repo
+            .change_operational_status(id, payload.operational_status.clone(), payload.version, changed_by)
+            .await
+            .map_err(ServiceError::from)?;
+
+        let _ = self.status_history_repo
+            .create(id, Some(current.status.clone()), legacy_status, payload.reason.as_deref(), changed_by)
+            .await;
 
         self.get_vehicle(id).await
     }

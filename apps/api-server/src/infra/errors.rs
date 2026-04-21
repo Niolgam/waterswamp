@@ -88,6 +88,7 @@ impl IntoResponse for AppError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Transaction error.".to_string(),
                 ),
+                RepositoryError::OptimisticLockConflict(msg) => (StatusCode::CONFLICT, msg),
             },
             // Mapping of Service errors
             AppError::Service(service_err) => match service_err {
@@ -110,6 +111,7 @@ impl IntoResponse for AppError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal service error.".to_string(),
                 ),
+                ServiceError::OptimisticLockConflict(msg) => (StatusCode::CONFLICT, msg),
             },
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
             AppError::InvalidPassword => (

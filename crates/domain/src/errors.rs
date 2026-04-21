@@ -26,6 +26,10 @@ pub enum RepositoryError {
     /// Transaction failed
     #[error("Transaction failed: {0}")]
     Transaction(String),
+
+    /// Optimistic concurrency conflict (OCC / DRS 4.2)
+    #[error("Optimistic lock conflict: {0}")]
+    OptimisticLockConflict(String),
 }
 
 /// Errors that can occur in service layer operations.
