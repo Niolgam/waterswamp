@@ -24,6 +24,7 @@ use application::services::{
         OrganizationalUnitTypeService, SystemSettingsService,
     },
     requisition_service::RequisitionService,
+    odometer_service::OdometerService,
     stock_movement_service::StockMovementService,
     stock_transfer_service::StockTransferService,
     supplier_service::SupplierService,
@@ -34,6 +35,7 @@ use application::services::{
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
+    OdometerReadingRepositoryPort,
     BuildingTypeRepositoryPort, CatmatClassRepositoryPort, CatmatGroupRepositoryPort,
     CatmatItemRepositoryPort, CatmatPdmRepositoryPort, CatserClassRepositoryPort,
     CatserDivisionRepositoryPort, CatserGroupRepositoryPort, CatserItemRepositoryPort,
@@ -87,6 +89,7 @@ use persistence::repositories::{
         VehicleRepository, VehicleStatusHistoryRepository, VehicleTransmissionTypeRepository,
     },
     warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
+    odometer_repository::OdometerReadingRepository,
 };
 
 // Core & Infra
@@ -404,6 +407,13 @@ pub fn build_application_state(
         stock_movement_service.clone(),
     ));
 
+    // Odometer service
+    let odometer_repo: Arc<dyn OdometerReadingRepositoryPort> =
+        Arc::new(OdometerReadingRepository::new(pool_auth.clone()));
+    let vehicle_repo_for_odometer: Arc<dyn VehicleRepositoryPort> =
+        Arc::new(VehicleRepository::new(pool_auth.clone()));
+    let odometer_service = Arc::new(OdometerService::new(odometer_repo, vehicle_repo_for_odometer));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -443,6 +453,7 @@ pub fn build_application_state(
         stock_movement_service,
         stock_transfer_service,
         warehouse_service,
+        odometer_service,
         config,
         field_encryption_key: enc_key,
 

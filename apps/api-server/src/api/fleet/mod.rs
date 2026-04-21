@@ -79,6 +79,8 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/status", axum::routing::put(handlers::change_vehicle_status))
         .route("/{id}/operational-status", axum::routing::put(handlers::change_operational_status))
         .route("/{id}/history", get(handlers::get_vehicle_status_history))
+        .route("/{id}/odometer", axum::routing::post(handlers::register_odometer_reading).get(handlers::list_odometer_readings))
+        .route("/{id}/odometer/projection", get(handlers::get_odometer_projection))
         .route(
             "/{id}/documents",
             get(handlers::list_vehicle_documents).post(handlers::upload_vehicle_document),
@@ -88,6 +90,10 @@ pub fn router() -> Router<AppState> {
             axum::routing::delete(handlers::delete_vehicle_document),
         );
 
+    // Odometer quarantine resolution (not under a specific vehicle)
+    let odometer_router = Router::new()
+        .route("/{reading_id}/resolve", axum::routing::put(handlers::resolve_odometer_quarantine));
+
     Router::new()
         .nest("/categories", categories_router)
         .nest("/makes", makes_router)
@@ -96,4 +102,5 @@ pub fn router() -> Router<AppState> {
         .nest("/fuel-types", fuel_types_router)
         .nest("/transmission-types", transmission_types_router)
         .nest("/vehicles", vehicles_router)
+        .nest("/odometer", odometer_router)
 }

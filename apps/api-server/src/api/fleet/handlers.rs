@@ -1,5 +1,6 @@
 use super::contracts::*;
 use crate::extractors::current_user::CurrentUser;
+use crate::middleware::idempotency::IdempotencyKey;
 use crate::state::AppState;
 use axum::{
     extract::{Path, Query, State},
@@ -8,6 +9,9 @@ use axum::{
 };
 use application::errors::ServiceError;
 use domain::models::vehicle::VehicleStatus;
+use domain::models::odometer::{
+    CreateOdometerReadingPayload, ResolveQuarantinePayload, StatusLeitura,
+};
 use serde::Deserialize;
 use utoipa::IntoParams;
 use uuid::Uuid;
@@ -757,4 +761,92 @@ pub async fn delete_vehicle_document(
         .await
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+// ============================
+// Odometer Handlers (DRS 4.3)
+// ============================
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct OdometerListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    pub status: Option<StatusLeitura>,
+}
+
+/// `POST /fleet/vehicles/{id}/odometer`
+///
+/// Registra uma leitura de odômetro. Requer header `Idempotency-Key: <uuid-v4>`.
+/// Retries com o mesmo `Idempotency-Key` retornam o resultado original (DRS 4.4).
+pub async fn register_odometer_reading(
+    user: CurrentUser,
+    idempotency: IdempotencyKey,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(mut payload): Json<CreateOdometerReadingPayload>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
+    payload.veiculo_id = id;
+    let reading = state
+        .odometer_service
+        .register_reading(payload, idempotency.0, Some(user.id))
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok((StatusCode::CREATED, Json(serde_json::to_value(&reading).unwrap())))
+}
+
+/// `GET /fleet/vehicles/{id}/odometer`
+pub async fn list_odometer_readings(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<OdometerListQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let (readings, total) = state
+        .odometer_service
+        .list_readings(id, query.limit, query.offset, query.status)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": readings, "total": total })))
+}
+
+/// `GET /fleet/vehicles/{id}/odometer/projection`
+pub async fn get_odometer_projection(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let projection = state
+        .odometer_service
+        .get_projection(id)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::to_value(&projection).unwrap()))
+}
+
+/// `PUT /fleet/odometer/{reading_id}/resolve`
+///
+/// Resolve uma leitura em quarentena: valida ou rejeita (RF-INS-03 / RN16).
+pub async fn resolve_odometer_quarantine(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(reading_id): Path<Uuid>,
+    Json(payload): Json<ResolveQuarantinePayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.odometer_service.resolve_quarantine(reading_id, payload).await {
+        Ok(reading) => (StatusCode::OK, Json(reading)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "optimistic-lock-failure",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        )
+            .into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
 }
