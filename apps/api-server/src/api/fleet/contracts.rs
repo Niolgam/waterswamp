@@ -2,6 +2,26 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 // Re-export domain types for API use
+pub use domain::models::asset_management::{
+    // Sinistros
+    VehicleIncidentType, VehicleIncidentStatus, VehicleIncidentDto,
+    CreateVehicleIncidentPayload, UpdateVehicleIncidentPayload,
+    // Transferências departamentais
+    VehicleDepartmentTransferDto, CreateVehicleDepartmentTransferPayload,
+    // Depreciação
+    DepreciationConfigDto, UpsertDepreciationConfigPayload, DepreciationCalculationDto,
+    // Baixa/desfazimento
+    DisposalStatus, DisposalDestination,
+    VehicleDisposalProcessDto, CreateDisposalProcessPayload, AdvanceDisposalPayload,
+    VehicleDisposalStepDto, CreateDisposalStepPayload,
+    // Catálogos ADM
+    FleetFuelCatalogDto, CreateFleetFuelCatalogPayload, UpdateFleetFuelCatalogPayload,
+    FleetMaintenanceServiceDto, CreateFleetMaintenanceServicePayload, UpdateFleetMaintenanceServicePayload,
+    FleetSystemParamDto, UpsertFleetSystemParamPayload,
+    FleetChecklistTemplateDto, CreateFleetChecklistTemplatePayload,
+    FleetChecklistItemDto, CreateFleetChecklistItemPayload,
+};
+
 pub use domain::models::vehicle::{
     AcquisitionType, AllocationStatus, ChangeOperationalStatusPayload, ChangeVehicleStatusPayload,
     CreateVehicleCategoryPayload, CreateVehicleColorPayload, CreateVehicleFuelTypePayload,

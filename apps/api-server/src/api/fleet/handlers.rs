@@ -855,10 +855,7 @@ pub async fn resolve_odometer_quarantine(
 // Asset Management Handlers (RF-AST-06/11/12)
 // ============================
 
-use domain::models::asset_management::{
-    CreateVehicleDepartmentTransferPayload, UpsertDepreciationConfigPayload,
-    CreateVehicleIncidentPayload, UpdateVehicleIncidentPayload, VehicleIncidentStatus,
-};
+// Asset management types come via `use super::contracts::*`
 
 // ── RF-AST-06: Transferência Departamental ──
 
@@ -999,4 +996,271 @@ pub async fn update_incident(
         ).into_response(),
         Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
     }
+}
+
+// ── RF-AST-09/10: Processo de Baixa ──
+
+#[derive(Debug, serde::Deserialize)]
+pub struct DisposalListQuery {
+    pub status: Option<DisposalStatus>,
+}
+
+pub async fn open_disposal(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<CreateDisposalProcessPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.asset_management_service.open_disposal(id, payload, Some(user.id)).await {
+        Ok(d) => (StatusCode::CREATED, Json(d)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "optimistic-lock-failure",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        ).into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+pub async fn get_disposal_by_vehicle(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let disposal = state
+        .asset_management_service
+        .get_disposal_by_vehicle(id)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": disposal })))
+}
+
+pub async fn list_disposals(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Query(query): Query<DisposalListQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let items = state
+        .asset_management_service
+        .list_disposals(query.status)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": items })))
+}
+
+pub async fn advance_disposal(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(disposal_id): Path<Uuid>,
+    Json(payload): Json<AdvanceDisposalPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.asset_management_service.advance_disposal(disposal_id, payload, Some(user.id)).await {
+        Ok(d) => (StatusCode::OK, Json(d)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "type": "optimistic-lock-failure",
+                "title": "Conflict",
+                "status": 409,
+                "detail": msg
+            })),
+        ).into_response(),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+pub async fn add_disposal_step(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(disposal_id): Path<Uuid>,
+    Json(payload): Json<CreateDisposalStepPayload>,
+) -> Result<(StatusCode, Json<VehicleDisposalStepDto>), (StatusCode, String)> {
+    state
+        .asset_management_service
+        .add_disposal_step(disposal_id, payload, Some(user.id))
+        .await
+        .map(|s| (StatusCode::CREATED, Json(s)))
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+pub async fn list_disposal_steps(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(disposal_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let steps = state
+        .asset_management_service
+        .list_disposal_steps(disposal_id)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": steps })))
+}
+
+// ── RF-ADM-07: Catálogo de Combustíveis ──
+
+pub async fn list_fuels(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let items = state
+        .asset_management_service
+        .list_fuels(true)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": items })))
+}
+
+pub async fn create_fuel(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateFleetFuelCatalogPayload>,
+) -> Result<(StatusCode, Json<FleetFuelCatalogDto>), (StatusCode, String)> {
+    state
+        .asset_management_service
+        .create_fuel(payload, Some(user.id))
+        .await
+        .map(|f| (StatusCode::CREATED, Json(f)))
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+pub async fn update_fuel(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateFleetFuelCatalogPayload>,
+) -> Result<Json<FleetFuelCatalogDto>, (StatusCode, String)> {
+    state
+        .asset_management_service
+        .update_fuel(id, payload, Some(user.id))
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+// ── RF-ADM-08: Catálogo de Serviços de Manutenção ──
+
+pub async fn list_maintenance_services(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let items = state
+        .asset_management_service
+        .list_maintenance_services(true)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": items })))
+}
+
+pub async fn create_maintenance_service(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateFleetMaintenanceServicePayload>,
+) -> Result<(StatusCode, Json<FleetMaintenanceServiceDto>), (StatusCode, String)> {
+    state
+        .asset_management_service
+        .create_maintenance_service(payload, Some(user.id))
+        .await
+        .map(|s| (StatusCode::CREATED, Json(s)))
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+pub async fn update_maintenance_service(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateFleetMaintenanceServicePayload>,
+) -> Result<Json<FleetMaintenanceServiceDto>, (StatusCode, String)> {
+    state
+        .asset_management_service
+        .update_maintenance_service(id, payload, Some(user.id))
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+// ── RF-ADM-01: Parâmetros do Sistema ──
+
+pub async fn list_system_params(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let items = state
+        .asset_management_service
+        .list_system_params()
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": items })))
+}
+
+pub async fn upsert_system_param(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<UpsertFleetSystemParamPayload>,
+) -> Result<Json<FleetSystemParamDto>, (StatusCode, String)> {
+    state
+        .asset_management_service
+        .upsert_system_param(payload, Some(user.id))
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+// ── RF-ADM-02: Templates de Checklist ──
+
+pub async fn list_checklist_templates(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let items = state
+        .asset_management_service
+        .list_checklist_templates(true)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": items })))
+}
+
+pub async fn create_checklist_template(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateFleetChecklistTemplatePayload>,
+) -> Result<(StatusCode, Json<FleetChecklistTemplateDto>), (StatusCode, String)> {
+    state
+        .asset_management_service
+        .create_checklist_template(payload, Some(user.id))
+        .await
+        .map(|t| (StatusCode::CREATED, Json(t)))
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+pub async fn add_checklist_item(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(template_id): Path<Uuid>,
+    Json(payload): Json<CreateFleetChecklistItemPayload>,
+) -> Result<(StatusCode, Json<FleetChecklistItemDto>), (StatusCode, String)> {
+    state
+        .asset_management_service
+        .add_checklist_item(template_id, payload)
+        .await
+        .map(|i| (StatusCode::CREATED, Json(i)))
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+pub async fn list_checklist_items(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(template_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let items = state
+        .asset_management_service
+        .list_checklist_items(template_id)
+        .await
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))?;
+    Ok(Json(serde_json::json!({ "data": items })))
 }

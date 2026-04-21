@@ -87,6 +87,8 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/depreciation", get(handlers::get_vehicle_depreciation))
         // RF-AST-12: Sinistros
         .route("/{id}/incidents", axum::routing::post(handlers::open_incident).get(handlers::list_incidents))
+        // RF-AST-09/10: Processo de baixa
+        .route("/{id}/disposal", axum::routing::post(handlers::open_disposal).get(handlers::get_disposal_by_vehicle))
         .route(
             "/{id}/documents",
             get(handlers::list_vehicle_documents).post(handlers::upload_vehicle_document),
@@ -103,9 +105,34 @@ pub fn router() -> Router<AppState> {
     let incidents_router = Router::new()
         .route("/{incident_id}", axum::routing::put(handlers::update_incident));
 
+    // RF-AST-09/10: Disposal process management
+    let disposal_router = Router::new()
+        .route("/", get(handlers::list_disposals))
+        .route("/{disposal_id}", axum::routing::put(handlers::advance_disposal))
+        .route("/{disposal_id}/steps", axum::routing::post(handlers::add_disposal_step).get(handlers::list_disposal_steps));
+
     // RF-AST-11: Depreciation config management (admin)
     let depreciation_router = Router::new()
         .route("/", get(handlers::list_depreciation_configs).post(handlers::upsert_depreciation_config));
+
+    // RF-ADM-07: Fleet fuel catalog
+    let fuel_catalog_router = Router::new()
+        .route("/", get(handlers::list_fuels).post(handlers::create_fuel))
+        .route("/{id}", axum::routing::put(handlers::update_fuel));
+
+    // RF-ADM-08: Fleet maintenance services catalog
+    let maintenance_services_router = Router::new()
+        .route("/", get(handlers::list_maintenance_services).post(handlers::create_maintenance_service))
+        .route("/{id}", axum::routing::put(handlers::update_maintenance_service));
+
+    // RF-ADM-01: Fleet system params
+    let system_params_router = Router::new()
+        .route("/", get(handlers::list_system_params).post(handlers::upsert_system_param));
+
+    // RF-ADM-02: Checklist templates
+    let checklist_router = Router::new()
+        .route("/", get(handlers::list_checklist_templates).post(handlers::create_checklist_template))
+        .route("/{template_id}/items", axum::routing::post(handlers::add_checklist_item).get(handlers::list_checklist_items));
 
     Router::new()
         .nest("/categories", categories_router)
@@ -117,5 +144,10 @@ pub fn router() -> Router<AppState> {
         .nest("/vehicles", vehicles_router)
         .nest("/odometer", odometer_router)
         .nest("/incidents", incidents_router)
+        .nest("/disposals", disposal_router)
         .nest("/depreciation-configs", depreciation_router)
+        .nest("/fuel-catalog", fuel_catalog_router)
+        .nest("/maintenance-services", maintenance_services_router)
+        .nest("/system-params", system_params_router)
+        .nest("/checklists", checklist_router)
 }

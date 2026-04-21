@@ -38,7 +38,9 @@ use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
     OdometerReadingRepositoryPort,
     VehicleDepartmentTransferRepositoryPort, DepreciationConfigRepositoryPort,
-    VehicleIncidentRepositoryPort,
+    VehicleIncidentRepositoryPort, VehicleDisposalRepositoryPort,
+    FleetFuelCatalogRepositoryPort, FleetMaintenanceServiceRepositoryPort,
+    FleetSystemParamRepositoryPort, FleetChecklistTemplateRepositoryPort,
     BuildingTypeRepositoryPort, CatmatClassRepositoryPort, CatmatGroupRepositoryPort,
     CatmatItemRepositoryPort, CatmatPdmRepositoryPort, CatserClassRepositoryPort,
     CatserDivisionRepositoryPort, CatserGroupRepositoryPort, CatserItemRepositoryPort,
@@ -97,6 +99,11 @@ use persistence::repositories::{
         VehicleDepartmentTransferRepository,
         DepreciationConfigRepository,
         VehicleIncidentRepository,
+        VehicleDisposalRepository,
+        FleetFuelCatalogRepository,
+        FleetMaintenanceServiceRepository,
+        FleetSystemParamRepository,
+        FleetChecklistTemplateRepository,
     },
 };
 
@@ -415,13 +422,23 @@ pub fn build_application_state(
         stock_movement_service.clone(),
     ));
 
-    // Asset management service (RF-AST-06/11/12)
+    // Asset management service (RF-AST-06/09/10/11/12 + RF-ADM-01/02/07/08)
     let transfer_repo: Arc<dyn VehicleDepartmentTransferRepositoryPort> =
         Arc::new(VehicleDepartmentTransferRepository::new(pool_auth.clone()));
     let depreciation_repo: Arc<dyn DepreciationConfigRepositoryPort> =
         Arc::new(DepreciationConfigRepository::new(pool_auth.clone()));
     let incident_repo: Arc<dyn VehicleIncidentRepositoryPort> =
         Arc::new(VehicleIncidentRepository::new(pool_auth.clone()));
+    let disposal_repo: Arc<dyn VehicleDisposalRepositoryPort> =
+        Arc::new(VehicleDisposalRepository::new(pool_auth.clone()));
+    let fuel_catalog_repo: Arc<dyn FleetFuelCatalogRepositoryPort> =
+        Arc::new(FleetFuelCatalogRepository::new(pool_auth.clone()));
+    let maintenance_service_repo: Arc<dyn FleetMaintenanceServiceRepositoryPort> =
+        Arc::new(FleetMaintenanceServiceRepository::new(pool_auth.clone()));
+    let system_param_repo: Arc<dyn FleetSystemParamRepositoryPort> =
+        Arc::new(FleetSystemParamRepository::new(pool_auth.clone()));
+    let checklist_repo: Arc<dyn FleetChecklistTemplateRepositoryPort> =
+        Arc::new(FleetChecklistTemplateRepository::new(pool_auth.clone()));
     let vehicle_model_repo_for_asset: Arc<dyn VehicleModelRepositoryPort> =
         Arc::new(VehicleModelRepository::new(pool_auth.clone()));
     let vehicle_repo_for_asset: Arc<dyn VehicleRepositoryPort> =
@@ -432,6 +449,11 @@ pub fn build_application_state(
         transfer_repo,
         depreciation_repo,
         incident_repo,
+        disposal_repo,
+        fuel_catalog_repo,
+        maintenance_service_repo,
+        system_param_repo,
+        checklist_repo,
         vehicle_repo_for_asset,
         vehicle_model_repo_for_asset,
         status_history_repo_for_asset,
