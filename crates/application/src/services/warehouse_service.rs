@@ -1,9 +1,8 @@
 use crate::errors::ServiceError;
-use crate::services::stock_movement_service::{ProcessMovementInput, StockMovementService, StockMovementType};
-use domain::{
-    models::warehouse::*,
-    ports::warehouse::*,
+use crate::services::stock_movement_service::{
+    ProcessMovementInput, StockMovementService, StockMovementType,
 };
+use domain::{models::warehouse::*, ports::warehouse::*};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -96,15 +95,14 @@ impl WarehouseService {
             ))
     }
 
-    pub async fn get_warehouse(
-        &self,
-        id: Uuid,
-    ) -> Result<WarehouseWithDetailsDto, ServiceError> {
+    pub async fn get_warehouse(&self, id: Uuid) -> Result<WarehouseWithDetailsDto, ServiceError> {
         self.warehouse_repo
             .find_with_details_by_id(id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))
     }
 
     pub async fn update_warehouse(
@@ -117,7 +115,9 @@ impl WarehouseService {
             .find_by_id(id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
 
         if let Some(ref code) = payload.code {
             if self
@@ -168,7 +168,9 @@ impl WarehouseService {
             .find_by_id(id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
 
         self.warehouse_repo
             .delete(id)
@@ -195,10 +197,7 @@ impl WarehouseService {
     // Warehouse Stock
     // ============================
 
-    pub async fn get_stock(
-        &self,
-        id: Uuid,
-    ) -> Result<WarehouseStockWithDetailsDto, ServiceError> {
+    pub async fn get_stock(&self, id: Uuid) -> Result<WarehouseStockWithDetailsDto, ServiceError> {
         self.stock_repo
             .find_with_details_by_id(id)
             .await
@@ -220,7 +219,9 @@ impl WarehouseService {
             .find_by_id(warehouse_id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
 
         self.stock_repo
             .list_by_warehouse(warehouse_id, limit, offset, search, is_blocked)
@@ -323,7 +324,9 @@ impl WarehouseService {
             .find_by_id(warehouse_id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
 
         if payload.origin_description.trim().is_empty() {
             return Err(ServiceError::BadRequest(
@@ -343,7 +346,9 @@ impl WarehouseService {
         };
 
         let entry_type_str = format!("{:?}", payload.entry_type);
-        let doc_number = payload.document_number.clone()
+        let doc_number = payload
+            .document_number
+            .clone()
             .unwrap_or_else(|| format!("AVULSA/{}", payload.origin_description));
 
         let mut tx = self
@@ -421,7 +426,9 @@ impl WarehouseService {
             .find_by_id(warehouse_id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
 
         if payload.items.is_empty() {
             return Err(ServiceError::BadRequest(
@@ -430,16 +437,19 @@ impl WarehouseService {
         }
 
         // Verify requisition exists and was fulfilled
-        let req_status: Option<String> = sqlx::query_scalar(
-            "SELECT status::TEXT FROM requisitions WHERE id = $1",
-        )
-        .bind(payload.requisition_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+        let req_status: Option<String> =
+            sqlx::query_scalar("SELECT status::TEXT FROM requisitions WHERE id = $1")
+                .bind(payload.requisition_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         match req_status.as_deref() {
-            None => return Err(ServiceError::NotFound("Requisição não encontrada".to_string())),
+            None => {
+                return Err(ServiceError::NotFound(
+                    "Requisição não encontrada".to_string(),
+                ))
+            }
             Some(s) if !matches!(s, "FULFILLED" | "PARTIALLY_FULFILLED") => {
                 return Err(ServiceError::BadRequest(format!(
                     "Devolução só é permitida para requisições FULFILLED ou PARTIALLY_FULFILLED. Status: {}",
@@ -449,13 +459,12 @@ impl WarehouseService {
             _ => {}
         }
 
-        let req_number: String = sqlx::query_scalar(
-            "SELECT requisition_number FROM requisitions WHERE id = $1",
-        )
-        .bind(payload.requisition_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+        let req_number: String =
+            sqlx::query_scalar("SELECT requisition_number FROM requisitions WHERE id = $1")
+                .bind(payload.requisition_id)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         let mut tx = self
             .pool
@@ -527,7 +536,9 @@ impl WarehouseService {
             .find_by_id(warehouse_id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
 
         // Validate mandatory fields (RN-005)
         if payload.justification.trim().is_empty() {
@@ -537,7 +548,8 @@ impl WarehouseService {
         }
         if payload.technical_opinion_url.trim().is_empty() {
             return Err(ServiceError::BadRequest(
-                "URL do Parecer Técnico é obrigatória para desfazimento (RN-005/RF-016)".to_string(),
+                "URL do Parecer Técnico é obrigatória para desfazimento (RN-005/RF-016)"
+                    .to_string(),
             ));
         }
 
@@ -632,7 +644,9 @@ impl WarehouseService {
             .find_by_id(warehouse_id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
 
         let movements = sqlx::query_as::<_, StockMovementDto>(
             r#"SELECT
@@ -641,7 +655,7 @@ impl WarehouseService {
                 w.name AS warehouse_name,
                 sm.catalog_item_id,
                 ci.description AS catalog_item_name,
-                ci.catmat_code AS catalog_item_code,
+                ci.code AS catalog_item_code,
                 sm.movement_type,
                 sm.movement_date,
                 sm.quantity_raw,
@@ -671,7 +685,7 @@ impl WarehouseService {
                LEFT JOIN users u ON u.id = sm.user_id
                WHERE sm.warehouse_id = $1
                  AND ($2::UUID IS NULL OR sm.catalog_item_id = $2)
-                 AND ($3::stock_movement_type_enum IS NULL OR sm.movement_type = $3)
+                 AND ($3::text IS NULL OR sm.movement_type::text = $3) 
                ORDER BY sm.movement_date DESC
                LIMIT $4 OFFSET $5"#,
         )
@@ -688,7 +702,7 @@ impl WarehouseService {
             r#"SELECT COUNT(*) FROM stock_movements
                WHERE warehouse_id = $1
                  AND ($2::UUID IS NULL OR catalog_item_id = $2)
-                 AND ($3::stock_movement_type_enum IS NULL OR movement_type = $3)"#,
+                 AND ($3::text IS NULL OR movement_type::text = $3)"#,
         )
         .bind(warehouse_id)
         .bind(catalog_item_id)
@@ -714,7 +728,9 @@ impl WarehouseService {
             .find_by_id(warehouse_id)
             .await
             .map_err(ServiceError::from)?
-            .ok_or(ServiceError::NotFound("Almoxarifado não encontrado".to_string()))?;
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
 
         if payload.document_number.trim().is_empty() {
             return Err(ServiceError::BadRequest(
@@ -770,7 +786,10 @@ impl WarehouseService {
                         notes: Some(format!(
                             "Saída por OS — Justificativa: {}{}",
                             payload.justification,
-                            item.item_notes.as_ref().map(|n| format!(" — {}", n)).unwrap_or_default()
+                            item.item_notes
+                                .as_ref()
+                                .map(|n| format!(" — {}", n))
+                                .unwrap_or_default()
                         )),
                         user_id,
                         batch_number: item.batch_number.clone(),

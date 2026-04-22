@@ -1,15 +1,3 @@
-//! Integration tests for the warehouse module
-//!
-//! Covers:
-//! - CRUD (create, get, update, delete, list)
-//! - Code uniqueness constraint
-//! - Warehouse stocks listing and detail
-//! - Stock params update
-//! - Stock block / unblock workflow
-//! - Guard rules (duplicate code, block already-blocked, unblock non-blocked)
-//! - Pagination and filters
-//! - Authorization (no token, non-admin token)
-
 mod common;
 
 use axum::http::StatusCode;
@@ -280,7 +268,7 @@ async fn test_list_warehouses() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert!(body["total"].as_i64().unwrap() >= 2);
-    assert!(body["warehouses"].is_array());
+    assert!(body["data"].is_array());
 }
 
 #[tokio::test]
@@ -308,7 +296,7 @@ async fn test_list_warehouses_filter_type() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let warehouses = body["warehouses"].as_array().unwrap();
+    let warehouses = body["data"].as_array().unwrap();
     assert!(warehouses.iter().all(|w| w["warehouse_type"] == "CENTRAL"));
 }
 
@@ -698,8 +686,8 @@ async fn create_catalog_item_with_stock(pool: &PgPool, warehouse_id: Uuid) -> (U
     .expect("pdm");
 
     let item_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO catmat_items (pdm_id, code, description, unit_of_measure_id, base_unit_id, is_active)
-         VALUES ($1, $2, $3, $4, $4, true)
+        "INSERT INTO catmat_items (pdm_id, code, description, unit_of_measure_id,  is_active)
+         VALUES ($1, $2, $3, $4,  true)
          ON CONFLICT (code) DO UPDATE SET description = catmat_items.description RETURNING id",
     )
     .bind(pdm_id)
@@ -784,7 +772,8 @@ async fn test_standalone_entry_donation() {
                 "unit_raw_id": unit_id,
                 "quantity_raw": "10.0000",
                 "conversion_factor": "1.0000",
-                "unit_price_base": "20.00"
+                "unit_price_base": "20.00",
+                "divergence_justification": "Valued at current market price"
             }]
         }))
         .await;
@@ -930,14 +919,16 @@ async fn test_standalone_entry_multi_item() {
                     "unit_raw_id": unit_id,
                     "quantity_raw": "5.0000",
                     "conversion_factor": "1.0000",
-                    "unit_price_base": "10.00"
+                    "unit_price_base": "10.00",
+                    "divergence_justification": "Valued at current market price"
                 },
                 {
                     "catalog_item_id": item2,
                     "unit_raw_id": unit_id,
                     "quantity_raw": "3.0000",
                     "conversion_factor": "1.0000",
-                    "unit_price_base": "20.00"
+                    "unit_price_base": "20.00",
+                    "divergence_justification": "Valued at current market price"
                 }
             ]
         }))
@@ -1438,7 +1429,8 @@ async fn test_list_movements_after_entry() {
                 "unit_raw_id": unit_id,
                 "quantity_raw": "5.0000",
                 "conversion_factor": "1.0000",
-                "unit_price_base": "10.00"
+                "unit_price_base": "10.00",
+                "divergence_justification": "Preço de mercado"
             }]
         }))
         .await;
@@ -1478,7 +1470,8 @@ async fn test_list_movements_with_limit_and_offset() {
                     "unit_raw_id": unit_id,
                     "quantity_raw": "1.0000",
                     "conversion_factor": "1.0000",
-                    "unit_price_base": "5.00"
+                    "unit_price_base": "5.00",
+                    "divergence_justification": "Valor simbólico"
                 }]
             }))
             .await;
@@ -1515,8 +1508,22 @@ async fn test_list_movements_filter_by_catalog_item() {
             "entry_type": "DONATION",
             "origin_description": "Doador filter test",
             "items": [
-                { "catalog_item_id": item1, "unit_raw_id": unit_id, "quantity_raw": "2.0", "conversion_factor": "1.0", "unit_price_base": "5.0" },
-                { "catalog_item_id": item2, "unit_raw_id": unit_id, "quantity_raw": "3.0", "conversion_factor": "1.0", "unit_price_base": "5.0" }
+                {
+                    "catalog_item_id": item1,
+                    "unit_raw_id": unit_id,
+                    "quantity_raw": "2.0",
+                    "conversion_factor": "1.0",
+                    "unit_price_base": "5.0",
+                    "divergence_justification": "Valor simbólico"
+                },
+                {
+                    "catalog_item_id": item2,
+                    "unit_raw_id": unit_id,
+                    "quantity_raw": "3.0",
+                    "conversion_factor": "1.0",
+                    "unit_price_base": "5.0" ,
+                    "divergence_justification": "Valor simbólico"
+                }
             ]
         }))
         .await;

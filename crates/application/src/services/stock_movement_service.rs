@@ -1,12 +1,3 @@
-//! StockMovementService
-//!
-//! Implementação em Rust da lógica anteriormente contida em:
-//!   - `fn_process_stock_movement` (trigger BEFORE INSERT em stock_movements)
-//!   - `fn_auto_post_invoice` (trigger AFTER UPDATE em invoices)
-//!
-//! Garante controle transacional explícito, lock pessimista e retornos de erro
-//! HTTP estruturados (ServiceError::BadRequest) em vez de exceções genéricas do banco.
-
 use crate::errors::ServiceError;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -71,7 +62,6 @@ pub struct ProcessMovementInput {
     pub quantity_raw: Decimal,
     pub conversion_factor: Decimal,
     pub quantity_base: Decimal,
-    /// Preço unitário na unidade base (entrada: preço real; saída: será sobrescrito pelo custo médio)
     pub unit_price_base: Decimal,
     pub invoice_id: Option<Uuid>,
     pub invoice_item_id: Option<Uuid>,
@@ -185,8 +175,8 @@ impl StockMovementService {
         .await
         .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
-        let (curr_qty, curr_avg, is_blocked, block_reason) = stock_row
-            .unwrap_or((Decimal::ZERO, Decimal::ZERO, false, None));
+        let (curr_qty, curr_avg, is_blocked, block_reason) =
+            stock_row.unwrap_or((Decimal::ZERO, Decimal::ZERO, false, None));
 
         // ── 3. Verificar bloqueio administrativo ─────────────────────────────
         if is_blocked && !input.movement_type.is_entry() {
@@ -288,10 +278,10 @@ impl StockMovementService {
         .bind(input.quantity_base)
         .bind(final_price)
         .bind(final_total)
-        .bind(curr_qty)    // balance_before
-        .bind(new_qty)     // balance_after
-        .bind(curr_avg)    // average_before
-        .bind(new_avg)     // average_after
+        .bind(curr_qty) // balance_before
+        .bind(new_qty) // balance_after
+        .bind(curr_avg) // average_before
+        .bind(new_avg) // average_after
         .bind(input.invoice_id)
         .bind(input.invoice_item_id)
         .bind(input.requisition_id)

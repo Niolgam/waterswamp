@@ -195,6 +195,45 @@ pub async fn seed(enforcer: &mut Enforcer) -> Result<()> {
         .await?;
 
     // ========================================================================
+    // NEW STOCK MOVEMENTS (RF-009, RF-011, RF-016, RF-017)
+    // ========================================================================
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            format!("{}/{{id}}/movements", wh_base),
+            ACTION_GET
+        ])
+        .await?;
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            format!("{}/{{id}}/entries", wh_base),
+            ACTION_POST
+        ])
+        .await?;
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            format!("{}/{{id}}/returns", wh_base),
+            ACTION_POST
+        ])
+        .await?;
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            format!("{}/{{id}}/disposals", wh_base),
+            ACTION_POST
+        ])
+        .await?;
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            format!("{}/{{id}}/manual-exits", wh_base),
+            ACTION_POST
+        ])
+        .await?;
+
+    // ========================================================================
     // WAREHOUSE REPORTS (Mantidos do original)
     // ========================================================================
     enforcer
