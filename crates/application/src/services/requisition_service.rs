@@ -644,6 +644,7 @@ impl RequisitionService {
                         invoice_item_id: None,
                         requisition_id: Some(id),
                         requisition_item_id: Some(fi.requisition_item_id),
+                        related_warehouse_id: None,
                         document_number: Some(requisition.requisition_number.clone()),
                         notes: payload.notes.clone(),
                         user_id: ctx.user_id,

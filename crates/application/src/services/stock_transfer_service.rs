@@ -233,6 +233,7 @@ impl StockTransferService {
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
+                        related_warehouse_id: Some(payload.destination_warehouse_id),
                         document_number: None, // filled after insert with transfer_number
                         notes: item.notes.clone(),
                         user_id: initiated_by,
@@ -403,6 +404,7 @@ impl StockTransferService {
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
+                        related_warehouse_id: Some(transfer.transfer.source_warehouse_id),
                         document_number: Some(transfer.transfer.transfer_number.clone()),
                         notes: payload.notes.clone(),
                         user_id: confirmed_by,
@@ -544,6 +546,7 @@ impl StockTransferService {
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
+                        related_warehouse_id: Some(transfer.transfer.destination_warehouse_id),
                         document_number: Some(format!(
                             "ESTORNO-TRF/{}",
                             transfer.transfer.transfer_number
@@ -647,6 +650,7 @@ impl StockTransferService {
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
+                        related_warehouse_id: Some(transfer.transfer.destination_warehouse_id),
                         document_number: Some(format!(
                             "CANCEL-TRF/{}",
                             transfer.transfer.transfer_number

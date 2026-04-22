@@ -77,6 +77,7 @@ pub struct ProcessMovementInput {
     pub invoice_item_id: Option<Uuid>,
     pub requisition_id: Option<Uuid>,
     pub requisition_item_id: Option<Uuid>,
+    pub related_warehouse_id: Option<Uuid>,
     pub document_number: Option<String>,
     pub notes: Option<String>,
     pub user_id: Uuid,
@@ -137,11 +138,11 @@ impl StockMovementService {
                     unit_price_base, total_value,
                     balance_before, balance_after, average_before, average_after,
                     invoice_id, invoice_item_id, requisition_id, requisition_item_id,
-                    document_number, notes, user_id, batch_number, expiration_date,
-                    divergence_justification
+                    related_warehouse_id, document_number, notes, user_id, batch_number,
+                    expiration_date, divergence_justification
                 ) VALUES (
                     $1,$2,$3::stock_movement_type_enum,$4,$5,$6,$7,$8,$9,$10,
-                    0,0,0,0,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+                    0,0,0,0,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
                 )"#,
             )
             .bind(input.warehouse_id)
@@ -158,6 +159,7 @@ impl StockMovementService {
             .bind(input.invoice_item_id)
             .bind(input.requisition_id)
             .bind(input.requisition_item_id)
+            .bind(input.related_warehouse_id)
             .bind(input.document_number.as_deref())
             .bind(input.notes.as_deref())
             .bind(input.user_id)
@@ -267,13 +269,13 @@ impl StockMovementService {
                 unit_price_base, total_value,
                 balance_before, balance_after, average_before, average_after,
                 invoice_id, invoice_item_id, requisition_id, requisition_item_id,
-                document_number, notes, user_id, batch_number, expiration_date,
-                divergence_justification, requires_review
+                related_warehouse_id, document_number, notes, user_id, batch_number,
+                expiration_date, divergence_justification, requires_review
             ) VALUES (
                 $1,$2,$3::stock_movement_type_enum,$4,$5,
                 $6,$7,$8,$9,$10,
                 $11,$12,$13,$14,
-                $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
+                $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
             )"#,
         )
         .bind(input.warehouse_id)
@@ -294,6 +296,7 @@ impl StockMovementService {
         .bind(input.invoice_item_id)
         .bind(input.requisition_id)
         .bind(input.requisition_item_id)
+        .bind(input.related_warehouse_id)
         .bind(input.document_number.as_deref())
         .bind(input.notes.as_deref())
         .bind(input.user_id)
@@ -391,6 +394,7 @@ impl StockMovementService {
                     invoice_item_id: Some(item.id),
                     requisition_id: None,
                     requisition_item_id: None,
+                    related_warehouse_id: None,
                     document_number: Some(invoice_number.to_string()),
                     notes: None,
                     user_id,
@@ -457,6 +461,7 @@ impl StockMovementService {
                     invoice_item_id: mv.invoice_item_id,
                     requisition_id: None,
                     requisition_item_id: None,
+                    related_warehouse_id: None,
                     document_number: Some(format!("ESTORNO NF {}", invoice_number)),
                     notes: Some(
                         "Estorno automático — NF revertida de POSTED para CANCELLED".to_string(),
@@ -505,6 +510,7 @@ impl StockMovementService {
                 invoice_item_id: Some(invoice_item_id),
                 requisition_id: None,
                 requisition_item_id: None,
+                related_warehouse_id: None,
                 document_number: Some(document_number.to_string()),
                 notes: notes.map(str::to_owned),
                 user_id,
