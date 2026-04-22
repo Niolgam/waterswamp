@@ -384,6 +384,7 @@ impl WarehouseService {
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
+                        related_warehouse_id: None,
                         document_number: Some(doc_number.clone()),
                         notes: item.item_notes.clone().or_else(|| payload.notes.clone()),
                         user_id,
@@ -489,6 +490,7 @@ impl WarehouseService {
                         invoice_item_id: None,
                         requisition_id: Some(payload.requisition_id),
                         requisition_item_id: None,
+                        related_warehouse_id: None,
                         document_number: Some(format!("DEV/{}", req_number)),
                         notes: item.item_notes.clone().or_else(|| payload.notes.clone()),
                         user_id,
@@ -587,6 +589,7 @@ impl WarehouseService {
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
+                        related_warehouse_id: None,
                         document_number: Some(payload.sei_process_number.clone()),
                         notes: Some(format!(
                             "DESFAZIMENTO — SEI: {} — Justificativa: {} — Parecer: {}",
@@ -762,6 +765,7 @@ impl WarehouseService {
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
+                        related_warehouse_id: None,
                         document_number: Some(payload.document_number.clone()),
                         notes: Some(format!(
                             "Saída por OS — Justificativa: {}{}",
