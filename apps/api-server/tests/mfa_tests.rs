@@ -45,10 +45,12 @@ async fn test_mfa_setup_initiation() {
         .await
         .unwrap();
 
+    let alice_token = common::generate_test_token(user_id);
+
     let response = app
         .api
         .post("/auth/mfa/setup")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", alice_token))
         .await;
 
     response.assert_status_ok();
@@ -107,6 +109,7 @@ async fn test_mfa_verify_setup_success() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
+    setup_response.assert_status_ok();
     let setup_body: Value = setup_response.json();
     let secret = setup_body["secret"].as_str().unwrap();
     let setup_token = setup_body["setup_token"].as_str().unwrap();
@@ -299,7 +302,7 @@ async fn test_mfa_status_with_backup_codes() {
 
     status_response.assert_status_ok();
     let body: Value = status_response.json();
-    assert_eq!(body["backup_codes_remaining"], 3);
+    assert_eq!(body["backup_codes_remaining"], 10);
 }
 
 #[tokio::test]

@@ -49,12 +49,7 @@ impl MfaService {
         username: &str,
     ) -> Result<MfaSetupResponse, ServiceError> {
         // 1. Check if already enabled
-        if self
-            .mfa_repo
-            .is_mfa_enabled(user_id)
-            .await
-            ?
-        {
+        if self.mfa_repo.is_mfa_enabled(user_id).await? {
             return Err(ServiceError::BadRequest(
                 "MFA já está ativado para este usuário.".to_string(),
             ));
@@ -73,7 +68,7 @@ impl MfaService {
             1,
             30,
             secret_bytes,
-            Some("WaterSwamp".to_string()),
+            Some("Waterswamp".to_string()),
             username.to_string(),
         )
         .map_err(|e| ServiceError::Internal(e.to_string()))?;
@@ -89,8 +84,7 @@ impl MfaService {
 
         self.mfa_repo
             .save_setup_token(user_id, &secret, &setup_token_hash, expires_at)
-            .await
-?;
+            .await?;
 
         Ok(MfaSetupResponse {
             secret,
@@ -110,8 +104,7 @@ impl MfaService {
         let (user_id, secret) = self
             .mfa_repo
             .find_setup_token(&setup_hash)
-            .await
-            ?
+            .await?
             .ok_or(ServiceError::InvalidCredentials)?;
 
         // 2. Validate TOTP
@@ -135,18 +128,14 @@ impl MfaService {
         }
 
         // 3. Enable MFA
-        self.mfa_repo
-            .enable_mfa(user_id, &secret)
-            .await
-?;
+        self.mfa_repo.enable_mfa(user_id, &secret).await?;
 
         // 4. Generate backup codes
         let (backup_codes, hashed_codes) = self.generate_backup_codes();
 
         self.mfa_repo
             .save_backup_codes(user_id, &hashed_codes)
-            .await
-?;
+            .await?;
 
         // 5. Notify
         if let Ok(Some(user)) = self.user_repo.find_extended_by_id(user_id).await {
@@ -176,11 +165,7 @@ impl MfaService {
         let user_id = claims.sub;
 
         // 2. Try TOTP
-        let secret_opt = self
-            .mfa_repo
-            .get_mfa_secret(user_id)
-            .await
-?;
+        let secret_opt = self.mfa_repo.get_mfa_secret(user_id).await?;
 
         let mut valid = false;
         let mut backup_used = false;
@@ -211,8 +196,7 @@ impl MfaService {
             if self
                 .mfa_repo
                 .verify_and_consume_backup_code(user_id, &code_hash)
-                .await
-                ?
+                .await?
             {
                 valid = true;
                 backup_used = true;
@@ -227,8 +211,7 @@ impl MfaService {
         let user = self
             .user_repo
             .find_by_id(user_id)
-            .await
-            ?
+            .await?
             .ok_or(ServiceError::Internal("Usuário não encontrado".to_string()))?;
 
         // 5. Generate Tokens
@@ -244,8 +227,7 @@ impl MfaService {
 
         self.auth_repo
             .save_refresh_token(user_id, &refresh_hash, family_id, expires_at)
-            .await
-?;
+            .await?;
 
         Ok(MfaVerifyResponse::new(
             access_token,
@@ -266,8 +248,7 @@ impl MfaService {
 
         self.mfa_repo
             .save_backup_codes(user_id, &hashed_codes)
-            .await
-?;
+            .await?;
 
         Ok(MfaBackupCodesResponse {
             backup_codes,

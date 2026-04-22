@@ -190,6 +190,12 @@ pub async fn cleanup_test_users(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM users WHERE username LIKE 'test_user_%'")
         .execute(pool)
         .await?;
+    sqlx::query("DELETE FROM mfa_backup_codes")
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM mfa_settings")
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
