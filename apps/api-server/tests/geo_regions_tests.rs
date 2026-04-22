@@ -260,7 +260,7 @@ async fn test_list_countries_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["items"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 2);
 }
 
@@ -468,7 +468,7 @@ async fn test_list_states_success() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["items"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() >= 3);
 }
 
@@ -537,7 +537,7 @@ async fn test_list_states_with_search() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let states = body["items"].as_array().unwrap();
+    let states = body["data"].as_array().unwrap();
     assert!(states
         .iter()
         .any(|s| s["name"].as_str().unwrap().contains(&name_match)));
@@ -667,7 +667,7 @@ async fn test_list_cities_filter_by_state() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let cities = body["items"].as_array().unwrap();
+    let cities = body["data"].as_array().unwrap();
 
     // Should only have State 1 cities
     for city in cities {

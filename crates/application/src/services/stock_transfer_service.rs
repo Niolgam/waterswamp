@@ -1,16 +1,7 @@
-//! StockTransferService — RF-018: Transferência entre Almoxarifados
-//!
-//! Implements a two-step transfer flow with pessimistic locking (RN-011):
-//!   1. `initiate_transfer()` — source warehouse manager starts the transfer,
-//!      generating a TRANSFER_OUT movement and reserving stock.
-//!   2. `confirm_transfer()` — destination manager confirms receipt,
-//!      generating a TRANSFER_IN movement atomically.
-//!   3. `reject_transfer()` — destination rejects; source reservation is released
-//!      via a compensatory TRANSFER_IN (returns the stock).
-//!   4. `cancel_transfer()` — source cancels before confirmation.
-
 use crate::errors::ServiceError;
-use crate::services::stock_movement_service::{ProcessMovementInput, StockMovementService, StockMovementType};
+use crate::services::stock_movement_service::{
+    ProcessMovementInput, StockMovementService, StockMovementType,
+};
 use chrono::Utc;
 use domain::models::warehouse::{
     CancelTransferPayload, ConfirmTransferPayload, InitiateTransferPayload, RejectTransferPayload,
@@ -60,7 +51,9 @@ impl StockTransferService {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| ServiceError::Internal(e.to_string()))?
-        .ok_or(ServiceError::NotFound("Transferência não encontrada".to_string()))?;
+        .ok_or(ServiceError::NotFound(
+            "Transferência não encontrada".to_string(),
+        ))?;
 
         let items = self.get_transfer_items(id).await?;
 
@@ -92,7 +85,7 @@ impl StockTransferService {
                LEFT JOIN warehouses dw ON dw.id = t.destination_warehouse_id
                WHERE ($1::UUID IS NULL OR t.source_warehouse_id = $1)
                  AND ($2::UUID IS NULL OR t.destination_warehouse_id = $2)
-                 AND ($3::stock_transfer_status_enum IS NULL OR t.status = $3)
+                 AND ($3::text IS NULL OR t.status::text = $3)
                ORDER BY t.created_at DESC
                LIMIT $4 OFFSET $5"#,
         )
@@ -109,7 +102,7 @@ impl StockTransferService {
             r#"SELECT COUNT(*) FROM stock_transfers t
                WHERE ($1::UUID IS NULL OR t.source_warehouse_id = $1)
                  AND ($2::UUID IS NULL OR t.destination_warehouse_id = $2)
-                 AND ($3::stock_transfer_status_enum IS NULL OR t.status = $3)"#,
+                 AND ($3::text IS NULL OR t.status::text = $3)"#,
         )
         .bind(source_warehouse_id)
         .bind(destination_warehouse_id)
@@ -129,7 +122,7 @@ impl StockTransferService {
             r#"SELECT
                 ti.id, ti.transfer_id, ti.catalog_item_id,
                 ci.description AS catalog_item_name,
-                ci.catmat_code AS catalog_item_code,
+                ci.code AS catalog_item_code,
                 ti.quantity_requested, ti.quantity_confirmed,
                 ti.unit_raw_id,
                 u.symbol AS unit_symbol,
@@ -384,14 +377,13 @@ impl StockTransferService {
             }
 
             // Get unit_price from the TRANSFER_OUT movement for this item
-            let source_price: Decimal = sqlx::query_scalar(
-                "SELECT unit_price_base FROM stock_movements WHERE id = $1",
-            )
-            .bind(titem.source_movement_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|e| ServiceError::Internal(e.to_string()))?
-            .unwrap_or(Decimal::ZERO);
+            let source_price: Decimal =
+                sqlx::query_scalar("SELECT unit_price_base FROM stock_movements WHERE id = $1")
+                    .bind(titem.source_movement_id)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(|e| ServiceError::Internal(e.to_string()))?
+                    .unwrap_or(Decimal::ZERO);
 
             // Generate TRANSFER_IN movement at destination
             self.stock_movement_service
@@ -451,23 +443,19 @@ impl StockTransferService {
 
             // Link the two movements (related_movement_id)
             if let Some(src_mv) = titem.source_movement_id {
-                sqlx::query(
-                    "UPDATE stock_movements SET related_movement_id = $1 WHERE id = $2",
-                )
-                .bind(dest_movement_id)
-                .bind(src_mv)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| ServiceError::Internal(e.to_string()))?;
+                sqlx::query("UPDATE stock_movements SET related_movement_id = $1 WHERE id = $2")
+                    .bind(dest_movement_id)
+                    .bind(src_mv)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
-                sqlx::query(
-                    "UPDATE stock_movements SET related_movement_id = $1 WHERE id = $2",
-                )
-                .bind(src_mv)
-                .bind(dest_movement_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| ServiceError::Internal(e.to_string()))?;
+                sqlx::query("UPDATE stock_movements SET related_movement_id = $1 WHERE id = $2")
+                    .bind(src_mv)
+                    .bind(dest_movement_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| ServiceError::Internal(e.to_string()))?;
             }
         }
 

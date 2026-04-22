@@ -439,7 +439,7 @@ async fn test_list_invoices() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert!(body["total"].as_i64().unwrap() >= 3);
-    assert!(body["invoices"].as_array().is_some());
+    assert!(body["data"].as_array().is_some());
 }
 
 #[tokio::test]
@@ -469,7 +469,7 @@ async fn test_list_invoices_filter_by_status() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    let invoices = body["invoices"].as_array().unwrap();
+    let invoices = body["data"].as_array().unwrap();
     for inv in invoices {
         assert_eq!(inv["status"], "PENDING");
     }
@@ -891,11 +891,16 @@ async fn test_duplicate_access_key_is_rejected() {
     let warehouse_id = create_test_warehouse(&app.db_auth).await;
     let unit_id = get_unit_id(&app.db_auth).await;
     let catalog_item_id = create_test_catmat_item(&app.db_auth, unit_id).await;
-    let mut digits: String = Uuid::new_v4().simple().to_string().chars().filter(|c| c.is_ascii_digit()).collect();
+    let mut digits: String = Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
     while digits.len() < 12 {
         digits.push_str("0");
     }
-    
+
     // Concatena com um prefixo padrão para formar os 44 dígitos numéricos
     let access_key = format!("35260300000000000000550010000000{}", &digits[..12]);
 
@@ -1049,7 +1054,7 @@ async fn test_list_invoices_pagination() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["invoices"].as_array().unwrap().len() <= 2);
+    assert!(body["data"].as_array().unwrap().len() <= 2);
     assert_eq!(body["limit"].as_i64().unwrap(), 2);
     assert_eq!(body["offset"].as_i64().unwrap(), 0);
 }
@@ -1070,7 +1075,12 @@ async fn test_post_invoice_creates_stock_entry() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();
@@ -1129,7 +1139,12 @@ async fn test_cancel_posted_invoice_reverses_stock() {
         .api
         .post("/api/admin/invoices")
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
-        .json(&invoice_payload(supplier_id, warehouse_id, catalog_item_id, unit_id))
+        .json(&invoice_payload(
+            supplier_id,
+            warehouse_id,
+            catalog_item_id,
+            unit_id,
+        ))
         .await
         .json();
     let id = created["id"].as_str().unwrap();

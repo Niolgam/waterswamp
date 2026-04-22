@@ -19,6 +19,23 @@ pub async fn seed(enforcer: &mut Enforcer) -> Result<()> {
         ])
         .await?;
 
+    // Invoice adjustments
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            format!("{}/{{id}}/adjustments", base),
+            ACTION_GET
+        ])
+        .await?;
+
+    enforcer
+        .add_policy(str_vec![
+            ROLE_ADMIN,
+            format!("{}/{{id}}/adjustments", base),
+            ACTION_POST
+        ])
+        .await?;
+
     // State machine transitions
     for action in &[
         "start-checking",

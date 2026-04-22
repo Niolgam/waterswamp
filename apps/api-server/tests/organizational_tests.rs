@@ -22,7 +22,7 @@ fn random_numeric_code() -> i32 {
     let uuid = Uuid::new_v4();
     let bytes = uuid.as_bytes();
     let num = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-    (num % 900000 + 100000) as i32  // Range 100000-999999
+    (num % 900000 + 100000) as i32 // Range 100000-999999
 }
 
 async fn create_system_setting(app: &TestApp, key: &str, value: Value) -> Value {
@@ -212,7 +212,7 @@ async fn test_list_system_settings() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["settings"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() > 0);
 }
 
@@ -371,7 +371,7 @@ async fn test_list_organizations() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["organizations"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() > 0);
 }
 
@@ -384,7 +384,10 @@ async fn test_get_organization() {
 
     let response = app
         .api
-        .get(&format!("/api/admin/organizational/organizations/{}", org_id))
+        .get(&format!(
+            "/api/admin/organizational/organizations/{}",
+            org_id
+        ))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
@@ -402,7 +405,10 @@ async fn test_update_organization() {
 
     let response = app
         .api
-        .put(&format!("/api/admin/organizational/organizations/{}", org_id))
+        .put(&format!(
+            "/api/admin/organizational/organizations/{}",
+            org_id
+        ))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "name": "Updated Organization Name"
@@ -423,7 +429,10 @@ async fn test_delete_organization() {
 
     let response = app
         .api
-        .delete(&format!("/api/admin/organizational/organizations/{}", org_id))
+        .delete(&format!(
+            "/api/admin/organizational/organizations/{}",
+            org_id
+        ))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 
@@ -469,7 +478,7 @@ async fn test_list_unit_categories() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["categories"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() > 0);
 }
 
@@ -513,7 +522,7 @@ async fn test_list_unit_types() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["types"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() > 0);
 }
 
@@ -615,7 +624,7 @@ async fn test_list_organizational_units() {
 
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
-    assert!(body["units"].is_array());
+    assert!(body["data"].is_array());
     assert!(body["total"].as_i64().unwrap() > 0);
 }
 
@@ -655,7 +664,7 @@ async fn test_get_organizational_unit_tree() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let body: Value = response.json();
     assert!(body.is_array());
-    assert!(body.as_array().unwrap().len() > 0);
+    assert!(!body.as_array().unwrap().is_empty());
 }
 
 #[tokio::test]

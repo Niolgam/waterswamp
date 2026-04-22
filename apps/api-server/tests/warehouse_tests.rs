@@ -363,7 +363,7 @@ async fn test_update_warehouse_duplicate_code() {
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&p2)
         .await;
-    
+
     let id2: Value = r2.json();
     let id2 = id2["id"].as_str().unwrap().to_string();
 
@@ -798,7 +798,10 @@ async fn test_standalone_entry_donation() {
     let body: Value = response.json();
     assert_eq!(body["movements_created"].as_i64().unwrap(), 1);
     assert_eq!(body["entry_type"].as_str().unwrap(), "Donation");
-    assert_eq!(body["warehouse_id"].as_str().unwrap(), warehouse_id.to_string());
+    assert_eq!(
+        body["warehouse_id"].as_str().unwrap(),
+        warehouse_id.to_string()
+    );
 }
 
 #[tokio::test]
@@ -987,7 +990,10 @@ async fn test_return_entry_success() {
     let body: Value = response.json();
     assert_eq!(body["movements_created"].as_i64().unwrap(), 1);
     assert_eq!(body["requisition_id"].as_str().unwrap(), req_id.to_string());
-    assert_eq!(body["warehouse_id"].as_str().unwrap(), warehouse_id.to_string());
+    assert_eq!(
+        body["warehouse_id"].as_str().unwrap(),
+        warehouse_id.to_string()
+    );
 }
 
 #[tokio::test]
@@ -1114,8 +1120,14 @@ async fn test_disposal_exit_success() {
     );
     let body: Value = response.json();
     assert_eq!(body["movements_created"].as_i64().unwrap(), 1);
-    assert_eq!(body["sei_process_number"].as_str().unwrap(), "23108.012345/2026-07");
-    assert_eq!(body["warehouse_id"].as_str().unwrap(), warehouse_id.to_string());
+    assert_eq!(
+        body["sei_process_number"].as_str().unwrap(),
+        "23108.012345/2026-07"
+    );
+    assert_eq!(
+        body["warehouse_id"].as_str().unwrap(),
+        warehouse_id.to_string()
+    );
 }
 
 #[tokio::test]
@@ -1268,7 +1280,10 @@ async fn test_manual_exit_success() {
 
     let response = app
         .api
-        .post(&format!("/api/admin/warehouses/{}/manual-exits", warehouse_id))
+        .post(&format!(
+            "/api/admin/warehouses/{}/manual-exits",
+            warehouse_id
+        ))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "document_number": "OS-2026-00123",
@@ -1292,7 +1307,10 @@ async fn test_manual_exit_success() {
     let body: Value = response.json();
     assert_eq!(body["movements_created"].as_i64().unwrap(), 1);
     assert_eq!(body["document_number"].as_str().unwrap(), "OS-2026-00123");
-    assert_eq!(body["warehouse_id"].as_str().unwrap(), warehouse_id.to_string());
+    assert_eq!(
+        body["warehouse_id"].as_str().unwrap(),
+        warehouse_id.to_string()
+    );
 }
 
 #[tokio::test]
@@ -1303,7 +1321,10 @@ async fn test_manual_exit_empty_document_number_fails() {
 
     let response = app
         .api
-        .post(&format!("/api/admin/warehouses/{}/manual-exits", warehouse_id))
+        .post(&format!(
+            "/api/admin/warehouses/{}/manual-exits",
+            warehouse_id
+        ))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "document_number": "   ",
@@ -1328,7 +1349,10 @@ async fn test_manual_exit_empty_justification_fails() {
 
     let response = app
         .api
-        .post(&format!("/api/admin/warehouses/{}/manual-exits", warehouse_id))
+        .post(&format!(
+            "/api/admin/warehouses/{}/manual-exits",
+            warehouse_id
+        ))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "document_number": "OS-2026-001",
@@ -1352,7 +1376,10 @@ async fn test_manual_exit_empty_items_fails() {
 
     let response = app
         .api
-        .post(&format!("/api/admin/warehouses/{}/manual-exits", warehouse_id))
+        .post(&format!(
+            "/api/admin/warehouses/{}/manual-exits",
+            warehouse_id
+        ))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .json(&json!({
             "document_number": "OS-2026-001",
@@ -1388,7 +1415,10 @@ async fn test_list_movements_empty_warehouse() {
     let body: Value = response.json();
     assert!(body["data"].is_array());
     assert_eq!(body["total"].as_i64().unwrap(), 0);
-    assert_eq!(body["warehouse_id"].as_str().unwrap(), warehouse_id.to_string());
+    assert_eq!(
+        body["warehouse_id"].as_str().unwrap(),
+        warehouse_id.to_string()
+    );
 }
 
 #[tokio::test]
@@ -1514,7 +1544,10 @@ async fn test_list_movements_warehouse_not_found() {
 
     let response = app
         .api
-        .get(&format!("/api/admin/warehouses/{}/movements", Uuid::new_v4()))
+        .get(&format!(
+            "/api/admin/warehouses/{}/movements",
+            Uuid::new_v4()
+        ))
         .add_header("Authorization", format!("Bearer {}", app.admin_token))
         .await;
 

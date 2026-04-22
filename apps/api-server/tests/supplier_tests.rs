@@ -32,18 +32,34 @@ fn generate_cpf() -> String {
     }
 
     // First check digit
-    let sum1: u32 = digits.iter().enumerate().map(|(i, d)| d * (10 - i as u32)).sum();
+    let sum1: u32 = digits
+        .iter()
+        .enumerate()
+        .map(|(i, d)| d * (10 - i as u32))
+        .sum();
     let check1 = {
         let rem = (sum1 * 10) % 11;
-        if rem >= 10 { 0 } else { rem }
+        if rem >= 10 {
+            0
+        } else {
+            rem
+        }
     };
     digits.push(check1);
 
     // Second check digit
-    let sum2: u32 = digits.iter().enumerate().map(|(i, d)| d * (11 - i as u32)).sum();
+    let sum2: u32 = digits
+        .iter()
+        .enumerate()
+        .map(|(i, d)| d * (11 - i as u32))
+        .sum();
     let check2 = {
         let rem = (sum2 * 10) % 11;
-        if rem >= 10 { 0 } else { rem }
+        if rem >= 10 {
+            0
+        } else {
+            rem
+        }
     };
     digits.push(check2);
 
@@ -73,7 +89,11 @@ fn generate_cnpj() -> String {
     let sum1: u32 = digits.iter().zip(weights1.iter()).map(|(d, w)| d * w).sum();
     let check1 = {
         let rem = sum1 % 11;
-        if rem < 2 { 0 } else { 11 - rem }
+        if rem < 2 {
+            0
+        } else {
+            11 - rem
+        }
     };
     digits.push(check1);
 
@@ -82,7 +102,11 @@ fn generate_cnpj() -> String {
     let sum2: u32 = digits.iter().zip(weights2.iter()).map(|(d, w)| d * w).sum();
     let check2 = {
         let rem = sum2 % 11;
-        if rem < 2 { 0 } else { 11 - rem }
+        if rem < 2 {
+            0
+        } else {
+            11 - rem
+        }
     };
     digits.push(check2);
 
@@ -105,7 +129,12 @@ async fn create_supplier_individual(app: &TestApp) -> Value {
             "phone": "(65) 99999-0000",
         }))
         .await;
-    assert_eq!(response.status_code(), StatusCode::CREATED, "Failed: {}", response.text());
+    assert_eq!(
+        response.status_code(),
+        StatusCode::CREATED,
+        "Failed: {}",
+        response.text()
+    );
     response.json()
 }
 
@@ -124,7 +153,12 @@ async fn create_supplier_legal_entity(app: &TestApp) -> Value {
             "zip_code": "78050000",
         }))
         .await;
-    assert_eq!(response.status_code(), StatusCode::CREATED, "Failed: {}", response.text());
+    assert_eq!(
+        response.status_code(),
+        StatusCode::CREATED,
+        "Failed: {}",
+        response.text()
+    );
     response.json()
 }
 
@@ -222,7 +256,7 @@ async fn test_list_suppliers() {
     assert_eq!(response.status_code(), StatusCode::OK);
     let list: Value = response.json();
     assert!(list["total"].as_i64().unwrap() >= 2);
-    assert!(list["suppliers"].as_array().is_some());
+    assert!(list["data"].as_array().is_some());
 }
 
 // ============================

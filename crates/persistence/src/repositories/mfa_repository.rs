@@ -192,14 +192,14 @@ impl MfaRepositoryPort for MfaRepository {
     }
 
     async fn get_mfa_secret(&self, user_id: Uuid) -> Result<Option<String>, RepositoryError> {
-        let raw: Option<String> =
+        let raw: Option<Option<String>> =
             sqlx::query_scalar("SELECT mfa_secret FROM users WHERE id = $1")
                 .bind(user_id)
                 .fetch_optional(&self.pool)
                 .await
                 .map_err(map_db_error)?;
 
-        match raw {
+        match raw.flatten() {
             None => Ok(None),
             Some(encrypted) => Ok(Some(self.decrypt(&encrypted)?)),
         }

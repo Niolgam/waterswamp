@@ -123,8 +123,8 @@ async fn create_catalog_item_with_stock(pool: &PgPool, warehouse_id: Uuid) -> (U
     .expect("pdm");
 
     let item_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO catmat_items (pdm_id, code, description, unit_of_measure_id, base_unit_id, is_active)
-         VALUES ($1, $2, $3, $4, $4, true)
+        "INSERT INTO catmat_items (pdm_id, code, description, unit_of_measure_id, is_active)
+         VALUES ($1, $2, $3, $4, true)
          ON CONFLICT (code) DO UPDATE SET description = catmat_items.description RETURNING id",
     )
     .bind(pdm_id)
@@ -224,8 +224,14 @@ async fn test_initiate_transfer_success() {
         .unwrap_or("")
         .starts_with("TRF-"));
     assert_eq!(body["status"].as_str().unwrap(), "PENDING");
-    assert_eq!(body["source_warehouse_id"].as_str().unwrap(), src.to_string());
-    assert_eq!(body["destination_warehouse_id"].as_str().unwrap(), dst.to_string());
+    assert_eq!(
+        body["source_warehouse_id"].as_str().unwrap(),
+        src.to_string()
+    );
+    assert_eq!(
+        body["destination_warehouse_id"].as_str().unwrap(),
+        dst.to_string()
+    );
     let items = body["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
 }
@@ -568,7 +574,10 @@ async fn test_reject_transfer_restores_source_stock() {
     .await
     .expect("final qty");
 
-    assert_eq!(initial_qty, final_qty, "stock should be restored after rejection");
+    assert_eq!(
+        initial_qty, final_qty,
+        "stock should be restored after rejection"
+    );
 }
 
 // ============================================================================
@@ -690,7 +699,10 @@ async fn test_cancel_transfer_restores_source_stock() {
     .await
     .expect("final qty");
 
-    assert_eq!(initial_qty, final_qty, "stock should be restored after cancellation");
+    assert_eq!(
+        initial_qty, final_qty,
+        "stock should be restored after cancellation"
+    );
 }
 
 // ============================================================================
@@ -830,7 +842,10 @@ async fn test_full_transfer_lifecycle_initiate_confirm() {
     .fetch_one(&app.db_auth)
     .await
     .expect("src after initiate");
-    assert!(src_after_initiate < src_initial, "source qty must decrease after initiate");
+    assert!(
+        src_after_initiate < src_initial,
+        "source qty must decrease after initiate"
+    );
 
     let confirm_response = app
         .api
@@ -854,8 +869,14 @@ async fn test_full_transfer_lifecycle_initiate_confirm() {
     .fetch_optional(&app.db_auth)
     .await
     .expect("dst qty");
-    assert!(dst_qty.is_some(), "destination should have a stock entry after confirm");
-    assert!(dst_qty.unwrap() > rust_decimal::Decimal::ZERO, "destination qty must be positive");
+    assert!(
+        dst_qty.is_some(),
+        "destination should have a stock entry after confirm"
+    );
+    assert!(
+        dst_qty.unwrap() > rust_decimal::Decimal::ZERO,
+        "destination qty must be positive"
+    );
 }
 
 #[tokio::test]
