@@ -37,6 +37,7 @@ impl StockTransferService {
                 sw.name AS source_warehouse_name,
                 t.destination_warehouse_id,
                 dw.name AS destination_warehouse_name,
+                u.username AS initiated_by_name,
                 t.status,
                 t.notes, t.rejection_reason, t.cancellation_reason,
                 t.initiated_by, t.confirmed_by, t.rejected_by, t.cancelled_by,
@@ -45,6 +46,7 @@ impl StockTransferService {
                FROM stock_transfers t
                LEFT JOIN warehouses sw ON sw.id = t.source_warehouse_id
                LEFT JOIN warehouses dw ON dw.id = t.destination_warehouse_id
+               LEFT JOIN users u ON u.id = t.initiated_by
                WHERE t.id = $1"#,
         )
         .bind(id)
@@ -75,6 +77,7 @@ impl StockTransferService {
                 sw.name AS source_warehouse_name,
                 t.destination_warehouse_id,
                 dw.name AS destination_warehouse_name,
+                u.username AS initiated_by_name,
                 t.status,
                 t.notes, t.rejection_reason, t.cancellation_reason,
                 t.initiated_by, t.confirmed_by, t.rejected_by, t.cancelled_by,
@@ -83,6 +86,7 @@ impl StockTransferService {
                FROM stock_transfers t
                LEFT JOIN warehouses sw ON sw.id = t.source_warehouse_id
                LEFT JOIN warehouses dw ON dw.id = t.destination_warehouse_id
+               LEFT JOIN users u ON u.id = t.initiated_by
                WHERE ($1::UUID IS NULL OR t.source_warehouse_id = $1)
                  AND ($2::UUID IS NULL OR t.destination_warehouse_id = $2)
                  AND ($3::text IS NULL OR t.status::text = $3)
@@ -118,7 +122,7 @@ impl StockTransferService {
         &self,
         transfer_id: Uuid,
     ) -> Result<Vec<StockTransferItemDto>, ServiceError> {
-        sqlx::query_as::<_, StockTransferItemDto>(
+        let items = sqlx::query_as::<_, StockTransferItemDto>(
             r#"SELECT
                 ti.id, ti.transfer_id, ti.catalog_item_id,
                 ci.description AS catalog_item_name,
@@ -126,7 +130,8 @@ impl StockTransferService {
                 ti.quantity_requested, ti.quantity_confirmed,
                 ti.unit_raw_id,
                 u.symbol AS unit_symbol,
-                ti.conversion_factor, ti.batch_number, ti.expiration_date, ti.notes
+                ti.conversion_factor, ti.batch_number, ti.expiration_date, ti.notes,
+                ti.source_movement_id, ti.destination_movement_id
                FROM stock_transfer_items ti
                LEFT JOIN catmat_items ci ON ci.id = ti.catalog_item_id
                LEFT JOIN units_of_measure u ON u.id = ti.unit_raw_id
@@ -135,7 +140,21 @@ impl StockTransferService {
         .bind(transfer_id)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| ServiceError::Internal(e.to_string()))
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let normalized_items = items
+            .into_iter()
+            .map(|mut item| {
+                item.quantity_requested = item.quantity_requested.normalize();
+                if let Some(qc) = item.quantity_confirmed {
+                    item.quantity_confirmed = Some(qc.normalize());
+                }
+                item.conversion_factor = item.conversion_factor.normalize();
+                item
+            })
+            .collect();
+
+        Ok(normalized_items)
     }
 
     // ========================================================================
@@ -213,9 +232,8 @@ impl StockTransferService {
                 ));
             }
 
-            let quantity_base = item.quantity_raw * item.conversion_factor;
+            let quantity_base = (item.quantity_raw * item.conversion_factor).normalize();
 
-            // Generate TRANSFER_OUT movement (this acquires pessimistic lock on warehouse_stocks)
             self.stock_movement_service
                 .process_movement(
                     &mut tx,
@@ -228,13 +246,13 @@ impl StockTransferService {
                         quantity_raw: item.quantity_raw,
                         conversion_factor: item.conversion_factor,
                         quantity_base,
-                        unit_price_base: Decimal::ZERO, // uses average cost
+                        unit_price_base: Decimal::ZERO,
                         invoice_id: None,
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
                         related_warehouse_id: Some(payload.destination_warehouse_id),
-                        document_number: None, // filled after insert with transfer_number
+                        document_number: None,
                         notes: item.notes.clone(),
                         user_id: initiated_by,
                         batch_number: item.batch_number.clone(),
@@ -396,7 +414,8 @@ impl StockTransferService {
                         movement_type: StockMovementType::TransferIn,
                         unit_raw_id: titem.unit_raw_id,
                         unit_conversion_id: None,
-                        quantity_raw: conf.quantity_confirmed,
+                        quantity_raw: (conf.quantity_confirmed / titem.conversion_factor)
+                            .normalize(),
                         conversion_factor: titem.conversion_factor,
                         quantity_base: conf.quantity_confirmed,
                         unit_price_base: source_price, // preserve cost from source
@@ -538,7 +557,8 @@ impl StockTransferService {
                         movement_type: StockMovementType::TransferIn,
                         unit_raw_id: item.unit_raw_id,
                         unit_conversion_id: None,
-                        quantity_raw: item.quantity_requested,
+                        quantity_raw: (item.quantity_requested / item.conversion_factor)
+                            .normalize(),
                         conversion_factor: item.conversion_factor,
                         quantity_base: item.quantity_requested,
                         unit_price_base: source_price,
@@ -642,7 +662,8 @@ impl StockTransferService {
                         movement_type: StockMovementType::TransferIn,
                         unit_raw_id: item.unit_raw_id,
                         unit_conversion_id: None,
-                        quantity_raw: item.quantity_requested,
+                        quantity_raw: (item.quantity_requested / item.conversion_factor)
+                            .normalize(),
                         conversion_factor: item.conversion_factor,
                         quantity_base: item.quantity_requested,
                         unit_price_base: source_price,
