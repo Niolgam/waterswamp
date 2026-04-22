@@ -10,7 +10,6 @@ pub async fn seed(enforcer: &mut Enforcer) -> Result<()> {
 
     // Base correta (plural) usada pelo Router principal de almoxarifados e pelos testes
     let wh_base = "/api/admin/warehouses";
-    let trf_base = "/api/admin/transfers";
 
     // Material Groups & Materials (Mantido do original)
     add_crud_policies(
@@ -119,6 +118,7 @@ pub async fn seed(enforcer: &mut Enforcer) -> Result<()> {
             ACTION_POST
         ])
         .await?;
+
     enforcer
         .add_policy(str_vec![
             ROLE_ADMIN,
@@ -229,17 +229,6 @@ pub async fn seed(enforcer: &mut Enforcer) -> Result<()> {
         .add_policy(str_vec![
             ROLE_ADMIN,
             format!("{}/reports/movement-analysis", legacy_base),
-            ACTION_GET
-        ])
-        .await?;
-
-    enforcer
-        .add_policy(str_vec![ROLE_ADMIN, trf_base, ACTION_GET])
-        .await?;
-    enforcer
-        .add_policy(str_vec![
-            ROLE_ADMIN,
-            format!("{}/{{id}}", trf_base),
             ACTION_GET
         ])
         .await?;
