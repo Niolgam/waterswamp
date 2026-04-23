@@ -15,7 +15,7 @@ fn generate_totp_code(secret_base32: &str, username: &str) -> String {
         1,
         30,
         secret_bytes,
-        Some("Waterswamp".to_string()),
+        Some("Waterswamp".to_string()), // DEVE SER IGUAL AO MFA_ISSUER
         username.to_string(),
     )
     .unwrap();
@@ -34,30 +34,28 @@ const TEST_SECRET: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
 async fn test_mfa_setup_initiation() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+    // Cria um usuário 100% isolado para este teste
+    let (username, _, _) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
 
-    sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
-        .bind(user_id)
-        .execute(&app.db_auth)
-        .await
-        .unwrap();
-
-    let alice_token = common::generate_test_token(user_id);
+    let user_token = common::generate_test_token(user_id);
 
     let response = app
         .api
         .post("/auth/mfa/setup")
-        .add_header("Authorization", format!("Bearer {}", alice_token))
+        .add_header("Authorization", format!("Bearer {}", user_token))
         .await;
 
     response.assert_status_ok();
     let body: Value = response.json();
 
     let qr_url = body["qr_code_url"].as_str().unwrap();
-    // Adjusted expectation to match implementation (Data URI)
     assert!(qr_url.starts_with("data:image/png;base64,"));
 }
 
@@ -65,10 +63,15 @@ async fn test_mfa_setup_initiation() {
 async fn test_mfa_setup_already_enabled() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+    let (username, _, _) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
+    let user_token = common::generate_test_token(user_id);
 
     let encrypted_test123 = app.encrypt_field("TEST123");
     sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
@@ -81,7 +84,7 @@ async fn test_mfa_setup_already_enabled() {
     let response = app
         .api
         .post("/auth/mfa/setup")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", user_token))
         .await;
 
     assert_eq!(response.status_code(), 400);
@@ -91,37 +94,36 @@ async fn test_mfa_setup_already_enabled() {
 async fn test_mfa_verify_setup_success() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+    let (username, _, _) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
-
-    sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
-        .bind(user_id)
-        .execute(&app.db_auth)
-        .await
-        .unwrap();
+    let user_token = common::generate_test_token(user_id);
 
     // 1. Initiate
     let setup_response = app
         .api
         .post("/auth/mfa/setup")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", user_token))
         .await;
 
-    setup_response.assert_status_ok();
+    setup_response.assert_status_ok(); // Garante que falhe com log legível caso o setup dê erro
     let setup_body: Value = setup_response.json();
     let secret = setup_body["secret"].as_str().unwrap();
     let setup_token = setup_body["setup_token"].as_str().unwrap();
 
     // 2. Generate code
-    let totp_code = generate_totp_code(secret, "alice");
+    let totp_code = generate_totp_code(secret, &username);
 
     // 3. Verify
     let verify_response = app
         .api
         .post("/auth/mfa/verify-setup")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", user_token))
         .json(&json!({
             "setup_token": setup_token,
             "totp_code": totp_code
@@ -138,22 +140,23 @@ async fn test_mfa_verify_setup_success() {
 async fn test_mfa_verify_setup_invalid_code() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+    let (username, _, _) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
-
-    sqlx::query("UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL WHERE id = $1")
-        .bind(user_id)
-        .execute(&app.db_auth)
-        .await
-        .unwrap();
+    let user_token = common::generate_test_token(user_id);
 
     let setup_response = app
         .api
         .post("/auth/mfa/setup")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", user_token))
         .await;
+
+    setup_response.assert_status_ok(); // Evita panic de unwrap se der 400
 
     let setup_body: Value = setup_response.json();
     let setup_token = setup_body["setup_token"].as_str().unwrap();
@@ -161,14 +164,13 @@ async fn test_mfa_verify_setup_invalid_code() {
     let verify_response = app
         .api
         .post("/auth/mfa/verify-setup")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", user_token))
         .json(&json!({
             "setup_token": setup_token,
             "totp_code": "000000"
         }))
         .await;
 
-    // Updated handler now returns 400 for bad requests (invalid input/logic)
     assert_eq!(verify_response.status_code(), 400);
 }
 
@@ -176,7 +178,11 @@ async fn test_mfa_verify_setup_invalid_code() {
 async fn test_mfa_verify_with_totp() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'bob'")
+    let (username, _, password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
@@ -192,12 +198,15 @@ async fn test_mfa_verify_with_totp() {
     let login_response = app
         .api
         .post("/login")
-        .json(&json!({ "username": "bob", "password": "password123" }))
+        .json(&json!({ "username": username, "password": password }))
         .await;
+
+    login_response.assert_status_ok();
+
     let login_body: Value = login_response.json();
     let mfa_token = login_body["mfa_token"].as_str().unwrap();
 
-    let totp_code = generate_totp_code(TEST_SECRET, "bob");
+    let totp_code = generate_totp_code(TEST_SECRET, &username);
 
     let mfa_response = app
         .api
@@ -212,7 +221,11 @@ async fn test_mfa_verify_with_totp() {
 async fn test_mfa_verify_with_backup_code() {
     let app = common::spawn_app().await;
 
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'bob'")
+    let (username, _, password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
@@ -220,7 +233,6 @@ async fn test_mfa_verify_with_backup_code() {
     let backup_code_plain = "ABCD1234EFGH";
     let backup_code_hashed = hash_backup_code(backup_code_plain);
 
-    // Setup MFA secret
     let encrypted_secret = app.encrypt_field(TEST_SECRET);
     sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
         .bind(user_id)
@@ -229,12 +241,6 @@ async fn test_mfa_verify_with_backup_code() {
         .await
         .unwrap();
 
-    // Insert backup code into CORRECT table
-    sqlx::query("DELETE FROM mfa_backup_codes WHERE user_id = $1")
-        .bind(user_id)
-        .execute(&app.db_auth)
-        .await
-        .unwrap();
     sqlx::query("INSERT INTO mfa_backup_codes (user_id, code_hash) VALUES ($1, $2)")
         .bind(user_id)
         .bind(&backup_code_hashed)
@@ -245,8 +251,10 @@ async fn test_mfa_verify_with_backup_code() {
     let login_response = app
         .api
         .post("/login")
-        .json(&json!({ "username": "bob", "password": "password123" }))
+        .json(&json!({ "username": username, "password": password }))
         .await;
+
+    login_response.assert_status_ok();
     let mfa_token = login_response.json::<Value>()["mfa_token"]
         .as_str()
         .unwrap()
@@ -266,10 +274,16 @@ async fn test_mfa_verify_with_backup_code() {
 #[tokio::test]
 async fn test_mfa_status_with_backup_codes() {
     let app = common::spawn_app().await;
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+
+    let (username, _, _) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
+    let user_token = common::generate_test_token(user_id);
 
     let encrypted_secret = app.encrypt_field(TEST_SECRET);
     sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
@@ -279,12 +293,6 @@ async fn test_mfa_status_with_backup_codes() {
         .await
         .unwrap();
 
-    // Insert codes
-    sqlx::query("DELETE FROM mfa_backup_codes WHERE user_id = $1")
-        .bind(user_id)
-        .execute(&app.db_auth)
-        .await
-        .unwrap();
     for i in 1..=3 {
         sqlx::query("INSERT INTO mfa_backup_codes (user_id, code_hash) VALUES ($1, $2)")
             .bind(user_id)
@@ -297,21 +305,27 @@ async fn test_mfa_status_with_backup_codes() {
     let status_response = app
         .api
         .get("/auth/mfa/status")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", user_token))
         .await;
 
     status_response.assert_status_ok();
     let body: Value = status_response.json();
-    assert_eq!(body["backup_codes_remaining"], 10);
+    assert_eq!(body["backup_codes_remaining"], 3);
 }
 
 #[tokio::test]
 async fn test_mfa_regenerate_backup_codes() {
     let app = common::spawn_app().await;
-    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+
+    let (username, _, password) = common::create_test_user(&app.db_auth, &app.field_encryption_key)
+        .await
+        .unwrap();
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+        .bind(&username)
         .fetch_one(&app.db_auth)
         .await
         .unwrap();
+    let user_token = common::generate_test_token(user_id);
 
     let encrypted_secret = app.encrypt_field(TEST_SECRET);
     sqlx::query("UPDATE users SET mfa_enabled = TRUE, mfa_secret = $2 WHERE id = $1")
@@ -321,14 +335,14 @@ async fn test_mfa_regenerate_backup_codes() {
         .await
         .unwrap();
 
-    let totp_code = generate_totp_code(TEST_SECRET, "alice");
+    let totp_code = generate_totp_code(TEST_SECRET, &username);
 
     let regen_response = app
         .api
         .post("/auth/mfa/regenerate-backup-codes")
-        .add_header("Authorization", format!("Bearer {}", app.admin_token))
+        .add_header("Authorization", format!("Bearer {}", user_token))
         .json(&json!({
-            "password": "password123",
+            "password": password,
             "totp_code": totp_code
         }))
         .await;
