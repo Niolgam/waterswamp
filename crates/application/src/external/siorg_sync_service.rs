@@ -747,6 +747,17 @@ impl SiorgSyncService {
             .await
             .unwrap_or_else(|_| format!("Categoria {}", siorg_id));
 
+        // Multiple siorg IDs can resolve to the same name (e.g. "Categoria Desconhecida")
+        // when the API returns no nome. Check by name before inserting to avoid the unique violation.
+        if let Some(existing) = self
+            .category_repo
+            .find_by_name(&real_name)
+            .await
+            .map_err(|e| SyncError::DatabaseError(e.to_string()))?
+        {
+            return Ok(existing);
+        }
+
         self.category_repo
             .create(CreateOrganizationalUnitCategoryPayload {
                 name: real_name,
