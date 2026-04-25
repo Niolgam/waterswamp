@@ -700,14 +700,14 @@ impl SiorgSyncService {
                 .await
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
 
-        // Snapshot dos códigos pré-existentes para determinar Creation vs Update no histórico
+        // Snapshot of pre-existing codes to determine Creation vs Update in history
         let pre_existing_codes: HashSet<i32> = id_lookup.keys().cloned().collect();
 
         let mut sorted_units = units;
         sorted_units.sort_by_key(|u| u.base.codigo_unidade.len());
 
         // ====================================================================
-        // 2. TRANSAÇÃO PRINCIPAL
+        // 2. MAIN TRANSACTION
         // ====================================================================
         let mut tx = self
             .pool
@@ -716,14 +716,13 @@ impl SiorgSyncService {
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
         let mut summary = SyncSummary::default();
 
-        // (siorg_code, local_id, is_exclusao) — coletado para gravar histórico após commit
+        // (siorg_code, local_id, is_deletion) — collected to write history after commit
         let mut history_entries: Vec<(i32, Uuid, bool)> = Vec::new();
 
         for siorg_unit in sorted_units {
             summary.total_processed += 1;
             let siorg_code = siorg_unit.siorg_code().unwrap();
 
-            // Busca os IDs reais nos caches que preparamos acima (Tempo: O(1))
             let tipo_ref = siorg_unit
                 .base
                 .codigo_tipo_unidade
@@ -737,7 +736,7 @@ impl SiorgSyncService {
             let unit_type_id = *types_cache.get(tipo_ref).unwrap();
             let category_id = *cats_cache.get(cat_ref).unwrap();
             let contact_info = self.map_contact(&siorg_unit);
-            let is_exclusao = siorg_unit.base.is_exclusao();
+            let is_deletion = siorg_unit.base.is_exclusao();
 
             let payload = SiorgUpsertPayload {
                 organization_id: org_id,
@@ -747,7 +746,7 @@ impl SiorgSyncService {
                 category_id,
                 unit_type_id,
                 name: siorg_unit.base.nome.clone(),
-                formal_name: Some(siorg_unit.base.nome.clone()), // SIORG costuma usar o mesmo
+                formal_name: Some(siorg_unit.base.nome.clone()), // SIORG uses same name for formal
                 acronym: siorg_unit.base.sigla.clone(),
                 siorg_code,
                 siorg_parent_code: siorg_unit.parent_siorg_code(),
@@ -755,20 +754,20 @@ impl SiorgSyncService {
                     "https://servicos.siorg.paineis.gestao.gov.br/api/v1/unidade/{}",
                     siorg_code
                 )),
-                siorg_last_version: None, // Pode vir da resposta da API de versão
+                siorg_last_version: None,
                 contact_info,
                 activity_area: match siorg_unit.area_atuacao.as_deref() {
                     Some("FIM") => ActivityArea::Core,
                     _ => ActivityArea::Support,
                 },
-                is_active: !is_exclusao,
+                is_active: !is_deletion,
             };
 
             match self.unit_repo.upsert_in_transaction(&mut tx, payload).await {
                 Ok(unit) => {
-                    history_entries.push((siorg_code, unit.id, is_exclusao));
+                    history_entries.push((siorg_code, unit.id, is_deletion));
                     id_lookup.insert(siorg_code, unit.id);
-                    if is_exclusao {
+                    if is_deletion {
                         summary.deleted += 1;
                     } else {
                         summary.updated += 1;
@@ -786,10 +785,10 @@ impl SiorgSyncService {
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
 
         // ====================================================================
-        // 3. REGISTRO DE HISTÓRICO (após commit — não-fatal)
+        // 3. HISTORY RECORDING (after commit — non-fatal)
         // ====================================================================
-        for (siorg_code, local_id, is_exclusao) in history_entries {
-            let change_type = if is_exclusao {
+        for (siorg_code, local_id, is_deletion) in history_entries {
+            let change_type = if is_deletion {
                 SiorgChangeType::Extinction
             } else if pre_existing_codes.contains(&siorg_code) {
                 SiorgChangeType::Update
@@ -813,7 +812,7 @@ impl SiorgSyncService {
             };
 
             if let Err(e) = self.history_repo.create(history_payload).await {
-                warn!("Falha ao registrar histórico para unidade {}: {}", siorg_code, e);
+                warn!("Failed to record history for unit {}: {}", siorg_code, e);
             }
         }
 
