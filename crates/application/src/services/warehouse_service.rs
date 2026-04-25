@@ -318,8 +318,8 @@ impl WarehouseService {
         payload: StandaloneEntryPayload,
         user_id: Uuid,
     ) -> Result<StandaloneEntryResult, ServiceError> {
-        // Validate warehouse exists
-        let _ = self
+        // Validate warehouse exists and check hierarchy (RN-001)
+        let warehouse = self
             .warehouse_repo
             .find_by_id(warehouse_id)
             .await
@@ -327,6 +327,13 @@ impl WarehouseService {
             .ok_or(ServiceError::NotFound(
                 "Almoxarifado não encontrado".to_string(),
             ))?;
+
+        if warehouse.warehouse_type == WarehouseType::Sector {
+            return Err(ServiceError::BadRequest(
+                "Entradas avulsas só são permitidas em almoxarifados do tipo CENTRAL (RN-001)."
+                    .to_string(),
+            ));
+        }
 
         if payload.origin_description.trim().is_empty() {
             return Err(ServiceError::BadRequest(

@@ -1,5 +1,6 @@
 use crate::errors::ServiceError;
 use crate::services::stock_movement_service::StockMovementService;
+use chrono::Utc;
 use domain::{
     models::invoice::*,
     ports::invoice::*,
@@ -45,6 +46,31 @@ impl InvoiceService {
             return Err(ServiceError::BadRequest(
                 "A nota fiscal deve ter ao menos um item".to_string(),
             ));
+        }
+
+        // RN-001: somente almoxarifados CENTRAL podem receber notas fiscais
+        let wh_type: Option<String> = sqlx::query_scalar(
+            "SELECT warehouse_type::TEXT FROM warehouses WHERE id = $1",
+        )
+        .bind(payload.warehouse_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        match wh_type.as_deref() {
+            None => {
+                return Err(ServiceError::NotFound(format!(
+                    "Almoxarifado '{}' não encontrado",
+                    payload.warehouse_id
+                )))
+            }
+            Some("SECTOR") => {
+                return Err(ServiceError::BadRequest(
+                    "Notas fiscais só podem ser recebidas em almoxarifados do tipo CENTRAL (RN-001)."
+                        .to_string(),
+                ))
+            }
+            _ => {}
         }
 
         if let Some(ref key) = payload.access_key {
@@ -405,34 +431,90 @@ impl InvoiceService {
         }
 
         if current.status == InvoiceStatus::Posted {
-            // Must reverse stock movements atomically
-            let mut tx = self
-                .pool
-                .begin()
-                .await
-                .map_err(|e| ServiceError::Internal(e.to_string()))?;
-
-            self.stock_movement_service
-                .reverse_invoice_entry(&mut tx, id, &current.invoice_number, user_id)
-                .await?;
-
-            sqlx::query(
-                "UPDATE invoices SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1",
-            )
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| ServiceError::Internal(e.to_string()))?;
-
-            tx.commit()
-                .await
-                .map_err(|e| ServiceError::Internal(e.to_string()))?;
+            // RN-008: NFs lançadas não aceitam cancelamento direto.
+            // Use POST /invoices/{id}/compensatory-reversal dentro de 24h.
+            return Err(ServiceError::BadRequest(
+                "Notas fiscais lançadas no estoque não podem ser canceladas diretamente. \
+                 Utilize o lançamento compensatório (POST …/compensatory-reversal) \
+                 dentro de 24h do lançamento (RN-008)."
+                    .to_string(),
+            ));
         } else {
             self.invoice_repo
                 .transition_to_cancelled(id, user_id)
                 .await
                 .map_err(ServiceError::from)?;
         }
+
+        self.invoice_repo
+            .find_with_details_by_id(id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::Internal("Falha ao buscar nota fiscal".to_string()))
+    }
+
+    /// RN-008 — Lançamento compensatório: reverte movimentações de estoque de uma NF
+    /// já lançada (POSTED) criando ADJUSTMENT_SUB equivalentes.
+    /// Só permitido dentro de 24h após o lançamento; após isso, use glosa.
+    pub async fn compensatory_reversal(
+        &self,
+        id: Uuid,
+        payload: CompensatoryReversalPayload,
+        user_id: Uuid,
+    ) -> Result<InvoiceWithDetailsDto, ServiceError> {
+        let current = self
+            .invoice_repo
+            .find_by_id(id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound("Nota fiscal não encontrada".to_string()))?;
+
+        if current.status != InvoiceStatus::Posted {
+            return Err(ServiceError::BadRequest(
+                "Lançamento compensatório só é permitido para notas com status POSTED".to_string(),
+            ));
+        }
+
+        let posted_at = current
+            .posted_at
+            .ok_or_else(|| ServiceError::Internal("Data de lançamento ausente na NF".to_string()))?;
+
+        let elapsed = Utc::now().signed_duration_since(posted_at);
+        if elapsed.num_hours() >= 24 {
+            return Err(ServiceError::BadRequest(format!(
+                "Janela de 24h expirada para lançamento compensatório. \
+                 A NF foi lançada há {} horas. Após 24h, utilize glosa (RN-008).",
+                elapsed.num_hours()
+            )));
+        }
+
+        if payload.reason.trim().is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Motivo do lançamento compensatório é obrigatório (RN-008)".to_string(),
+            ));
+        }
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        self.stock_movement_service
+            .reverse_invoice_entry(&mut tx, id, &current.invoice_number, user_id)
+            .await?;
+
+        sqlx::query(
+            "UPDATE invoices SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
         self.invoice_repo
             .find_with_details_by_id(id)

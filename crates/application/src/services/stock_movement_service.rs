@@ -162,6 +162,26 @@ impl StockMovementService {
             return Ok(());
         }
 
+        // ── 1.5. Validar quantidade discreta×contínua (RF-004) ───────────────
+        // Consulta allows_fractions da unidade informada na movimentação.
+        let allows_fractions: Option<bool> = sqlx::query_scalar(
+            "SELECT allows_fractions FROM units_of_measure WHERE id = $1",
+        )
+        .bind(input.unit_raw_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        if let Some(false) = allows_fractions {
+            if input.quantity_base.fract() != Decimal::ZERO {
+                return Err(ServiceError::BadRequest(format!(
+                    "Item indivisível (unidade discreta): quantidade fracionada não é permitida. \
+                     Informado: {} (RF-004).",
+                    input.quantity_base
+                )));
+            }
+        }
+
         // ── 2. Capturar saldo atual com lock pessimista ───────────────────────
         let stock_row: Option<(Decimal, Decimal, bool, Option<String>)> = sqlx::query_as(
             r#"SELECT quantity, average_unit_value, is_blocked, block_reason
