@@ -5,11 +5,14 @@ use utoipa::ToSchema;
 pub use domain::models::organizational::{
     ActivityArea, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
     CreateOrganizationalUnitPayload, CreateOrganizationalUnitTypePayload,
+    CreateSiorgEsferaPayload, CreateSiorgNaturezaJuridicaPayload, CreateSiorgPoderPayload,
     CreateSystemSettingPayload, OrganizationDto, OrganizationalUnitCategoryDto,
     OrganizationalUnitDto, OrganizationalUnitTreeNode, OrganizationalUnitTypeDto,
-    OrganizationalUnitWithDetailsDto, SystemSettingDto, UpdateOrganizationPayload,
-    UpdateOrganizationalUnitCategoryPayload, UpdateOrganizationalUnitPayload,
-    UpdateOrganizationalUnitTypePayload, UpdateSystemSettingPayload,
+    OrganizationalUnitWithDetailsDto, SiorgEsferaDto, SiorgNaturezaJuridicaDto, SiorgPoderDto,
+    SystemSettingDto, UpdateOrganizationPayload, UpdateOrganizationalUnitCategoryPayload,
+    UpdateOrganizationalUnitPayload, UpdateOrganizationalUnitTypePayload,
+    UpdateSiorgEsferaPayload, UpdateSiorgNaturezaJuridicaPayload, UpdateSiorgPoderPayload,
+    UpdateSystemSettingPayload,
 };
 
 // ============================
@@ -51,6 +54,30 @@ pub struct OrganizationalUnitTypesListResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct OrganizationalUnitsListResponse {
     pub data: Vec<OrganizationalUnitWithDetailsDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SiorgNaturezaJuridicaListResponse {
+    pub data: Vec<SiorgNaturezaJuridicaDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SiorgPoderListResponse {
+    pub data: Vec<SiorgPoderDto>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SiorgEsferaListResponse {
+    pub data: Vec<SiorgEsferaDto>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,

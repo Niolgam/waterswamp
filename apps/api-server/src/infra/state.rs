@@ -7,7 +7,8 @@ use application::services::geo_regions_service::GeoRegionsService;
 use application::services::mfa_service::MfaService;
 use application::services::organizational_service::{
     OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
-    OrganizationalUnitTypeService, SystemSettingsService,
+    OrganizationalUnitTypeService, SiorgEsferaService, SiorgNaturezaJuridicaService,
+    SiorgPoderService, SystemSettingsService,
 };
 use application::services::requisition_service::RequisitionService;
 use application::services::user_service::UserService;
@@ -61,6 +62,9 @@ pub struct AppState {
     pub siorg_sync_service: Arc<SiorgSyncService>,
     pub siorg_sync_queue_repository: Arc<dyn SiorgSyncQueueRepositoryPort>,
     pub siorg_history_repository: Arc<dyn SiorgHistoryRepositoryPort>,
+    pub siorg_natureza_juridica_service: Arc<SiorgNaturezaJuridicaService>,
+    pub siorg_poder_service: Arc<SiorgPoderService>,
+    pub siorg_esfera_service: Arc<SiorgEsferaService>,
     pub requisition_service: Arc<RequisitionService>,
     pub supplier_service: Arc<SupplierService>,
     pub vehicle_service: Arc<VehicleService>,

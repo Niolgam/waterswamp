@@ -21,7 +21,8 @@ use application::services::{
     mfa_service::MfaService,
     organizational_service::{
         OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
-        OrganizationalUnitTypeService, SystemSettingsService,
+        OrganizationalUnitTypeService, SiorgEsferaService, SiorgNaturezaJuridicaService,
+        SiorgPoderService, SystemSettingsService,
     },
     requisition_service::RequisitionService,
     stock_movement_service::StockMovementService,
@@ -42,7 +43,8 @@ use domain::ports::{
     InvoiceItemRepositoryPort, InvoiceRepositoryPort, MfaRepositoryPort,
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
-    RequisitionItemRepositoryPort, RequisitionRepositoryPort, SiorgHistoryRepositoryPort,
+    RequisitionItemRepositoryPort, RequisitionRepositoryPort, SiorgEsferaRepositoryPort,
+    SiorgHistoryRepositoryPort, SiorgNaturezaJuridicaRepositoryPort, SiorgPoderRepositoryPort,
     SiorgSyncQueueRepositoryPort, SiteRepositoryPort, SpaceRepositoryPort, SpaceTypeRepositoryPort,
     StateRepositoryPort, SupplierRepositoryPort, SystemSettingsRepositoryPort,
     UnitConversionRepositoryPort, UnitOfMeasureRepositoryPort, UserRepositoryPort,
@@ -73,7 +75,8 @@ use persistence::repositories::{
     mfa_repository::MfaRepository,
     organizational_repository::{
         OrganizationRepository, OrganizationalUnitCategoryRepository, OrganizationalUnitRepository,
-        OrganizationalUnitTypeRepository, SystemSettingsRepository,
+        OrganizationalUnitTypeRepository, SiorgEsferaRepository, SiorgNaturezaJuridicaRepository,
+        SiorgPoderRepository, SystemSettingsRepository,
     },
     requisition_repository::{RequisitionItemRepository, RequisitionRepository},
     supplier_repository::SupplierRepository,
@@ -251,6 +254,14 @@ pub fn build_application_state(
         ),
     );
 
+    // SIORG basic domain table repositories
+    let natureza_juridica_repo_port: Arc<dyn SiorgNaturezaJuridicaRepositoryPort> =
+        Arc::new(SiorgNaturezaJuridicaRepository::new(pool_auth_arc.clone()));
+    let poder_repo_port: Arc<dyn SiorgPoderRepositoryPort> =
+        Arc::new(SiorgPoderRepository::new(pool_auth_arc.clone()));
+    let esfera_repo_port: Arc<dyn SiorgEsferaRepositoryPort> =
+        Arc::new(SiorgEsferaRepository::new(pool_auth_arc.clone()));
+
     // Organizational services
     let system_settings_service = Arc::new(SystemSettingsService::new(
         system_settings_repo_port.clone(),
@@ -280,6 +291,12 @@ pub fn build_application_state(
             .expect("Failed to create SIORG client"),
     );
 
+    // SIORG basic domain services
+    let siorg_natureza_juridica_service =
+        Arc::new(SiorgNaturezaJuridicaService::new(natureza_juridica_repo_port.clone()));
+    let siorg_poder_service = Arc::new(SiorgPoderService::new(poder_repo_port.clone()));
+    let siorg_esfera_service = Arc::new(SiorgEsferaService::new(esfera_repo_port.clone()));
+
     let siorg_sync_service = Arc::new(application::external::SiorgSyncService::new(
         siorg_client,
         organization_repo_port,
@@ -287,6 +304,9 @@ pub fn build_application_state(
         unit_category_repo_port,
         unit_type_repo_port,
         system_settings_repo_port.clone(),
+        natureza_juridica_repo_port,
+        poder_repo_port,
+        esfera_repo_port,
         pool_auth.clone(),
     ));
 
@@ -432,6 +452,9 @@ pub fn build_application_state(
         siorg_sync_service,
         siorg_sync_queue_repository: siorg_sync_queue_repo_port,
         siorg_history_repository: siorg_history_repo_port,
+        siorg_natureza_juridica_service,
+        siorg_poder_service,
+        siorg_esfera_service,
         requisition_service,
         supplier_service,
         vehicle_service,

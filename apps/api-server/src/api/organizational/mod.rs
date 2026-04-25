@@ -118,12 +118,54 @@ pub fn router() -> Router<AppState> {
         .route("/detailed", get(stats_handlers::get_detailed_stats))
         .route("/health", get(stats_handlers::get_health_status));
 
+    // Natureza Jurídica routes
+    let natureza_juridica_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_natureza_juridica).post(handlers::create_natureza_juridica),
+        )
+        .route(
+            "/{id}",
+            get(handlers::get_natureza_juridica)
+                .put(handlers::update_natureza_juridica)
+                .delete(handlers::delete_natureza_juridica),
+        );
+
+    // Poder routes
+    let poder_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_poder).post(handlers::create_poder),
+        )
+        .route(
+            "/{id}",
+            get(handlers::get_poder)
+                .put(handlers::update_poder)
+                .delete(handlers::delete_poder),
+        );
+
+    // Esfera routes
+    let esfera_router = Router::new()
+        .route(
+            "/",
+            get(handlers::list_esfera).post(handlers::create_esfera),
+        )
+        .route(
+            "/{id}",
+            get(handlers::get_esfera)
+                .put(handlers::update_esfera)
+                .delete(handlers::delete_esfera),
+        );
+
     Router::new()
         .nest("/settings", settings_router)
         .nest("/organizations", organizations_router)
         .nest("/unit-categories", unit_categories_router)
         .nest("/unit-types", unit_types_router)
         .nest("/units", units_router)
+        .nest("/natureza-juridica", natureza_juridica_router)
+        .nest("/poder", poder_router)
+        .nest("/esfera", esfera_router)
         .nest("/sync", sync_router)
         .nest("/sync/queue", queue_router)
         .nest("/sync/conflicts", conflicts_router)

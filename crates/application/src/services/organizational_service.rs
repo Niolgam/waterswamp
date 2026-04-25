@@ -3,6 +3,7 @@ use domain::models::organizational::*;
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
+    SiorgEsferaRepositoryPort, SiorgNaturezaJuridicaRepositoryPort, SiorgPoderRepositoryPort,
     SystemSettingsRepositoryPort,
 };
 use std::sync::Arc;
@@ -607,5 +608,173 @@ impl OrganizationalUnitService {
         let _ = self.get(id).await?;
 
         Ok(self.unit_repository.activate(id).await?)
+    }
+}
+
+// ============================================================================
+// SiorgNaturezaJuridicaService
+// ============================================================================
+
+pub struct SiorgNaturezaJuridicaService {
+    repo: Arc<dyn SiorgNaturezaJuridicaRepositoryPort>,
+}
+
+impl SiorgNaturezaJuridicaService {
+    pub fn new(repo: Arc<dyn SiorgNaturezaJuridicaRepositoryPort>) -> Self {
+        Self { repo }
+    }
+
+    pub async fn get(&self, id: Uuid) -> Result<SiorgNaturezaJuridicaDto, ServiceError> {
+        self.repo
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| ServiceError::NotFound(format!("Natureza jurídica {} não encontrada", id)))
+    }
+
+    pub async fn list(
+        &self,
+        is_active: Option<bool>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<SiorgNaturezaJuridicaDto>, i64), ServiceError> {
+        Ok(self.repo.list(is_active, limit, offset).await?)
+    }
+
+    pub async fn create(
+        &self,
+        payload: CreateSiorgNaturezaJuridicaPayload,
+    ) -> Result<SiorgNaturezaJuridicaDto, ServiceError> {
+        if self.repo.find_by_siorg_code(payload.siorg_code).await?.is_some() {
+            return Err(ServiceError::Conflict(format!(
+                "Código SIORG {} já existe em natureza_juridica",
+                payload.siorg_code
+            )));
+        }
+        Ok(self.repo.create(payload).await?)
+    }
+
+    pub async fn update(
+        &self,
+        id: Uuid,
+        payload: UpdateSiorgNaturezaJuridicaPayload,
+    ) -> Result<SiorgNaturezaJuridicaDto, ServiceError> {
+        let _ = self.get(id).await?;
+        Ok(self.repo.update(id, payload).await?)
+    }
+
+    pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
+        Ok(self.repo.delete(id).await?)
+    }
+}
+
+// ============================================================================
+// SiorgPoderService
+// ============================================================================
+
+pub struct SiorgPoderService {
+    repo: Arc<dyn SiorgPoderRepositoryPort>,
+}
+
+impl SiorgPoderService {
+    pub fn new(repo: Arc<dyn SiorgPoderRepositoryPort>) -> Self {
+        Self { repo }
+    }
+
+    pub async fn get(&self, id: Uuid) -> Result<SiorgPoderDto, ServiceError> {
+        self.repo
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| ServiceError::NotFound(format!("Poder {} não encontrado", id)))
+    }
+
+    pub async fn list(
+        &self,
+        is_active: Option<bool>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<SiorgPoderDto>, i64), ServiceError> {
+        Ok(self.repo.list(is_active, limit, offset).await?)
+    }
+
+    pub async fn create(
+        &self,
+        payload: CreateSiorgPoderPayload,
+    ) -> Result<SiorgPoderDto, ServiceError> {
+        if self.repo.find_by_siorg_code(payload.siorg_code).await?.is_some() {
+            return Err(ServiceError::Conflict(format!(
+                "Código SIORG {} já existe em poder",
+                payload.siorg_code
+            )));
+        }
+        Ok(self.repo.create(payload).await?)
+    }
+
+    pub async fn update(
+        &self,
+        id: Uuid,
+        payload: UpdateSiorgPoderPayload,
+    ) -> Result<SiorgPoderDto, ServiceError> {
+        let _ = self.get(id).await?;
+        Ok(self.repo.update(id, payload).await?)
+    }
+
+    pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
+        Ok(self.repo.delete(id).await?)
+    }
+}
+
+// ============================================================================
+// SiorgEsferaService
+// ============================================================================
+
+pub struct SiorgEsferaService {
+    repo: Arc<dyn SiorgEsferaRepositoryPort>,
+}
+
+impl SiorgEsferaService {
+    pub fn new(repo: Arc<dyn SiorgEsferaRepositoryPort>) -> Self {
+        Self { repo }
+    }
+
+    pub async fn get(&self, id: Uuid) -> Result<SiorgEsferaDto, ServiceError> {
+        self.repo
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| ServiceError::NotFound(format!("Esfera {} não encontrada", id)))
+    }
+
+    pub async fn list(
+        &self,
+        is_active: Option<bool>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<SiorgEsferaDto>, i64), ServiceError> {
+        Ok(self.repo.list(is_active, limit, offset).await?)
+    }
+
+    pub async fn create(
+        &self,
+        payload: CreateSiorgEsferaPayload,
+    ) -> Result<SiorgEsferaDto, ServiceError> {
+        if self.repo.find_by_siorg_code(payload.siorg_code).await?.is_some() {
+            return Err(ServiceError::Conflict(format!(
+                "Código SIORG {} já existe em esfera",
+                payload.siorg_code
+            )));
+        }
+        Ok(self.repo.create(payload).await?)
+    }
+
+    pub async fn update(
+        &self,
+        id: Uuid,
+        payload: UpdateSiorgEsferaPayload,
+    ) -> Result<SiorgEsferaDto, ServiceError> {
+        let _ = self.get(id).await?;
+        Ok(self.repo.update(id, payload).await?)
+    }
+
+    pub async fn delete(&self, id: Uuid) -> Result<(), ServiceError> {
+        Ok(self.repo.delete(id).await?)
     }
 }

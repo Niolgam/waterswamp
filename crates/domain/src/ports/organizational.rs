@@ -240,6 +240,43 @@ pub trait OrganizationalUnitRepositoryPort: Send + Sync {
 }
 
 // ============================================================================
+// SIORG Basic Domain Table Repository Ports
+// ============================================================================
+
+#[async_trait]
+pub trait SiorgNaturezaJuridicaRepositoryPort: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgNaturezaJuridicaDto>, RepositoryError>;
+    async fn find_by_siorg_code(&self, code: i32) -> Result<Option<SiorgNaturezaJuridicaDto>, RepositoryError>;
+    async fn list(&self, is_active: Option<bool>, limit: i64, offset: i64) -> Result<(Vec<SiorgNaturezaJuridicaDto>, i64), RepositoryError>;
+    async fn create(&self, payload: CreateSiorgNaturezaJuridicaPayload) -> Result<SiorgNaturezaJuridicaDto, RepositoryError>;
+    async fn update(&self, id: Uuid, payload: UpdateSiorgNaturezaJuridicaPayload) -> Result<SiorgNaturezaJuridicaDto, RepositoryError>;
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
+    async fn upsert_by_siorg_code(&self, payload: CreateSiorgNaturezaJuridicaPayload) -> Result<SiorgNaturezaJuridicaDto, RepositoryError>;
+}
+
+#[async_trait]
+pub trait SiorgPoderRepositoryPort: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgPoderDto>, RepositoryError>;
+    async fn find_by_siorg_code(&self, code: i32) -> Result<Option<SiorgPoderDto>, RepositoryError>;
+    async fn list(&self, is_active: Option<bool>, limit: i64, offset: i64) -> Result<(Vec<SiorgPoderDto>, i64), RepositoryError>;
+    async fn create(&self, payload: CreateSiorgPoderPayload) -> Result<SiorgPoderDto, RepositoryError>;
+    async fn update(&self, id: Uuid, payload: UpdateSiorgPoderPayload) -> Result<SiorgPoderDto, RepositoryError>;
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
+    async fn upsert_by_siorg_code(&self, payload: CreateSiorgPoderPayload) -> Result<SiorgPoderDto, RepositoryError>;
+}
+
+#[async_trait]
+pub trait SiorgEsferaRepositoryPort: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgEsferaDto>, RepositoryError>;
+    async fn find_by_siorg_code(&self, code: i32) -> Result<Option<SiorgEsferaDto>, RepositoryError>;
+    async fn list(&self, is_active: Option<bool>, limit: i64, offset: i64) -> Result<(Vec<SiorgEsferaDto>, i64), RepositoryError>;
+    async fn create(&self, payload: CreateSiorgEsferaPayload) -> Result<SiorgEsferaDto, RepositoryError>;
+    async fn update(&self, id: Uuid, payload: UpdateSiorgEsferaPayload) -> Result<SiorgEsferaDto, RepositoryError>;
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError>;
+    async fn upsert_by_siorg_code(&self, payload: CreateSiorgEsferaPayload) -> Result<SiorgEsferaDto, RepositoryError>;
+}
+
+// ============================================================================
 // SIORG Sync Queue Repository Port
 // ============================================================================
 
