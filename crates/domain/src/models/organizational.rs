@@ -378,6 +378,82 @@ fn default_true() -> bool {
 }
 
 // ============================================================================
+// SIORG Basic Domain Tables
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct SiorgNaturezaJuridicaDto {
+    pub id: Uuid,
+    pub siorg_code: i32,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateSiorgNaturezaJuridicaPayload {
+    pub siorg_code: i32,
+    pub name: String,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateSiorgNaturezaJuridicaPayload {
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct SiorgPoderDto {
+    pub id: Uuid,
+    pub siorg_code: i32,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateSiorgPoderPayload {
+    pub siorg_code: i32,
+    pub name: String,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateSiorgPoderPayload {
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct SiorgEsferaDto {
+    pub id: Uuid,
+    pub siorg_code: i32,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateSiorgEsferaPayload {
+    pub siorg_code: i32,
+    pub name: String,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateSiorgEsferaPayload {
+    pub name: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+// ============================================================================
 // SIORG Sync Queue
 // ============================================================================
 

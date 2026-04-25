@@ -213,6 +213,110 @@ pub struct SiorgServico {
     pub mensagem: Option<String>,
 }
 
+// ============================================================================
+// Tabelas Básicas / Domínio
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgTipoUnidade {
+    #[serde(deserialize_with = "deserialize_string_or_int")]
+    pub codigo_tipo_unidade: String,
+    pub descricao_tipo_unidade: String,
+    pub ativo: Option<String>,
+}
+
+impl SiorgTipoUnidade {
+    pub fn siorg_code(&self) -> Option<i32> {
+        self.codigo_tipo_unidade.rsplit('/').next().and_then(|s| s.parse().ok())
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.ativo.as_deref().map(|a| a.eq_ignore_ascii_case("SIM")).unwrap_or(true)
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgCategoriaUnidade {
+    #[serde(deserialize_with = "deserialize_string_or_int")]
+    pub codigo_categoria_unidade: String,
+    pub descricao_categoria_unidade: String,
+    pub ativo: Option<String>,
+}
+
+impl SiorgCategoriaUnidade {
+    pub fn siorg_code(&self) -> Option<i32> {
+        self.codigo_categoria_unidade.rsplit('/').next().and_then(|s| s.parse().ok())
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.ativo.as_deref().map(|a| a.eq_ignore_ascii_case("SIM")).unwrap_or(true)
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgNaturezaJuridica {
+    pub codigo_natureza_juridica: i32,
+    pub descricao_natureza_juridica: String,
+    pub ativo: Option<String>,
+}
+
+impl SiorgNaturezaJuridica {
+    pub fn is_active(&self) -> bool {
+        self.ativo.as_deref().map(|a| a.eq_ignore_ascii_case("SIM")).unwrap_or(true)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SiorgNaturezaJuridicaResponse {
+    natureza_juridica: Vec<SiorgNaturezaJuridica>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgPoder {
+    pub codigo_poder: i32,
+    pub descricao_poder: String,
+    pub ativo: Option<String>,
+}
+
+impl SiorgPoder {
+    pub fn is_active(&self) -> bool {
+        self.ativo.as_deref().map(|a| a.eq_ignore_ascii_case("SIM")).unwrap_or(true)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SiorgPoderResponse {
+    poder: Vec<SiorgPoder>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiorgEsfera {
+    pub codigo_esfera: i32,
+    pub descricao_esfera: String,
+    pub ativo: Option<String>,
+}
+
+impl SiorgEsfera {
+    pub fn is_active(&self) -> bool {
+        self.ativo.as_deref().map(|a| a.eq_ignore_ascii_case("SIM")).unwrap_or(true)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SiorgEsferaResponse {
+    esfera: Vec<SiorgEsfera>,
+}
+
 /// Campos base de uma unidade organizacional (presentes na versão resumida e completa).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -760,10 +864,14 @@ impl SiorgClient {
         let id = id_or_uri.rsplit('/').next().unwrap_or(id_or_uri);
         let url = format!("{}/categoria-unidade/{}", self.base_url, id);
         let resp: serde_json::Value = self.client.get(&url).send().await?.json().await?;
-        Ok(resp["nome"]
-            .as_str()
-            .unwrap_or("Categoria Desconhecida")
-            .to_string())
+        // A API SIORG usa "descricaoCategoriaUnidade" dentro de "categoriaUnidade"
+        let name = resp
+            .get("categoriaUnidade")
+            .and_then(|o| o.get("descricaoCategoriaUnidade"))
+            .and_then(|v| v.as_str())
+            .or_else(|| resp.get("descricaoCategoriaUnidade").and_then(|v| v.as_str()))
+            .or_else(|| resp.get("nome").and_then(|v| v.as_str()));
+        Ok(name.unwrap_or("Categoria Desconhecida").to_string())
     }
 
     // Busca o nome legível de um tipo de unidade
@@ -771,10 +879,139 @@ impl SiorgClient {
         let id = id_or_uri.rsplit('/').next().unwrap_or(id_or_uri);
         let url = format!("{}/tipo-unidade/{}", self.base_url, id);
         let resp: serde_json::Value = self.client.get(&url).send().await?.json().await?;
-        Ok(resp["nome"]
-            .as_str()
-            .unwrap_or("Tipo Desconhecido")
-            .to_string())
+        // A API SIORG usa "descricaoTipoUnidade" dentro de "tipoUnidade"
+        let name = resp
+            .get("tipoUnidade")
+            .and_then(|o| o.get("descricaoTipoUnidade"))
+            .and_then(|v| v.as_str())
+            .or_else(|| resp.get("descricaoTipoUnidade").and_then(|v| v.as_str()))
+            .or_else(|| resp.get("nome").and_then(|v| v.as_str()));
+        Ok(name.unwrap_or("Tipo Desconhecido").to_string())
+    }
+
+    // ========================================================================
+    // Tabelas Básicas — carga em bloco
+    // ========================================================================
+
+    /// Retorna todos os tipos de unidade organizacional cadastrados no SIORG.
+    /// Endpoint: `GET /tipo-unidade`
+    pub async fn get_all_tipo_unidade(&self) -> Result<Vec<SiorgTipoUnidade>> {
+        let url = format!("{}/tipo-unidade", self.base_url);
+        let body = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch tipo-unidade")?
+            .text()
+            .await
+            .context("Failed to read tipo-unidade body")?;
+
+        let v: serde_json::Value = serde_json::from_str(&body)
+            .context("Failed to parse tipo-unidade JSON")?;
+
+        let arr = match v.get("tipoUnidade") {
+            Some(serde_json::Value::Array(a)) => a.clone(),
+            Some(obj @ serde_json::Value::Object(_)) => vec![obj.clone()],
+            _ => return Ok(vec![]),
+        };
+
+        let mut result = Vec::with_capacity(arr.len());
+        for item in arr {
+            if let Ok(t) = serde_json::from_value::<SiorgTipoUnidade>(item) {
+                result.push(t);
+            }
+        }
+        Ok(result)
+    }
+
+    /// Retorna todas as categorias de unidade organizacional cadastradas no SIORG.
+    /// Endpoint: `GET /categoria-unidade`
+    pub async fn get_all_categoria_unidade(&self) -> Result<Vec<SiorgCategoriaUnidade>> {
+        let url = format!("{}/categoria-unidade", self.base_url);
+        let body = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch categoria-unidade")?
+            .text()
+            .await
+            .context("Failed to read categoria-unidade body")?;
+
+        let v: serde_json::Value = serde_json::from_str(&body)
+            .context("Failed to parse categoria-unidade JSON")?;
+
+        let arr = match v.get("categoriaUnidade") {
+            Some(serde_json::Value::Array(a)) => a.clone(),
+            Some(obj @ serde_json::Value::Object(_)) => vec![obj.clone()],
+            _ => return Ok(vec![]),
+        };
+
+        let mut result = Vec::with_capacity(arr.len());
+        for item in arr {
+            if let Ok(c) = serde_json::from_value::<SiorgCategoriaUnidade>(item) {
+                result.push(c);
+            }
+        }
+        Ok(result)
+    }
+
+    /// Retorna todas as naturezas jurídicas cadastradas no SIORG.
+    /// Endpoint: `GET /natureza-juridica`
+    pub async fn get_all_natureza_juridica(&self) -> Result<Vec<SiorgNaturezaJuridica>> {
+        let url = format!("{}/natureza-juridica", self.base_url);
+        let body = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch natureza-juridica")?
+            .text()
+            .await
+            .context("Failed to read natureza-juridica body")?;
+
+        let parsed: SiorgNaturezaJuridicaResponse =
+            serde_json::from_str(&body).context("Failed to parse natureza-juridica JSON")?;
+        Ok(parsed.natureza_juridica)
+    }
+
+    /// Retorna todos os poderes cadastrados no SIORG.
+    /// Endpoint: `GET /poder`
+    pub async fn get_all_poder(&self) -> Result<Vec<SiorgPoder>> {
+        let url = format!("{}/poder", self.base_url);
+        let body = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch poder")?
+            .text()
+            .await
+            .context("Failed to read poder body")?;
+
+        let parsed: SiorgPoderResponse =
+            serde_json::from_str(&body).context("Failed to parse poder JSON")?;
+        Ok(parsed.poder)
+    }
+
+    /// Retorna todas as esferas cadastradas no SIORG.
+    /// Endpoint: `GET /esfera`
+    pub async fn get_all_esfera(&self) -> Result<Vec<SiorgEsfera>> {
+        let url = format!("{}/esfera", self.base_url);
+        let body = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to fetch esfera")?
+            .text()
+            .await
+            .context("Failed to read esfera body")?;
+
+        let parsed: SiorgEsferaResponse =
+            serde_json::from_str(&body).context("Failed to parse esfera JSON")?;
+        Ok(parsed.esfera)
     }
 }
 

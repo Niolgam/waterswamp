@@ -3,7 +3,8 @@ use crate::extractors::current_user::CurrentUser;
 use crate::infra::state::AppState;
 use application::services::organizational_service::{
     OrganizationService, OrganizationalUnitCategoryService, OrganizationalUnitService,
-    OrganizationalUnitTypeService, SystemSettingsService,
+    OrganizationalUnitTypeService, SiorgEsferaService, SiorgNaturezaJuridicaService,
+    SiorgPoderService, SystemSettingsService,
 };
 use axum::{
     extract::{Path, Query, State},
@@ -1181,4 +1182,242 @@ pub async fn check_siorg_health(
             "SIORG API is unavailable".to_string(),
         ))
     }
+}
+
+// ============================
+// Query Params for Basic Tables
+// ============================
+
+#[derive(Debug, Deserialize)]
+pub struct SiorgBasicTableListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    pub is_active: Option<bool>,
+}
+
+// ============================
+// Natureza Jurídica Handlers
+// ============================
+
+pub async fn list_natureza_juridica(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Query(params): Query<SiorgBasicTableListQuery>,
+) -> Result<Json<SiorgNaturezaJuridicaListResponse>, (StatusCode, String)> {
+    let service: Arc<SiorgNaturezaJuridicaService> = state.siorg_natureza_juridica_service.clone();
+    let (data, total) = service
+        .list(params.is_active, params.limit, params.offset)
+        .await
+        .map_err(|e| (e.status_code(), e.to_string()))?;
+    Ok(Json(SiorgNaturezaJuridicaListResponse {
+        data,
+        total,
+        limit: params.limit,
+        offset: params.offset,
+    }))
+}
+
+pub async fn get_natureza_juridica(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<SiorgNaturezaJuridicaDto>, (StatusCode, String)> {
+    let service: Arc<SiorgNaturezaJuridicaService> = state.siorg_natureza_juridica_service.clone();
+    service
+        .get(id)
+        .await
+        .map(Json)
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn create_natureza_juridica(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateSiorgNaturezaJuridicaPayload>,
+) -> Result<(StatusCode, Json<SiorgNaturezaJuridicaDto>), (StatusCode, String)> {
+    let service: Arc<SiorgNaturezaJuridicaService> = state.siorg_natureza_juridica_service.clone();
+    service
+        .create(payload)
+        .await
+        .map(|dto| (StatusCode::CREATED, Json(dto)))
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn update_natureza_juridica(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateSiorgNaturezaJuridicaPayload>,
+) -> Result<Json<SiorgNaturezaJuridicaDto>, (StatusCode, String)> {
+    let service: Arc<SiorgNaturezaJuridicaService> = state.siorg_natureza_juridica_service.clone();
+    service
+        .update(id, payload)
+        .await
+        .map(Json)
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn delete_natureza_juridica(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let service: Arc<SiorgNaturezaJuridicaService> = state.siorg_natureza_juridica_service.clone();
+    service
+        .delete(id)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+// ============================
+// Poder Handlers
+// ============================
+
+pub async fn list_poder(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Query(params): Query<SiorgBasicTableListQuery>,
+) -> Result<Json<SiorgPoderListResponse>, (StatusCode, String)> {
+    let service: Arc<SiorgPoderService> = state.siorg_poder_service.clone();
+    let (data, total) = service
+        .list(params.is_active, params.limit, params.offset)
+        .await
+        .map_err(|e| (e.status_code(), e.to_string()))?;
+    Ok(Json(SiorgPoderListResponse {
+        data,
+        total,
+        limit: params.limit,
+        offset: params.offset,
+    }))
+}
+
+pub async fn get_poder(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<SiorgPoderDto>, (StatusCode, String)> {
+    let service: Arc<SiorgPoderService> = state.siorg_poder_service.clone();
+    service
+        .get(id)
+        .await
+        .map(Json)
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn create_poder(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateSiorgPoderPayload>,
+) -> Result<(StatusCode, Json<SiorgPoderDto>), (StatusCode, String)> {
+    let service: Arc<SiorgPoderService> = state.siorg_poder_service.clone();
+    service
+        .create(payload)
+        .await
+        .map(|dto| (StatusCode::CREATED, Json(dto)))
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn update_poder(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateSiorgPoderPayload>,
+) -> Result<Json<SiorgPoderDto>, (StatusCode, String)> {
+    let service: Arc<SiorgPoderService> = state.siorg_poder_service.clone();
+    service
+        .update(id, payload)
+        .await
+        .map(Json)
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn delete_poder(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let service: Arc<SiorgPoderService> = state.siorg_poder_service.clone();
+    service
+        .delete(id)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+// ============================
+// Esfera Handlers
+// ============================
+
+pub async fn list_esfera(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Query(params): Query<SiorgBasicTableListQuery>,
+) -> Result<Json<SiorgEsferaListResponse>, (StatusCode, String)> {
+    let service: Arc<SiorgEsferaService> = state.siorg_esfera_service.clone();
+    let (data, total) = service
+        .list(params.is_active, params.limit, params.offset)
+        .await
+        .map_err(|e| (e.status_code(), e.to_string()))?;
+    Ok(Json(SiorgEsferaListResponse {
+        data,
+        total,
+        limit: params.limit,
+        offset: params.offset,
+    }))
+}
+
+pub async fn get_esfera(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<SiorgEsferaDto>, (StatusCode, String)> {
+    let service: Arc<SiorgEsferaService> = state.siorg_esfera_service.clone();
+    service
+        .get(id)
+        .await
+        .map(Json)
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn create_esfera(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Json(payload): Json<CreateSiorgEsferaPayload>,
+) -> Result<(StatusCode, Json<SiorgEsferaDto>), (StatusCode, String)> {
+    let service: Arc<SiorgEsferaService> = state.siorg_esfera_service.clone();
+    service
+        .create(payload)
+        .await
+        .map(|dto| (StatusCode::CREATED, Json(dto)))
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn update_esfera(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateSiorgEsferaPayload>,
+) -> Result<Json<SiorgEsferaDto>, (StatusCode, String)> {
+    let service: Arc<SiorgEsferaService> = state.siorg_esfera_service.clone();
+    service
+        .update(id, payload)
+        .await
+        .map(Json)
+        .map_err(|e| (e.status_code(), e.to_string()))
+}
+
+pub async fn delete_esfera(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let service: Arc<SiorgEsferaService> = state.siorg_esfera_service.clone();
+    service
+        .delete(id)
+        .await
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| (e.status_code(), e.to_string()))
 }

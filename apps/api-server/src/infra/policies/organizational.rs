@@ -242,6 +242,15 @@ pub async fn seed(enforcer: &mut Enforcer) -> Result<()> {
         ])
         .await?;
 
+    // Legal Nature
+    add_crud_policies(enforcer, ROLE_ADMIN, &format!("{}/natureza-juridica", base)).await?;
+
+    // Power
+    add_crud_policies(enforcer, ROLE_ADMIN, &format!("{}/poder", base)).await?;
+
+    // Sphere
+    add_crud_policies(enforcer, ROLE_ADMIN, &format!("{}/esfera", base)).await?;
+
     tracing::info!("Políticas de Organizational Management carregadas");
     Ok(())
 }

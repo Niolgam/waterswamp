@@ -2,16 +2,19 @@ use domain::errors::RepositoryError;
 use domain::models::{
     ActivityArea, ContactInfo, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
     CreateOrganizationalUnitPayload, CreateOrganizationalUnitTypePayload,
+    CreateSiorgEsferaPayload, CreateSiorgNaturezaJuridicaPayload, CreateSiorgPoderPayload,
     CreateSystemSettingPayload, OrganizationDto, OrganizationalUnitCategoryDto,
     OrganizationalUnitDto, OrganizationalUnitTreeNode, OrganizationalUnitTypeDto,
-    OrganizationalUnitWithDetailsDto, SiorgUpsertPayload, SystemSettingDto,
-    UpdateOrganizationPayload, UpdateOrganizationalUnitCategoryPayload,
-    UpdateOrganizationalUnitPayload, UpdateOrganizationalUnitTypePayload,
-    UpdateSystemSettingPayload,
+    OrganizationalUnitWithDetailsDto, SiorgEsferaDto, SiorgNaturezaJuridicaDto, SiorgPoderDto,
+    SiorgUpsertPayload, SystemSettingDto, UpdateOrganizationPayload,
+    UpdateOrganizationalUnitCategoryPayload, UpdateOrganizationalUnitPayload,
+    UpdateOrganizationalUnitTypePayload, UpdateSiorgEsferaPayload,
+    UpdateSiorgNaturezaJuridicaPayload, UpdateSiorgPoderPayload, UpdateSystemSettingPayload,
 };
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
+    SiorgEsferaRepositoryPort, SiorgNaturezaJuridicaRepositoryPort, SiorgPoderRepositoryPort,
     SystemSettingsRepositoryPort,
 };
 use sqlx::{PgPool, Row};
@@ -1451,5 +1454,317 @@ impl OrganizationalUnitRepositoryPort for OrganizationalUnitRepository {
         .map_err(|e| RepositoryError::Database(e.to_string()))?;
 
         Ok(result)
+    }
+}
+
+// ============================================================================
+// SiorgNaturezaJuridicaRepository
+// ============================================================================
+
+pub struct SiorgNaturezaJuridicaRepository {
+    pool: Arc<PgPool>,
+}
+
+impl SiorgNaturezaJuridicaRepository {
+    pub fn new(pool: Arc<PgPool>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl SiorgNaturezaJuridicaRepositoryPort for SiorgNaturezaJuridicaRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgNaturezaJuridicaDto>, RepositoryError> {
+        sqlx::query_as::<_, SiorgNaturezaJuridicaDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_natureza_juridica WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn find_by_siorg_code(&self, code: i32) -> Result<Option<SiorgNaturezaJuridicaDto>, RepositoryError> {
+        sqlx::query_as::<_, SiorgNaturezaJuridicaDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_natureza_juridica WHERE siorg_code = $1",
+        )
+        .bind(code)
+        .fetch_optional(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn list(&self, is_active: Option<bool>, limit: i64, offset: i64) -> Result<(Vec<SiorgNaturezaJuridicaDto>, i64), RepositoryError> {
+        let rows = sqlx::query_as::<_, SiorgNaturezaJuridicaDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_natureza_juridica WHERE ($1::BOOLEAN IS NULL OR is_active = $1) ORDER BY siorg_code LIMIT $2 OFFSET $3",
+        )
+        .bind(is_active)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM siorg_natureza_juridica WHERE ($1::BOOLEAN IS NULL OR is_active = $1)",
+        )
+        .bind(is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+
+        Ok((rows, total))
+    }
+
+    async fn create(&self, p: CreateSiorgNaturezaJuridicaPayload) -> Result<SiorgNaturezaJuridicaDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgNaturezaJuridicaDto>(
+            "INSERT INTO siorg_natureza_juridica (siorg_code, name, is_active) VALUES ($1, $2, $3) RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(p.siorg_code)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn update(&self, id: Uuid, p: UpdateSiorgNaturezaJuridicaPayload) -> Result<SiorgNaturezaJuridicaDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgNaturezaJuridicaDto>(
+            "UPDATE siorg_natureza_juridica SET name = COALESCE($2, name), is_active = COALESCE($3, is_active) WHERE id = $1 RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(id)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM siorg_natureza_juridica WHERE id = $1")
+            .bind(id)
+            .execute(&*self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn upsert_by_siorg_code(&self, p: CreateSiorgNaturezaJuridicaPayload) -> Result<SiorgNaturezaJuridicaDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgNaturezaJuridicaDto>(
+            "INSERT INTO siorg_natureza_juridica (siorg_code, name, is_active) VALUES ($1, $2, $3) ON CONFLICT (siorg_code) DO UPDATE SET name = EXCLUDED.name, is_active = EXCLUDED.is_active, updated_at = NOW() RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(p.siorg_code)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+}
+
+// ============================================================================
+// SiorgPoderRepository
+// ============================================================================
+
+pub struct SiorgPoderRepository {
+    pool: Arc<PgPool>,
+}
+
+impl SiorgPoderRepository {
+    pub fn new(pool: Arc<PgPool>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl SiorgPoderRepositoryPort for SiorgPoderRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgPoderDto>, RepositoryError> {
+        sqlx::query_as::<_, SiorgPoderDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_poder WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn find_by_siorg_code(&self, code: i32) -> Result<Option<SiorgPoderDto>, RepositoryError> {
+        sqlx::query_as::<_, SiorgPoderDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_poder WHERE siorg_code = $1",
+        )
+        .bind(code)
+        .fetch_optional(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn list(&self, is_active: Option<bool>, limit: i64, offset: i64) -> Result<(Vec<SiorgPoderDto>, i64), RepositoryError> {
+        let rows = sqlx::query_as::<_, SiorgPoderDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_poder WHERE ($1::BOOLEAN IS NULL OR is_active = $1) ORDER BY siorg_code LIMIT $2 OFFSET $3",
+        )
+        .bind(is_active)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM siorg_poder WHERE ($1::BOOLEAN IS NULL OR is_active = $1)",
+        )
+        .bind(is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+
+        Ok((rows, total))
+    }
+
+    async fn create(&self, p: CreateSiorgPoderPayload) -> Result<SiorgPoderDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgPoderDto>(
+            "INSERT INTO siorg_poder (siorg_code, name, is_active) VALUES ($1, $2, $3) RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(p.siorg_code)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn update(&self, id: Uuid, p: UpdateSiorgPoderPayload) -> Result<SiorgPoderDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgPoderDto>(
+            "UPDATE siorg_poder SET name = COALESCE($2, name), is_active = COALESCE($3, is_active) WHERE id = $1 RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(id)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM siorg_poder WHERE id = $1")
+            .bind(id)
+            .execute(&*self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn upsert_by_siorg_code(&self, p: CreateSiorgPoderPayload) -> Result<SiorgPoderDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgPoderDto>(
+            "INSERT INTO siorg_poder (siorg_code, name, is_active) VALUES ($1, $2, $3) ON CONFLICT (siorg_code) DO UPDATE SET name = EXCLUDED.name, is_active = EXCLUDED.is_active, updated_at = NOW() RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(p.siorg_code)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+}
+
+// ============================================================================
+// SiorgEsferaRepository
+// ============================================================================
+
+pub struct SiorgEsferaRepository {
+    pool: Arc<PgPool>,
+}
+
+impl SiorgEsferaRepository {
+    pub fn new(pool: Arc<PgPool>) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl SiorgEsferaRepositoryPort for SiorgEsferaRepository {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<SiorgEsferaDto>, RepositoryError> {
+        sqlx::query_as::<_, SiorgEsferaDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_esfera WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn find_by_siorg_code(&self, code: i32) -> Result<Option<SiorgEsferaDto>, RepositoryError> {
+        sqlx::query_as::<_, SiorgEsferaDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_esfera WHERE siorg_code = $1",
+        )
+        .bind(code)
+        .fetch_optional(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn list(&self, is_active: Option<bool>, limit: i64, offset: i64) -> Result<(Vec<SiorgEsferaDto>, i64), RepositoryError> {
+        let rows = sqlx::query_as::<_, SiorgEsferaDto>(
+            "SELECT id, siorg_code, name, is_active, created_at, updated_at FROM siorg_esfera WHERE ($1::BOOLEAN IS NULL OR is_active = $1) ORDER BY siorg_code LIMIT $2 OFFSET $3",
+        )
+        .bind(is_active)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM siorg_esfera WHERE ($1::BOOLEAN IS NULL OR is_active = $1)",
+        )
+        .bind(is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))?;
+
+        Ok((rows, total))
+    }
+
+    async fn create(&self, p: CreateSiorgEsferaPayload) -> Result<SiorgEsferaDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgEsferaDto>(
+            "INSERT INTO siorg_esfera (siorg_code, name, is_active) VALUES ($1, $2, $3) RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(p.siorg_code)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn update(&self, id: Uuid, p: UpdateSiorgEsferaPayload) -> Result<SiorgEsferaDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgEsferaDto>(
+            "UPDATE siorg_esfera SET name = COALESCE($2, name), is_active = COALESCE($3, is_active) WHERE id = $1 RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(id)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM siorg_esfera WHERE id = $1")
+            .bind(id)
+            .execute(&*self.pool)
+            .await
+            .map_err(|e| RepositoryError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn upsert_by_siorg_code(&self, p: CreateSiorgEsferaPayload) -> Result<SiorgEsferaDto, RepositoryError> {
+        sqlx::query_as::<_, SiorgEsferaDto>(
+            "INSERT INTO siorg_esfera (siorg_code, name, is_active) VALUES ($1, $2, $3) ON CONFLICT (siorg_code) DO UPDATE SET name = EXCLUDED.name, is_active = EXCLUDED.is_active, updated_at = NOW() RETURNING id, siorg_code, name, is_active, created_at, updated_at",
+        )
+        .bind(p.siorg_code)
+        .bind(p.name)
+        .bind(p.is_active)
+        .fetch_one(&*self.pool)
+        .await
+        .map_err(|e| RepositoryError::Database(e.to_string()))
     }
 }

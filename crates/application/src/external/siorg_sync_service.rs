@@ -1,12 +1,14 @@
 use super::siorg_client::{SiorgClient, SiorgUnidadeCompleta};
 pub use domain::models::{
-    ActivityArea, ContactInfo, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
-    CreateOrganizationalUnitTypePayload, CreateSystemSettingPayload, OrganizationDto,
-    OrganizationalUnitCategoryDto, OrganizationalUnitDto, OrganizationalUnitTypeDto,
+    ActivityArea, ContactInfo, CreateHistoryItemPayload, CreateOrganizationPayload,
+    CreateOrganizationalUnitCategoryPayload, CreateOrganizationalUnitTypePayload,
+    CreateSiorgEsferaPayload, CreateSiorgNaturezaJuridicaPayload, CreateSiorgPoderPayload,
+    CreateSystemSettingPayload, OrganizationDto, OrganizationalUnitCategoryDto,
+    OrganizationalUnitDto, OrganizationalUnitTypeDto, SiorgChangeType, SiorgEntityType,
     SiorgUpsertPayload, SyncSummary, UpdateOrganizationPayload, UpdateSystemSettingPayload,
 };
 use domain::ports::*;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -30,10 +32,15 @@ pub struct SiorgSyncService {
     category_repo: Arc<dyn OrganizationalUnitCategoryRepositoryPort>,
     type_repo: Arc<dyn OrganizationalUnitTypeRepositoryPort>,
     settings_repo: Arc<dyn SystemSettingsRepositoryPort>,
+    natureza_juridica_repo: Arc<dyn SiorgNaturezaJuridicaRepositoryPort>,
+    poder_repo: Arc<dyn SiorgPoderRepositoryPort>,
+    esfera_repo: Arc<dyn SiorgEsferaRepositoryPort>,
+    history_repo: Arc<dyn SiorgHistoryRepositoryPort>,
     pool: sqlx::PgPool,
 }
 
 impl SiorgSyncService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         siorg_client: Arc<SiorgClient>,
         organization_repo: Arc<dyn OrganizationRepositoryPort>,
@@ -41,6 +48,10 @@ impl SiorgSyncService {
         category_repo: Arc<dyn OrganizationalUnitCategoryRepositoryPort>,
         type_repo: Arc<dyn OrganizationalUnitTypeRepositoryPort>,
         settings_repo: Arc<dyn SystemSettingsRepositoryPort>,
+        natureza_juridica_repo: Arc<dyn SiorgNaturezaJuridicaRepositoryPort>,
+        poder_repo: Arc<dyn SiorgPoderRepositoryPort>,
+        esfera_repo: Arc<dyn SiorgEsferaRepositoryPort>,
+        history_repo: Arc<dyn SiorgHistoryRepositoryPort>,
         pool: sqlx::PgPool,
     ) -> Self {
         Self {
@@ -50,8 +61,153 @@ impl SiorgSyncService {
             category_repo,
             type_repo,
             settings_repo,
+            natureza_juridica_repo,
+            poder_repo,
+            esfera_repo,
+            history_repo,
             pool,
         }
+    }
+
+    // ========================================================================
+    // Basic Table Sync (tipo-unidade, categoria-unidade, natureza-juridica, poder, esfera)
+    // ========================================================================
+
+    /// Sincroniza todas as tabelas básicas do SIORG antes de qualquer carga de unidades.
+    ///
+    /// Garante que tipos, categorias, naturezas jurídicas, poderes e esferas estejam
+    /// no banco antes de fazer o upsert de unidades organizacionais, evitando fallbacks
+    /// como "Tipo Desconhecido" e "Categoria Desconhecida".
+    pub async fn sync_basic_tables(&self) -> Result<(), SyncError> {
+        info!("Sincronizando tabelas básicas do SIORG (tipo-unidade, categoria-unidade, natureza-juridica, poder, esfera)...");
+
+        // 1. Tipos de unidade organizacional
+        match self.siorg_client.get_all_tipo_unidade().await {
+            Ok(tipos) => {
+                info!("Importando {} tipos de unidade do SIORG", tipos.len());
+                for t in tipos {
+                    if let Some(code) = t.siorg_code() {
+                        let is_active = t.is_active();
+                        let payload = CreateOrganizationalUnitTypePayload {
+                            code: code.to_string(),
+                            name: t.descricao_tipo_unidade.clone(),
+                            description: Some("Importado automaticamente do SIORG".to_string()),
+                            siorg_code: Some(code),
+                            is_active,
+                        };
+                        // Tenta criar; se já existe (unique violation), ignora
+                        if let Err(e) = self.type_repo.create(payload).await {
+                            // Atualiza se já existe via find_by_siorg_code
+                            if let Ok(Some(existing)) = self.type_repo.find_by_siorg_code(code).await {
+                                use domain::models::UpdateOrganizationalUnitTypePayload;
+                                let _ = self.type_repo.update(existing.id, UpdateOrganizationalUnitTypePayload {
+                                    name: Some(t.descricao_tipo_unidade),
+                                    description: None,
+                                    is_active: Some(is_active),
+                                }).await;
+                            } else {
+                                warn!("Erro ao importar tipo de unidade {}: {}", code, e);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => warn!("Falha ao buscar tipos de unidade do SIORG: {}. Continuando.", e),
+        }
+
+        // 2. Categorias de unidade organizacional
+        match self.siorg_client.get_all_categoria_unidade().await {
+            Ok(cats) => {
+                info!("Importando {} categorias de unidade do SIORG", cats.len());
+                for c in cats {
+                    if let Some(code) = c.siorg_code() {
+                        let is_active = c.is_active();
+                        let payload = CreateOrganizationalUnitCategoryPayload {
+                            name: c.descricao_categoria_unidade.clone(),
+                            description: Some("Importado automaticamente do SIORG".to_string()),
+                            siorg_code: Some(code),
+                            display_order: 0,
+                            is_active,
+                        };
+                        if let Err(_) = self.category_repo.create(payload).await {
+                            if let Ok(Some(existing)) = self.category_repo.find_by_siorg_code(code).await {
+                                use domain::models::UpdateOrganizationalUnitCategoryPayload;
+                                let _ = self.category_repo.update(existing.id, UpdateOrganizationalUnitCategoryPayload {
+                                    name: Some(c.descricao_categoria_unidade),
+                                    description: None,
+                                    display_order: None,
+                                    is_active: Some(is_active),
+                                }).await;
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => warn!("Falha ao buscar categorias de unidade do SIORG: {}. Continuando.", e),
+        }
+
+        // 3. Naturezas jurídicas
+        match self.siorg_client.get_all_natureza_juridica().await {
+            Ok(items) => {
+                info!("Importando {} naturezas jurídicas do SIORG", items.len());
+                for nj in items {
+                    let code = nj.codigo_natureza_juridica;
+                    let is_active = nj.is_active();
+                    let payload = CreateSiorgNaturezaJuridicaPayload {
+                        siorg_code: code,
+                        name: nj.descricao_natureza_juridica,
+                        is_active,
+                    };
+                    if let Err(e) = self.natureza_juridica_repo.upsert_by_siorg_code(payload).await {
+                        warn!("Erro ao upsert natureza_juridica {}: {}", code, e);
+                    }
+                }
+            }
+            Err(e) => warn!("Falha ao buscar naturezas jurídicas do SIORG: {}. Continuando.", e),
+        }
+
+        // 4. Poderes
+        match self.siorg_client.get_all_poder().await {
+            Ok(items) => {
+                info!("Importando {} poderes do SIORG", items.len());
+                for p in items {
+                    let code = p.codigo_poder;
+                    let is_active = p.is_active();
+                    let payload = CreateSiorgPoderPayload {
+                        siorg_code: code,
+                        name: p.descricao_poder,
+                        is_active,
+                    };
+                    if let Err(e) = self.poder_repo.upsert_by_siorg_code(payload).await {
+                        warn!("Erro ao upsert poder {}: {}", code, e);
+                    }
+                }
+            }
+            Err(e) => warn!("Falha ao buscar poderes do SIORG: {}. Continuando.", e),
+        }
+
+        // 5. Esferas
+        match self.siorg_client.get_all_esfera().await {
+            Ok(items) => {
+                info!("Importando {} esferas do SIORG", items.len());
+                for es in items {
+                    let code = es.codigo_esfera;
+                    let is_active = es.is_active();
+                    let payload = CreateSiorgEsferaPayload {
+                        siorg_code: code,
+                        name: es.descricao_esfera,
+                        is_active,
+                    };
+                    if let Err(e) = self.esfera_repo.upsert_by_siorg_code(payload).await {
+                        warn!("Erro ao upsert esfera {}: {}", code, e);
+                    }
+                }
+            }
+            Err(e) => warn!("Falha ao buscar esferas do SIORG: {}. Continuando.", e),
+        }
+
+        info!("Tabelas básicas do SIORG sincronizadas.");
+        Ok(())
     }
 
     async fn prepare_dependencies(
@@ -253,6 +409,11 @@ impl SiorgSyncService {
             org_id, org.siorg_code
         );
 
+        // Garante tabelas básicas presentes antes de fazer o bulk sync
+        if let Err(e) = self.sync_basic_tables().await {
+            warn!("Falha ao sincronizar tabelas básicas, continuando: {}", e);
+        }
+
         let mut summary = SyncSummary::default();
         self.sync_organization_units_versioned(org_id, org.siorg_code, &mut summary)
             .await?;
@@ -312,6 +473,11 @@ impl SiorgSyncService {
     /// - Se não há versão armazenada: sync completo via `get_estrutura_completa` (primeira vez).
     pub async fn sync_all_from_db(&self) -> Result<SyncSummary, SyncError> {
         info!("Iniciando sincronização global: buscando organizações ativas com siorg_code");
+
+        // Passo 0: garante que todas as tabelas básicas estão presentes no BD
+        if let Err(e) = self.sync_basic_tables().await {
+            warn!("Falha ao sincronizar tabelas básicas, continuando: {}", e);
+        }
 
         // 1. Lista as organizações ativas registradas (limite alto para garantir que pegue todas)
         let (orgs, _) = self
@@ -534,11 +700,14 @@ impl SiorgSyncService {
                 .await
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
 
+        // Snapshot of pre-existing codes to determine Creation vs Update in history
+        let pre_existing_codes: HashSet<i32> = id_lookup.keys().cloned().collect();
+
         let mut sorted_units = units;
         sorted_units.sort_by_key(|u| u.base.codigo_unidade.len());
 
         // ====================================================================
-        // 2. TRANSAÇÃO PRINCIPAL
+        // 2. MAIN TRANSACTION
         // ====================================================================
         let mut tx = self
             .pool
@@ -547,11 +716,13 @@ impl SiorgSyncService {
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
         let mut summary = SyncSummary::default();
 
+        // (siorg_code, local_id, is_deletion) — collected to write history after commit
+        let mut history_entries: Vec<(i32, Uuid, bool)> = Vec::new();
+
         for siorg_unit in sorted_units {
             summary.total_processed += 1;
             let siorg_code = siorg_unit.siorg_code().unwrap();
 
-            // Busca os IDs reais nos caches que preparamos acima (Tempo: O(1))
             let tipo_ref = siorg_unit
                 .base
                 .codigo_tipo_unidade
@@ -565,6 +736,7 @@ impl SiorgSyncService {
             let unit_type_id = *types_cache.get(tipo_ref).unwrap();
             let category_id = *cats_cache.get(cat_ref).unwrap();
             let contact_info = self.map_contact(&siorg_unit);
+            let is_deletion = siorg_unit.base.is_exclusao();
 
             let payload = SiorgUpsertPayload {
                 organization_id: org_id,
@@ -574,7 +746,7 @@ impl SiorgSyncService {
                 category_id,
                 unit_type_id,
                 name: siorg_unit.base.nome.clone(),
-                formal_name: Some(siorg_unit.base.nome.clone()), // SIORG costuma usar o mesmo
+                formal_name: Some(siorg_unit.base.nome.clone()), // SIORG uses same name for formal
                 acronym: siorg_unit.base.sigla.clone(),
                 siorg_code,
                 siorg_parent_code: siorg_unit.parent_siorg_code(),
@@ -582,19 +754,20 @@ impl SiorgSyncService {
                     "https://servicos.siorg.paineis.gestao.gov.br/api/v1/unidade/{}",
                     siorg_code
                 )),
-                siorg_last_version: None, // Pode vir da resposta da API de versão
+                siorg_last_version: None,
                 contact_info,
                 activity_area: match siorg_unit.area_atuacao.as_deref() {
                     Some("FIM") => ActivityArea::Core,
                     _ => ActivityArea::Support,
                 },
-                is_active: !siorg_unit.base.is_exclusao(),
+                is_active: !is_deletion,
             };
 
             match self.unit_repo.upsert_in_transaction(&mut tx, payload).await {
                 Ok(unit) => {
+                    history_entries.push((siorg_code, unit.id, is_deletion));
                     id_lookup.insert(siorg_code, unit.id);
-                    if siorg_unit.base.is_exclusao() {
+                    if is_deletion {
                         summary.deleted += 1;
                     } else {
                         summary.updated += 1;
@@ -610,6 +783,39 @@ impl SiorgSyncService {
         tx.commit()
             .await
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+
+        // ====================================================================
+        // 3. HISTORY RECORDING (after commit — non-fatal)
+        // ====================================================================
+        for (siorg_code, local_id, is_deletion) in history_entries {
+            let change_type = if is_deletion {
+                SiorgChangeType::Extinction
+            } else if pre_existing_codes.contains(&siorg_code) {
+                SiorgChangeType::Update
+            } else {
+                SiorgChangeType::Creation
+            };
+
+            let history_payload = CreateHistoryItemPayload {
+                entity_type: SiorgEntityType::Unit,
+                siorg_code,
+                local_id: Some(local_id),
+                change_type,
+                previous_data: None,
+                new_data: None,
+                affected_fields: vec![],
+                siorg_version: None,
+                source: "SYNC".to_string(),
+                sync_queue_id: None,
+                requires_review: false,
+                created_by: None,
+            };
+
+            if let Err(e) = self.history_repo.create(history_payload).await {
+                warn!("Failed to record history for unit {}: {}", siorg_code, e);
+            }
+        }
+
         Ok(summary)
     }
 

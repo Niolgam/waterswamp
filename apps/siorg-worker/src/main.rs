@@ -4,12 +4,14 @@ use application::workers::siorg_sync_worker::{SiorgSyncWorkerCore, WorkerConfig}
 use domain::ports::{
     OrganizationRepositoryPort, OrganizationalUnitCategoryRepositoryPort,
     OrganizationalUnitRepositoryPort, OrganizationalUnitTypeRepositoryPort,
-    SiorgHistoryRepositoryPort, SiorgSyncQueueRepositoryPort, SystemSettingsRepositoryPort,
+    SiorgEsferaRepositoryPort, SiorgHistoryRepositoryPort, SiorgNaturezaJuridicaRepositoryPort,
+    SiorgPoderRepositoryPort, SiorgSyncQueueRepositoryPort, SystemSettingsRepositoryPort,
 };
 use persistence::repositories::{
     organizational_repository::{
         OrganizationRepository, OrganizationalUnitCategoryRepository, OrganizationalUnitRepository,
-        OrganizationalUnitTypeRepository, SystemSettingsRepository,
+        OrganizationalUnitTypeRepository, SiorgEsferaRepository, SiorgNaturezaJuridicaRepository,
+        SiorgPoderRepository, SystemSettingsRepository,
     },
     siorg_sync_repository::{SiorgHistoryRepository, SiorgSyncQueueRepository},
 };
@@ -74,6 +76,13 @@ async fn main() -> Result<()> {
         SiorgClient::new(siorg_base_url, siorg_token).expect("Failed to create SIORG client"),
     );
 
+    let natureza_juridica_repo: Arc<dyn SiorgNaturezaJuridicaRepositoryPort> =
+        Arc::new(SiorgNaturezaJuridicaRepository::new(arc_pool.clone()));
+    let poder_repo: Arc<dyn SiorgPoderRepositoryPort> =
+        Arc::new(SiorgPoderRepository::new(arc_pool.clone()));
+    let esfera_repo: Arc<dyn SiorgEsferaRepositoryPort> =
+        Arc::new(SiorgEsferaRepository::new(arc_pool.clone()));
+
     let sync_service = Arc::new(SiorgSyncService::new(
         siorg_client,
         organization_repo,
@@ -81,6 +90,10 @@ async fn main() -> Result<()> {
         category_repo,
         type_repo,
         settings_repo,
+        natureza_juridica_repo,
+        poder_repo,
+        esfera_repo,
+        history_repo.clone(),
         pool.clone(),
     ));
 
