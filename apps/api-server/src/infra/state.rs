@@ -22,6 +22,11 @@ use application::services::invoice_adjustment_service::InvoiceAdjustmentService;
 use application::services::stock_movement_service::StockMovementService;
 use application::services::stock_transfer_service::StockTransferService;
 use application::services::warehouse_service::WarehouseService;
+use application::services::odometer_service::OdometerService;
+use application::services::asset_management_service::AssetManagementService;
+use application::services::trip_service::TripService;
+use application::services::maintenance_service::MaintenanceService;
+use application::services::fleet_report_service::FleetReportService;
 use application::external::SiorgSyncService;
 use casbin::Enforcer;
 use core_services::jwt::JwtService;
@@ -76,6 +81,11 @@ pub struct AppState {
     pub stock_movement_service: Arc<StockMovementService>,
     pub stock_transfer_service: Arc<StockTransferService>,
     pub warehouse_service: Arc<WarehouseService>,
+    pub odometer_service: Arc<OdometerService>,
+    pub asset_management_service: Arc<AssetManagementService>,
+    pub trip_service: Arc<TripService>,
+    pub maintenance_service: Arc<MaintenanceService>,
+    pub fleet_report_service: Arc<FleetReportService>,
     pub config: Arc<Config>,
     /// AES-256-GCM key for field-level encryption (email, MFA secrets).
     pub field_encryption_key: [u8; 32],

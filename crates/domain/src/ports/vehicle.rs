@@ -206,6 +206,27 @@ pub trait VehicleRepositoryPort: Send + Sync {
         status: Option<VehicleStatus>,
         notes: Option<&str>,
         updated_by: Option<Uuid>,
+        version: Option<i32>,
+    ) -> Result<VehicleDto, RepositoryError>;
+
+    /// Transiciona o `operational_status` do veículo com OCC (DRS 4.2).
+    /// Retorna `OptimisticLockConflict` se `version` não coincidir.
+    async fn change_operational_status(
+        &self,
+        id: Uuid,
+        new_status: OperationalStatus,
+        version: i32,
+        updated_by: Option<Uuid>,
+    ) -> Result<VehicleDto, RepositoryError>;
+
+    /// Transiciona o `allocation_status` do veículo com OCC (RF-USO-01/02/03).
+    /// Retorna `OptimisticLockConflict` se `version` não coincidir.
+    async fn change_allocation_status(
+        &self,
+        id: Uuid,
+        new_status: AllocationStatus,
+        version: i32,
+        updated_by: Option<Uuid>,
     ) -> Result<VehicleDto, RepositoryError>;
 
     async fn soft_delete(&self, id: Uuid, deleted_by: Option<Uuid>) -> Result<bool, RepositoryError>;

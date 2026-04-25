@@ -512,6 +512,7 @@ impl From<RepositoryError> for ServiceError {
             RepositoryError::ForeignKey(msg) => ServiceError::InvalidOperation(format!("Foreign key constraint: {}", msg)),
             RepositoryError::InvalidData(msg) => ServiceError::InvalidOperation(msg),
             RepositoryError::Transaction(msg) => ServiceError::RepositoryError(format!("Transaction error: {}", msg)),
+            RepositoryError::OptimisticLockConflict(msg) => ServiceError::RepositoryError(format!("Optimistic lock conflict: {}", msg)),
         }
     }
 }

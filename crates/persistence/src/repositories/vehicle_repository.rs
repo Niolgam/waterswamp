@@ -810,7 +810,7 @@ impl VehicleRepositoryPort for VehicleRepository {
                 v.fleet_code, v.cost_sharing, v.initial_mileage, v.fuel_tank_capacity,
                 v.acquisition_type, v.acquisition_date, v.purchase_value,
                 v.patrimony_number, v.department_id,
-                v.status, v.notes,
+                v.operational_status, v.allocation_status, v.status, v.notes,
                 v.last_odometer_km, v.last_odometer_date, v.last_fueling_id,
                 v.created_at, v.updated_at
             FROM vehicles v
@@ -858,6 +858,8 @@ impl VehicleRepositoryPort for VehicleRepository {
             purchase_value: r.get("purchase_value"),
             patrimony_number: r.get("patrimony_number"),
             department_id: r.get("department_id"),
+            operational_status: r.get("operational_status"),
+            allocation_status: r.get("allocation_status"),
             status: r.get("status"),
             notes: r.get("notes"),
             last_odometer_km: r.get("last_odometer_km"),
@@ -1026,8 +1028,9 @@ impl VehicleRepositoryPort for VehicleRepository {
         status: Option<VehicleStatus>,
         notes: Option<&str>,
         updated_by: Option<Uuid>,
+        version: Option<i32>,
     ) -> Result<VehicleDto, RepositoryError> {
-        sqlx::query_as::<_, VehicleDto>(
+        let result = sqlx::query_as::<_, VehicleDto>(
             r#"
             UPDATE vehicles
             SET license_plate = COALESCE($2, license_plate),
@@ -1055,8 +1058,11 @@ impl VehicleRepositoryPort for VehicleRepository {
                 status = COALESCE($24, status),
                 notes = CASE WHEN $25::TEXT IS NOT NULL THEN $25 ELSE notes END,
                 updated_by = $26,
-                updated_at = NOW()
-            WHERE id = $1 AND is_deleted = false
+                updated_at = NOW(),
+                version = version + 1
+            WHERE id = $1
+              AND is_deleted = false
+              AND ($27::INT IS NULL OR version = $27)
             RETURNING *
             "#
         )
@@ -1086,9 +1092,81 @@ impl VehicleRepositoryPort for VehicleRepository {
         .bind(status)
         .bind(notes)
         .bind(updated_by)
-        .fetch_one(&self.pool)
+        .bind(version)
+        .fetch_optional(&self.pool)
         .await
-        .map_err(map_db_error)
+        .map_err(map_db_error)?;
+
+        result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle:{}", id)))
+    }
+
+    async fn change_operational_status(
+        &self,
+        id: Uuid,
+        new_status: OperationalStatus,
+        version: i32,
+        updated_by: Option<Uuid>,
+    ) -> Result<VehicleDto, RepositoryError> {
+        let legacy_status: VehicleStatus = match new_status {
+            OperationalStatus::Ativo => VehicleStatus::Active,
+            OperationalStatus::Manutencao => VehicleStatus::InMaintenance,
+            OperationalStatus::Indisponivel => VehicleStatus::Inactive,
+        };
+        let result = sqlx::query_as::<_, VehicleDto>(
+            r#"
+            UPDATE vehicles
+            SET operational_status = $2,
+                status = $3,
+                version = version + 1,
+                updated_by = $4,
+                updated_at = NOW()
+            WHERE id = $1
+              AND version = $5
+              AND is_deleted = false
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(new_status)
+        .bind(legacy_status)
+        .bind(updated_by)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+
+        result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle:{}", id)))
+    }
+
+    async fn change_allocation_status(
+        &self,
+        id: Uuid,
+        new_status: AllocationStatus,
+        version: i32,
+        updated_by: Option<Uuid>,
+    ) -> Result<VehicleDto, RepositoryError> {
+        let result = sqlx::query_as::<_, VehicleDto>(
+            r#"
+            UPDATE vehicles
+            SET allocation_status = $2,
+                version           = version + 1,
+                updated_by        = $3,
+                updated_at        = NOW()
+            WHERE id = $1
+              AND version = $4
+              AND is_deleted = false
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(new_status)
+        .bind(updated_by)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+
+        result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle:{}", id)))
     }
 
     async fn soft_delete(&self, id: Uuid, deleted_by: Option<Uuid>) -> Result<bool, RepositoryError> {
@@ -1142,7 +1220,7 @@ impl VehicleRepositoryPort for VehicleRepository {
                 v.fleet_code, v.cost_sharing, v.initial_mileage, v.fuel_tank_capacity,
                 v.acquisition_type, v.acquisition_date, v.purchase_value,
                 v.patrimony_number, v.department_id,
-                v.status, v.notes,
+                v.operational_status, v.allocation_status, v.status, v.notes,
                 v.last_odometer_km, v.last_odometer_date, v.last_fueling_id,
                 v.created_at, v.updated_at
             FROM vehicles v
@@ -1204,6 +1282,8 @@ impl VehicleRepositoryPort for VehicleRepository {
             purchase_value: r.get("purchase_value"),
             patrimony_number: r.get("patrimony_number"),
             department_id: r.get("department_id"),
+            operational_status: r.get("operational_status"),
+            allocation_status: r.get("allocation_status"),
             status: r.get("status"),
             notes: r.get("notes"),
             last_odometer_km: r.get("last_odometer_km"),
