@@ -93,6 +93,7 @@ async fn main() -> Result<()> {
         natureza_juridica_repo,
         poder_repo,
         esfera_repo,
+        history_repo.clone(),
         pool.clone(),
     ));
 

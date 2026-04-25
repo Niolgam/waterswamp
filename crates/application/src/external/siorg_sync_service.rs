@@ -1,14 +1,14 @@
 use super::siorg_client::{SiorgClient, SiorgUnidadeCompleta};
 pub use domain::models::{
-    ActivityArea, ContactInfo, CreateOrganizationPayload, CreateOrganizationalUnitCategoryPayload,
-    CreateOrganizationalUnitTypePayload, CreateSiorgEsferaPayload,
-    CreateSiorgNaturezaJuridicaPayload, CreateSiorgPoderPayload, CreateSystemSettingPayload,
-    OrganizationDto, OrganizationalUnitCategoryDto, OrganizationalUnitDto,
-    OrganizationalUnitTypeDto, SiorgUpsertPayload, SyncSummary, UpdateOrganizationPayload,
-    UpdateSystemSettingPayload,
+    ActivityArea, ContactInfo, CreateHistoryItemPayload, CreateOrganizationPayload,
+    CreateOrganizationalUnitCategoryPayload, CreateOrganizationalUnitTypePayload,
+    CreateSiorgEsferaPayload, CreateSiorgNaturezaJuridicaPayload, CreateSiorgPoderPayload,
+    CreateSystemSettingPayload, OrganizationDto, OrganizationalUnitCategoryDto,
+    OrganizationalUnitDto, OrganizationalUnitTypeDto, SiorgChangeType, SiorgEntityType,
+    SiorgUpsertPayload, SyncSummary, UpdateOrganizationPayload, UpdateSystemSettingPayload,
 };
 use domain::ports::*;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -35,6 +35,7 @@ pub struct SiorgSyncService {
     natureza_juridica_repo: Arc<dyn SiorgNaturezaJuridicaRepositoryPort>,
     poder_repo: Arc<dyn SiorgPoderRepositoryPort>,
     esfera_repo: Arc<dyn SiorgEsferaRepositoryPort>,
+    history_repo: Arc<dyn SiorgHistoryRepositoryPort>,
     pool: sqlx::PgPool,
 }
 
@@ -50,6 +51,7 @@ impl SiorgSyncService {
         natureza_juridica_repo: Arc<dyn SiorgNaturezaJuridicaRepositoryPort>,
         poder_repo: Arc<dyn SiorgPoderRepositoryPort>,
         esfera_repo: Arc<dyn SiorgEsferaRepositoryPort>,
+        history_repo: Arc<dyn SiorgHistoryRepositoryPort>,
         pool: sqlx::PgPool,
     ) -> Self {
         Self {
@@ -62,6 +64,7 @@ impl SiorgSyncService {
             natureza_juridica_repo,
             poder_repo,
             esfera_repo,
+            history_repo,
             pool,
         }
     }
@@ -697,6 +700,9 @@ impl SiorgSyncService {
                 .await
                 .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
 
+        // Snapshot dos códigos pré-existentes para determinar Creation vs Update no histórico
+        let pre_existing_codes: HashSet<i32> = id_lookup.keys().cloned().collect();
+
         let mut sorted_units = units;
         sorted_units.sort_by_key(|u| u.base.codigo_unidade.len());
 
@@ -709,6 +715,9 @@ impl SiorgSyncService {
             .await
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
         let mut summary = SyncSummary::default();
+
+        // (siorg_code, local_id, is_exclusao) — coletado para gravar histórico após commit
+        let mut history_entries: Vec<(i32, Uuid, bool)> = Vec::new();
 
         for siorg_unit in sorted_units {
             summary.total_processed += 1;
@@ -728,6 +737,7 @@ impl SiorgSyncService {
             let unit_type_id = *types_cache.get(tipo_ref).unwrap();
             let category_id = *cats_cache.get(cat_ref).unwrap();
             let contact_info = self.map_contact(&siorg_unit);
+            let is_exclusao = siorg_unit.base.is_exclusao();
 
             let payload = SiorgUpsertPayload {
                 organization_id: org_id,
@@ -751,13 +761,14 @@ impl SiorgSyncService {
                     Some("FIM") => ActivityArea::Core,
                     _ => ActivityArea::Support,
                 },
-                is_active: !siorg_unit.base.is_exclusao(),
+                is_active: !is_exclusao,
             };
 
             match self.unit_repo.upsert_in_transaction(&mut tx, payload).await {
                 Ok(unit) => {
+                    history_entries.push((siorg_code, unit.id, is_exclusao));
                     id_lookup.insert(siorg_code, unit.id);
-                    if siorg_unit.base.is_exclusao() {
+                    if is_exclusao {
                         summary.deleted += 1;
                     } else {
                         summary.updated += 1;
@@ -773,6 +784,39 @@ impl SiorgSyncService {
         tx.commit()
             .await
             .map_err(|e| SyncError::DatabaseError(e.to_string()))?;
+
+        // ====================================================================
+        // 3. REGISTRO DE HISTÓRICO (após commit — não-fatal)
+        // ====================================================================
+        for (siorg_code, local_id, is_exclusao) in history_entries {
+            let change_type = if is_exclusao {
+                SiorgChangeType::Extinction
+            } else if pre_existing_codes.contains(&siorg_code) {
+                SiorgChangeType::Update
+            } else {
+                SiorgChangeType::Creation
+            };
+
+            let history_payload = CreateHistoryItemPayload {
+                entity_type: SiorgEntityType::Unit,
+                siorg_code,
+                local_id: Some(local_id),
+                change_type,
+                previous_data: None,
+                new_data: None,
+                affected_fields: vec![],
+                siorg_version: None,
+                source: "SYNC".to_string(),
+                sync_queue_id: None,
+                requires_review: false,
+                created_by: None,
+            };
+
+            if let Err(e) = self.history_repo.create(history_payload).await {
+                warn!("Falha ao registrar histórico para unidade {}: {}", siorg_code, e);
+            }
+        }
+
         Ok(summary)
     }
 

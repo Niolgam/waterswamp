@@ -307,6 +307,7 @@ pub fn build_application_state(
         natureza_juridica_repo_port,
         poder_repo_port,
         esfera_repo_port,
+        siorg_history_repo_port.clone(),
         pool_auth.clone(),
     ));
 
