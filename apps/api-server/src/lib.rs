@@ -30,6 +30,7 @@ use application::services::{
     trip_service::TripService,
     maintenance_service::MaintenanceService,
     fleet_report_service::FleetReportService,
+    inventory_service::InventoryService,
     stock_movement_service::StockMovementService,
     stock_transfer_service::StockTransferService,
     supplier_service::SupplierService,
@@ -65,6 +66,7 @@ use domain::ports::{
     VehicleModelRepositoryPort, VehicleRepositoryPort, VehicleStatusHistoryRepositoryPort,
     VehicleTransmissionTypeRepositoryPort, WarehouseRepositoryPort, WarehouseStockRepositoryPort,
 };
+use domain::ports::warehouse::{DisposalRequestRepositoryPort, InventorySessionRepositoryPort};
 use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
@@ -101,6 +103,8 @@ use persistence::repositories::{
         VehicleRepository, VehicleStatusHistoryRepository, VehicleTransmissionTypeRepository,
     },
     warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
+    disposal_request_repository::DisposalRequestRepository,
+    inventory_session_repository::InventorySessionRepository,
     odometer_repository::OdometerReadingRepository,
     trip_repository::VehicleTripRepository,
     maintenance_repository::MaintenanceOrderRepository,
@@ -437,10 +441,21 @@ pub fn build_application_state(
         Arc::new(WarehouseRepository::new(pool_auth.clone()));
     let stock_repo: Arc<dyn WarehouseStockRepositoryPort> =
         Arc::new(WarehouseStockRepository::new(pool_auth.clone()));
+    let disposal_request_repo: Arc<dyn DisposalRequestRepositoryPort> =
+        Arc::new(DisposalRequestRepository::new(pool_auth.clone()));
+    let inventory_session_repo: Arc<dyn InventorySessionRepositoryPort> =
+        Arc::new(InventorySessionRepository::new(pool_auth.clone()));
     let warehouse_service = Arc::new(WarehouseService::new(
         pool_auth.clone(),
-        warehouse_repo,
+        warehouse_repo.clone(),
         stock_repo,
+        stock_movement_service.clone(),
+        disposal_request_repo,
+    ));
+    let inventory_service = Arc::new(InventoryService::new(
+        pool_auth.clone(),
+        inventory_session_repo,
+        warehouse_repo,
         stock_movement_service.clone(),
     ));
 
@@ -573,6 +588,7 @@ pub fn build_application_state(
         stock_movement_service,
         stock_transfer_service,
         warehouse_service,
+        inventory_service,
         odometer_service,
         asset_management_service,
         trip_service,

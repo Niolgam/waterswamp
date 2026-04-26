@@ -7,6 +7,13 @@ use axum::{
     Router,
 };
 
+pub fn disposal_requests_router() -> Router<AppState> {
+    Router::new()
+        .route("/{id}", get(handlers::get_disposal_request))
+        .route("/{id}/confirm-signature", post(handlers::confirm_disposal_signature))
+        .route("/{id}/cancel", post(handlers::cancel_disposal_request))
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(handlers::list_warehouses).post(handlers::create_warehouse))
@@ -16,10 +23,11 @@ pub fn router() -> Router<AppState> {
         .route("/stocks/{stock_id}", get(handlers::get_stock).patch(handlers::update_stock_params))
         .route("/stocks/{stock_id}/block", post(handlers::block_stock))
         .route("/stocks/{stock_id}/unblock", post(handlers::unblock_stock))
-        // Stock movement routes (RF-009, RF-011, RF-016, RF-017)
+        // Stock movement routes (RF-009, RF-011, RF-017)
         .route("/{id}/movements", get(handlers::list_stock_movements))
         .route("/{id}/entries", post(handlers::create_standalone_entry))
         .route("/{id}/returns", post(handlers::create_return_entry))
-        .route("/{id}/disposals", post(handlers::create_disposal_exit))
         .route("/{id}/manual-exits", post(handlers::create_manual_exit))
+        // Disposal request routes (RF-016, RN-005, Ticket 1.1)
+        .route("/{id}/disposal-requests", get(handlers::list_disposal_requests).post(handlers::create_disposal_request))
 }
