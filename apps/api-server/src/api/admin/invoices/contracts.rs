@@ -2,9 +2,10 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 pub use domain::models::invoice::{
-    CancelInvoicePayload, CheckInvoicePayload, CreateInvoiceItemPayload, CreateInvoicePayload,
-    InvoiceItemWithDetailsDto, InvoiceStatus, InvoiceWithDetailsDto, PostInvoicePayload,
-    RejectInvoicePayload, StartCheckingPayload, UpdateInvoicePayload,
+    CancelInvoicePayload, CheckInvoicePayload, CompensatoryReversalPayload,
+    CreateInvoiceItemPayload, CreateInvoicePayload, InvoiceItemWithDetailsDto, InvoiceStatus,
+    InvoiceWithDetailsDto, PostInvoicePayload, RejectInvoicePayload, StartCheckingPayload,
+    UpdateInvoicePayload,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

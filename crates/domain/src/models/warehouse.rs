@@ -409,6 +409,8 @@ pub struct ManualExitResult {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum StockTransferStatus {
     Pending,
+    /// RF-049: Aguardando assinatura digital Gov.br antes de efetivar o TRANSFER_IN.
+    AwaitingGovbrSignature,
     Confirmed,
     Rejected,
     Cancelled,
@@ -458,6 +460,10 @@ pub struct StockTransferDto {
     pub rejected_at: Option<DateTime<Utc>>,
     pub cancelled_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
+    /// RF-049: se verdadeiro, a confirmação do destino requer assinatura Gov.br antes do TRANSFER_IN.
+    pub requires_govbr_signature: bool,
+    pub govbr_signed_at: Option<DateTime<Utc>>,
+    pub govbr_signed_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -490,6 +496,8 @@ pub struct InitiateTransferPayload {
     /// Prazo em horas para o destino confirmar (None = sem prazo)
     pub expires_in_hours: Option<i64>,
     pub notes: Option<String>,
+    /// RF-049: exige assinatura Gov.br antes de efetivar o TRANSFER_IN no destino.
+    pub requires_govbr_signature: Option<bool>,
     pub items: Vec<InitiateTransferItemPayload>,
 }
 
@@ -518,4 +526,197 @@ pub struct RejectTransferPayload {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CancelTransferPayload {
     pub cancellation_reason: String,
+}
+
+/// RF-049 — Confirma a assinatura Gov.br de uma transferência em AWAITING_GOVBR_SIGNATURE.
+/// Após confirmação, o TRANSFER_IN é gerado e o status passa para CONFIRMED.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ConfirmGovbrSignatureTransferPayload {
+    pub notes: Option<String>,
+}
+
+// ============================
+// Disposal Requests (Ticket 1.1 — RN-005)
+// ============================
+
+/// Status do pedido de desfazimento
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
+#[sqlx(type_name = "disposal_request_status_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DisposalRequestStatus {
+    AwaitingSignature,
+    Signed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct DisposalRequestDto {
+    pub id: Uuid,
+    pub warehouse_id: Uuid,
+    pub sei_process_number: String,
+    pub justification: String,
+    pub technical_opinion_url: String,
+    pub status: DisposalRequestStatus,
+    pub notes: Option<String>,
+    pub requested_by: Uuid,
+    pub requested_at: DateTime<Utc>,
+    pub signed_by: Option<Uuid>,
+    pub signed_at: Option<DateTime<Utc>>,
+    pub cancelled_by: Option<Uuid>,
+    pub cancelled_at: Option<DateTime<Utc>>,
+    pub cancellation_reason: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct DisposalRequestItemDto {
+    pub id: Uuid,
+    pub disposal_request_id: Uuid,
+    pub catalog_item_id: Uuid,
+    pub catalog_item_name: Option<String>,
+    pub catalog_item_code: Option<String>,
+    pub unit_raw_id: Uuid,
+    pub unit_symbol: Option<String>,
+    pub unit_conversion_id: Option<Uuid>,
+    pub quantity_raw: Decimal,
+    pub conversion_factor: Decimal,
+    pub batch_number: Option<String>,
+    pub notes: Option<String>,
+    pub movement_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DisposalRequestWithItemsDto {
+    #[serde(flatten)]
+    pub request: DisposalRequestDto,
+    pub warehouse_name: Option<String>,
+    pub items: Vec<DisposalRequestItemDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DisposalRequestItemInput {
+    pub catalog_item_id: Uuid,
+    pub unit_raw_id: Uuid,
+    pub unit_conversion_id: Option<Uuid>,
+    pub quantity_raw: Decimal,
+    pub conversion_factor: Decimal,
+    pub batch_number: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// Cria um pedido de desfazimento em AWAITING_SIGNATURE (estoque não é deduzido ainda).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateDisposalRequestPayload {
+    pub justification: String,
+    pub sei_process_number: String,
+    pub technical_opinion_url: String,
+    pub notes: Option<String>,
+    pub items: Vec<DisposalRequestItemInput>,
+}
+
+/// Confirma que a assinatura Gov.br foi obtida — dispara a dedução de estoque.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ConfirmDisposalSignaturePayload {
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CancelDisposalRequestPayload {
+    pub cancellation_reason: String,
+}
+
+// ============================
+// Inventory Sessions (Ticket 1.3 — RF-019 + Ticket 1.2 — RF-049)
+// ============================
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type)]
+#[sqlx(type_name = "inventory_session_status_enum", rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InventorySessionStatus {
+    Open,
+    Counting,
+    Reconciling,
+    Completed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct InventorySessionDto {
+    pub id: Uuid,
+    pub warehouse_id: Uuid,
+    pub status: InventorySessionStatus,
+    pub tolerance_percentage: Decimal,
+    pub sei_process_number: Option<String>,
+    pub notes: Option<String>,
+    pub created_by: Uuid,
+    pub counting_started_at: Option<DateTime<Utc>>,
+    pub reconciliation_started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub cancelled_at: Option<DateTime<Utc>>,
+    pub govbr_signed_at: Option<DateTime<Utc>>,
+    pub govbr_signed_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, sqlx::FromRow)]
+pub struct InventorySessionItemDto {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub catalog_item_id: Uuid,
+    pub catalog_item_name: Option<String>,
+    pub catalog_item_code: Option<String>,
+    pub unit_raw_id: Uuid,
+    pub unit_symbol: Option<String>,
+    pub system_quantity: Decimal,
+    pub counted_quantity: Option<Decimal>,
+    /// counted_quantity - system_quantity (calculado no SELECT)
+    pub divergence: Option<Decimal>,
+    /// |divergence| / system_quantity (calculado no SELECT; NULL se system_quantity = 0)
+    pub divergence_percentage: Option<Decimal>,
+    pub movement_id: Option<Uuid>,
+    pub notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct InventorySessionWithItemsDto {
+    #[serde(flatten)]
+    pub session: InventorySessionDto,
+    pub warehouse_name: Option<String>,
+    pub items: Vec<InventorySessionItemDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateInventorySessionPayload {
+    /// Percentual de tolerância; se None, usa `inventory.tolerance_percentage` de system_settings.
+    pub tolerance_percentage: Option<Decimal>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SubmitCountPayload {
+    pub catalog_item_id: Uuid,
+    pub counted_quantity: Decimal,
+    pub notes: Option<String>,
+}
+
+/// RN-012: sei_process_number é obrigatório se algum item tiver divergência > tolerance.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ReconcileInventoryPayload {
+    pub sei_process_number: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CancelInventorySessionPayload {
+    pub reason: Option<String>,
+}
+
+/// RF-049: Confirma assinatura Gov.br do documento de conciliação de inventário.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ConfirmGovbrSignatureInventoryPayload {
+    pub notes: Option<String>,
 }

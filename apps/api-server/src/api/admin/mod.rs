@@ -1,11 +1,17 @@
 pub mod audit;
+pub mod batches;
 pub mod policies;
 pub mod requisitions;
 pub mod transfers;
 pub mod users;
 
 pub mod invoices;
+pub mod inventory_sessions;
 pub mod warehouses;
+pub mod alerts;
+pub mod dashboard;
+pub mod abc_analysis;
+pub mod legacy_import;
 
 use crate::{
     api::{
@@ -39,6 +45,15 @@ pub fn router() -> Router<AppState> {
         .nest("/reports", reports::router())
         .nest("/invoices", invoices::router())
         .nest("/warehouses", warehouses::router())
+        .nest("/warehouses", inventory_sessions::warehouse_router())
+        .nest("/inventory-sessions", inventory_sessions::session_router())
+        .nest("/disposal-requests", warehouses::disposal_requests_router())
         .merge(transfers::router())
+        .merge(batches::batch_router())
+        .nest("/warehouses", batches::warehouse_batch_router())
+        .merge(alerts::router())
+        .merge(dashboard::router())
+        .merge(abc_analysis::router())
+        .merge(legacy_import::router())
         .layer(admin_rate_limiter())
 }

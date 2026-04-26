@@ -16,4 +16,5 @@ pub fn router() -> Router<AppState> {
         .route("/transfers/{id}/confirm", post(handlers::confirm_transfer))
         .route("/transfers/{id}/reject", post(handlers::reject_transfer))
         .route("/transfers/{id}/cancel", post(handlers::cancel_transfer))
+        .route("/transfers/{id}/confirm-govbr-signature", post(handlers::confirm_govbr_signature_transfer))
 }

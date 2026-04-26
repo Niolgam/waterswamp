@@ -1,5 +1,7 @@
 use crate::errors::ServiceError;
+use crate::services::financial_event_service::FinancialEventPublisher;
 use crate::services::stock_movement_service::StockMovementService;
+use crate::services::supplier_service::SupplierService;
 use domain::{
     models::catalog::MaterialClassification,
     models::invoice::InvoiceStatus,
@@ -17,6 +19,8 @@ pub struct InvoiceAdjustmentService {
     invoice_repo: Arc<dyn InvoiceRepositoryPort>,
     adjustment_repo: Arc<dyn InvoiceAdjustmentRepositoryPort>,
     stock_movement_service: Arc<StockMovementService>,
+    financial_event_publisher: Option<Arc<FinancialEventPublisher>>,
+    supplier_service: Option<Arc<SupplierService>>,
 }
 
 impl InvoiceAdjustmentService {
@@ -31,7 +35,19 @@ impl InvoiceAdjustmentService {
             invoice_repo,
             adjustment_repo,
             stock_movement_service,
+            financial_event_publisher: None,
+            supplier_service: None,
         }
+    }
+
+    pub fn with_financial_event_publisher(mut self, publisher: Arc<FinancialEventPublisher>) -> Self {
+        self.financial_event_publisher = Some(publisher);
+        self
+    }
+
+    pub fn with_supplier_service(mut self, supplier_service: Arc<SupplierService>) -> Self {
+        self.supplier_service = Some(supplier_service);
+        self
     }
 
     pub async fn list_adjustments(
@@ -199,13 +215,37 @@ impl InvoiceAdjustmentService {
             .await
             .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
-        Ok(InvoiceAdjustmentWithItemsDto {
+        let result = InvoiceAdjustmentWithItemsDto {
             id: adjustment.id,
             invoice_id: adjustment.invoice_id,
             reason: adjustment.reason,
             created_by: adjustment.created_by,
             created_at: adjustment.created_at,
             items: item_details,
-        })
+        };
+
+        // RF-028: Publish GLOSA_CRIADA financial event (fire-and-forget)
+        if let Some(ref pub_) = self.financial_event_publisher {
+            let total_adjusted_value: Decimal = result.items.iter()
+                .map(|i| i.adjusted_value)
+                .sum();
+            let _ = pub_
+                .publish_glosa_criada(
+                    invoice_id,
+                    result.id,
+                    invoice.supplier_id,
+                    invoice.warehouse_id,
+                    total_adjusted_value,
+                    user_id,
+                )
+                .await;
+        }
+
+        // RF-039: Auto-update supplier quality score
+        if let Some(ref svc) = self.supplier_service {
+            let _ = svc.penalize_quality_score(invoice.supplier_id).await;
+        }
+
+        Ok(result)
     }
 }

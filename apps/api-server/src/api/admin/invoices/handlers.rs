@@ -152,6 +152,21 @@ pub async fn cancel_invoice(
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
+/// RN-008: Lançamento compensatório — reverte NF POSTED dentro de 24h do lançamento.
+pub async fn compensatory_reversal(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<CompensatoryReversalPayload>,
+) -> Result<Json<InvoiceWithDetailsDto>, (StatusCode, String)> {
+    state
+        .invoice_service
+        .compensatory_reversal(id, payload, user.id)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
 pub async fn delete_invoice(
     _user: CurrentUser,
     State(state): State<AppState>,

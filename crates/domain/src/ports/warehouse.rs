@@ -107,3 +107,127 @@ pub trait WarehouseStockRepositoryPort: Send + Sync {
 
     async fn unblock(&self, id: Uuid) -> Result<WarehouseStockDto, RepositoryError>;
 }
+
+// ── Disposal Requests (Ticket 1.1 — RN-005) ──────────────────────────────────
+
+#[async_trait]
+pub trait DisposalRequestRepositoryPort: Send + Sync {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<DisposalRequestDto>, RepositoryError>;
+    async fn find_with_items(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<DisposalRequestWithItemsDto>, RepositoryError>;
+    async fn list_by_warehouse(
+        &self,
+        warehouse_id: Uuid,
+        limit: i64,
+        offset: i64,
+        status: Option<DisposalRequestStatus>,
+    ) -> Result<(Vec<DisposalRequestDto>, i64), RepositoryError>;
+    async fn create(
+        &self,
+        warehouse_id: Uuid,
+        sei_process_number: &str,
+        justification: &str,
+        technical_opinion_url: &str,
+        notes: Option<&str>,
+        requested_by: Uuid,
+    ) -> Result<DisposalRequestDto, RepositoryError>;
+    async fn create_item(
+        &self,
+        disposal_request_id: Uuid,
+        catalog_item_id: Uuid,
+        unit_raw_id: Uuid,
+        unit_conversion_id: Option<Uuid>,
+        quantity_raw: rust_decimal::Decimal,
+        conversion_factor: rust_decimal::Decimal,
+        batch_number: Option<&str>,
+        notes: Option<&str>,
+    ) -> Result<(), RepositoryError>;
+    async fn transition_to_signed(
+        &self,
+        id: Uuid,
+        signed_by: Uuid,
+    ) -> Result<DisposalRequestDto, RepositoryError>;
+    async fn transition_to_cancelled(
+        &self,
+        id: Uuid,
+        cancelled_by: Uuid,
+        cancellation_reason: &str,
+    ) -> Result<DisposalRequestDto, RepositoryError>;
+    async fn set_item_movement(
+        &self,
+        item_id: Uuid,
+        movement_id: Uuid,
+    ) -> Result<(), RepositoryError>;
+}
+
+// ── Inventory Sessions (Ticket 1.3 — RF-019) ─────────────────────────────────
+
+#[async_trait]
+pub trait InventorySessionRepositoryPort: Send + Sync {
+    async fn find_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<InventorySessionDto>, RepositoryError>;
+    async fn find_with_items(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<InventorySessionWithItemsDto>, RepositoryError>;
+    async fn list_by_warehouse(
+        &self,
+        warehouse_id: Uuid,
+        limit: i64,
+        offset: i64,
+        status: Option<InventorySessionStatus>,
+    ) -> Result<(Vec<InventorySessionDto>, i64), RepositoryError>;
+    async fn create(
+        &self,
+        warehouse_id: Uuid,
+        tolerance_percentage: rust_decimal::Decimal,
+        notes: Option<&str>,
+        created_by: Uuid,
+    ) -> Result<InventorySessionDto, RepositoryError>;
+    async fn transition_to_counting(&self, id: Uuid) -> Result<InventorySessionDto, RepositoryError>;
+    async fn transition_to_reconciling(
+        &self,
+        id: Uuid,
+    ) -> Result<InventorySessionDto, RepositoryError>;
+    async fn transition_to_completed(
+        &self,
+        id: Uuid,
+        sei_process_number: Option<&str>,
+    ) -> Result<InventorySessionDto, RepositoryError>;
+    async fn transition_to_cancelled(
+        &self,
+        id: Uuid,
+    ) -> Result<InventorySessionDto, RepositoryError>;
+    async fn confirm_govbr_signature(
+        &self,
+        id: Uuid,
+        signed_by: Uuid,
+    ) -> Result<InventorySessionDto, RepositoryError>;
+    /// Snapshot: insere todos os itens de warehouse_stocks para o warehouse na sessão.
+    async fn snapshot_stock_items(
+        &self,
+        session_id: Uuid,
+        warehouse_id: Uuid,
+    ) -> Result<usize, RepositoryError>;
+    /// Atualiza ou cria a contagem física de um item.
+    async fn upsert_item_count(
+        &self,
+        session_id: Uuid,
+        catalog_item_id: Uuid,
+        counted_quantity: rust_decimal::Decimal,
+        notes: Option<&str>,
+    ) -> Result<InventorySessionItemDto, RepositoryError>;
+    async fn list_items(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<InventorySessionItemDto>, RepositoryError>;
+    async fn set_item_movement(
+        &self,
+        item_id: Uuid,
+        movement_id: Uuid,
+    ) -> Result<(), RepositoryError>;
+}

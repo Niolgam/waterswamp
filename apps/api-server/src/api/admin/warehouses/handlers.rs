@@ -7,12 +7,21 @@ use axum::{
     Json,
 };
 use domain::models::warehouse::{
-    DisposalExitPayload, ManualExitPayload, ReturnEntryPayload, StandaloneEntryPayload,
-    StockMovementDto,
+    CancelDisposalRequestPayload, CreateDisposalRequestPayload, DisposalRequestStatus,
+    ManualExitPayload, ReturnEntryPayload, StandaloneEntryPayload, StockMovementDto,
 };
 use serde::Deserialize;
 use utoipa::IntoParams;
 use uuid::Uuid;
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct DisposalListQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    pub status: Option<DisposalRequestStatus>,
+}
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct MovementListQuery {
@@ -309,28 +318,85 @@ pub async fn create_return_entry(
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-/// POST /api/admin/warehouses/:id/disposals
-/// RF-016: Saída por Desfazimento/Baixa (com SEI e Parecer Técnico)
-pub async fn create_disposal_exit(
+/// POST /api/admin/warehouses/:id/disposal-requests
+/// RF-016: Cria pedido de desfazimento em AWAITING_SIGNATURE (RN-005, Ticket 1.1)
+pub async fn create_disposal_request(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(warehouse_id): Path<Uuid>,
-    Json(payload): Json<DisposalExitPayload>,
+    Json(payload): Json<CreateDisposalRequestPayload>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
     state
         .warehouse_service
-        .create_disposal_exit(warehouse_id, payload, user.id)
+        .create_disposal_request(warehouse_id, payload, user.id)
         .await
-        .map(|r| {
-            (
-                StatusCode::CREATED,
-                Json(serde_json::json!({
-                    "movements_created": r.movements_created,
-                    "sei_process_number": r.sei_process_number,
-                    "warehouse_id": r.warehouse_id
-                })),
-            )
+        .map(|r| (StatusCode::CREATED, Json(serde_json::json!(r))))
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+/// GET /api/admin/warehouses/:id/disposal-requests
+pub async fn list_disposal_requests(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(warehouse_id): Path<Uuid>,
+    Query(query): Query<DisposalListQuery>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    state
+        .warehouse_service
+        .list_disposal_requests(warehouse_id, query.limit, query.offset, query.status)
+        .await
+        .map(|(data, total)| {
+            Json(serde_json::json!({
+                "data": data,
+                "total": total,
+                "limit": query.limit,
+                "offset": query.offset
+            }))
         })
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+/// GET /api/admin/disposal-requests/:id
+pub async fn get_disposal_request(
+    _user: CurrentUser,
+    State(state): State<AppState>,
+    Path(request_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    state
+        .warehouse_service
+        .get_disposal_request(request_id)
+        .await
+        .map(|r| Json(serde_json::json!(r)))
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+/// POST /api/admin/disposal-requests/:id/confirm-signature
+/// RF-016: Confirma assinatura Gov.br e deduz estoque (Ticket 1.1)
+pub async fn confirm_disposal_signature(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(request_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    state
+        .warehouse_service
+        .confirm_disposal_signature(request_id, user.id)
+        .await
+        .map(|r| Json(serde_json::json!(r)))
+        .map_err(|e| (StatusCode::from(&e), e.to_string()))
+}
+
+/// POST /api/admin/disposal-requests/:id/cancel
+pub async fn cancel_disposal_request(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(request_id): Path<Uuid>,
+    Json(payload): Json<CancelDisposalRequestPayload>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    state
+        .warehouse_service
+        .cancel_disposal_request(request_id, payload, user.id)
+        .await
+        .map(|r| Json(serde_json::json!(r)))
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 

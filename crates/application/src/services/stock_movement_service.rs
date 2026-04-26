@@ -162,6 +162,26 @@ impl StockMovementService {
             return Ok(());
         }
 
+        // ── 1.5. Validar quantidade discreta×contínua (RF-004) ───────────────
+        // Consulta allows_fractions da unidade informada na movimentação.
+        let allows_fractions: Option<bool> = sqlx::query_scalar(
+            "SELECT allows_fractions FROM units_of_measure WHERE id = $1",
+        )
+        .bind(input.unit_raw_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        if let Some(false) = allows_fractions {
+            if input.quantity_base.fract() != Decimal::ZERO {
+                return Err(ServiceError::BadRequest(format!(
+                    "Item indivisível (unidade discreta): quantidade fracionada não é permitida. \
+                     Informado: {} (RF-004).",
+                    input.quantity_base
+                )));
+            }
+        }
+
         // ── 2. Capturar saldo atual com lock pessimista ───────────────────────
         let stock_row: Option<(Decimal, Decimal, bool, Option<String>)> = sqlx::query_as(
             r#"SELECT quantity, average_unit_value, is_blocked, block_reason
@@ -326,6 +346,47 @@ impl StockMovementService {
         .execute(&mut **tx)
         .await
         .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        // ── 8. UPSERT em warehouse_batch_stocks (RF-021 FEFO) ─────────────────
+        // Only when a batch_number is provided — maintains per-batch inventory.
+        if let Some(ref bn) = input.batch_number {
+            let delta = if is_entry_movement {
+                input.quantity_base
+            } else {
+                -input.quantity_base
+            };
+            let cost = if is_entry_movement && input.unit_price_base > Decimal::ZERO {
+                input.unit_price_base
+            } else {
+                curr_avg
+            };
+            sqlx::query(
+                r#"INSERT INTO warehouse_batch_stocks
+                    (warehouse_id, catalog_item_id, batch_number, expiration_date, quantity, unit_cost)
+                   VALUES ($1, $2, $3, $4, GREATEST(0, $5), $6)
+                   ON CONFLICT (warehouse_id, catalog_item_id, batch_number)
+                   DO UPDATE SET
+                    quantity = GREATEST(0, warehouse_batch_stocks.quantity + $5),
+                    unit_cost = CASE
+                        WHEN $5 > 0 AND $6 > 0 THEN
+                            (warehouse_batch_stocks.quantity * warehouse_batch_stocks.unit_cost
+                             + $5 * $6)
+                            / NULLIF(warehouse_batch_stocks.quantity + $5, 0)
+                        ELSE warehouse_batch_stocks.unit_cost
+                    END,
+                    expiration_date = COALESCE(warehouse_batch_stocks.expiration_date, $4),
+                    updated_at = NOW()"#,
+            )
+            .bind(input.warehouse_id)
+            .bind(input.catalog_item_id)
+            .bind(bn)
+            .bind(input.expiration_date)
+            .bind(delta)
+            .bind(cost)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+        }
 
         Ok(())
     }

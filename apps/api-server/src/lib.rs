@@ -16,6 +16,8 @@ use application::services::{
     driver_service::DriverService,
     fueling_service::FuelingService,
     geo_regions_service::GeoRegionsService,
+    batch_service::BatchService,
+    financial_event_service::FinancialEventPublisher,
     invoice_adjustment_service::InvoiceAdjustmentService,
     invoice_service::InvoiceService,
     mfa_service::MfaService,
@@ -30,6 +32,7 @@ use application::services::{
     trip_service::TripService,
     maintenance_service::MaintenanceService,
     fleet_report_service::FleetReportService,
+    inventory_service::InventoryService,
     stock_movement_service::StockMovementService,
     stock_transfer_service::StockTransferService,
     supplier_service::SupplierService,
@@ -37,6 +40,10 @@ use application::services::{
     vehicle_fine_service::VehicleFineService,
     vehicle_service::VehicleService,
     warehouse_service::WarehouseService,
+    alert_service::AlertService,
+    dashboard_service::DashboardService,
+    abc_analysis_service::AbcAnalysisService,
+    legacy_import_service::LegacyImportService,
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
@@ -65,6 +72,13 @@ use domain::ports::{
     VehicleModelRepositoryPort, VehicleRepositoryPort, VehicleStatusHistoryRepositoryPort,
     VehicleTransmissionTypeRepositoryPort, WarehouseRepositoryPort, WarehouseStockRepositoryPort,
 };
+use domain::ports::warehouse::{DisposalRequestRepositoryPort, InventorySessionRepositoryPort};
+use domain::ports::financial_event::FinancialEventRepositoryPort;
+use domain::ports::batch::{WarehouseBatchStockRepositoryPort, BatchQualityOccurrenceRepositoryPort};
+use domain::ports::alert::StockAlertRepositoryPort;
+use domain::ports::dashboard::DashboardRepositoryPort;
+use domain::ports::abc_analysis::AbcAnalysisRepositoryPort;
+use domain::ports::legacy_import::LegacyImportRepositoryPort;
 use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
@@ -101,10 +115,18 @@ use persistence::repositories::{
         VehicleRepository, VehicleStatusHistoryRepository, VehicleTransmissionTypeRepository,
     },
     warehouse_repository::{WarehouseRepository, WarehouseStockRepository},
+    disposal_request_repository::DisposalRequestRepository,
+    inventory_session_repository::InventorySessionRepository,
     odometer_repository::OdometerReadingRepository,
     trip_repository::VehicleTripRepository,
     maintenance_repository::MaintenanceOrderRepository,
     report_repository::FleetReportRepository,
+    financial_event_repository::FinancialEventRepository,
+    batch_repository::{WarehouseBatchStockRepository, BatchQualityOccurrenceRepository},
+    alert_repository::StockAlertRepository,
+    dashboard_repository::DashboardRepository,
+    abc_analysis_repository::AbcAnalysisRepository,
+    legacy_import_repository::LegacyImportRepository,
     asset_management_repository::{
         VehicleDepartmentTransferRepository,
         DepreciationConfigRepository,
@@ -412,6 +434,33 @@ pub fn build_application_state(
         vehicle_fine_status_history_repo,
     ));
 
+    // Financial event repository and publisher (RF-028)
+    let financial_event_repo: Arc<dyn FinancialEventRepositoryPort> =
+        Arc::new(FinancialEventRepository::new(pool_auth.clone()));
+    let financial_event_publisher = Arc::new(FinancialEventPublisher::new(financial_event_repo));
+
+    // Comprasnet empenho client (RF-030) — optional, only when base URL is configured
+    let comprasnet_empenho_client = {
+        use application::external::ComprasnetEmpenhoClient;
+        let base_url = std::env::var("COMPRASNET_EMPENHO_API_URL")
+            .unwrap_or_default();
+        let api_token = std::env::var("COMPRASNET_EMPENHO_API_TOKEN").ok();
+        if !base_url.is_empty() {
+            match ComprasnetEmpenhoClient::new(base_url, api_token) {
+                Ok(client) => {
+                    tracing::info!("Comprasnet empenho client initialized (RF-030)");
+                    Some(Arc::new(client))
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize Comprasnet empenho client: {}. Empenho validation disabled.", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
     // Invoice repositories and service
     let invoice_repo: Arc<dyn InvoiceRepositoryPort> =
         Arc::new(InvoiceRepository::new(pool_auth.clone()));
@@ -419,28 +468,50 @@ pub fn build_application_state(
         Arc::new(InvoiceItemRepository::new(pool_auth.clone()));
     let invoice_adjustment_repo: Arc<dyn InvoiceAdjustmentRepositoryPort> =
         Arc::new(InvoiceAdjustmentRepository::new(pool_auth.clone()));
-    let invoice_service = Arc::new(InvoiceService::new(
+
+    let mut invoice_svc_builder = InvoiceService::new(
         pool_auth.clone(),
         invoice_repo.clone(),
         invoice_item_repo,
         stock_movement_service.clone(),
-    ));
-    let invoice_adjustment_service = Arc::new(InvoiceAdjustmentService::new(
-        pool_auth.clone(),
-        invoice_repo,
-        invoice_adjustment_repo,
-        stock_movement_service.clone(),
-    ));
+    )
+    .with_financial_event_publisher(financial_event_publisher.clone());
+    if let Some(ref empenho_client) = comprasnet_empenho_client {
+        invoice_svc_builder = invoice_svc_builder.with_empenho_client(empenho_client.clone());
+    }
+    let invoice_service = Arc::new(invoice_svc_builder);
+
+    let invoice_adjustment_service = Arc::new(
+        InvoiceAdjustmentService::new(
+            pool_auth.clone(),
+            invoice_repo,
+            invoice_adjustment_repo,
+            stock_movement_service.clone(),
+        )
+        .with_financial_event_publisher(financial_event_publisher.clone())
+        .with_supplier_service(supplier_service.clone()),
+    );
 
     // Warehouse repositories and service
     let warehouse_repo: Arc<dyn WarehouseRepositoryPort> =
         Arc::new(WarehouseRepository::new(pool_auth.clone()));
     let stock_repo: Arc<dyn WarehouseStockRepositoryPort> =
         Arc::new(WarehouseStockRepository::new(pool_auth.clone()));
+    let disposal_request_repo: Arc<dyn DisposalRequestRepositoryPort> =
+        Arc::new(DisposalRequestRepository::new(pool_auth.clone()));
+    let inventory_session_repo: Arc<dyn InventorySessionRepositoryPort> =
+        Arc::new(InventorySessionRepository::new(pool_auth.clone()));
     let warehouse_service = Arc::new(WarehouseService::new(
         pool_auth.clone(),
-        warehouse_repo,
+        warehouse_repo.clone(),
         stock_repo,
+        stock_movement_service.clone(),
+        disposal_request_repo,
+    ));
+    let inventory_service = Arc::new(InventoryService::new(
+        pool_auth.clone(),
+        inventory_session_repo,
+        warehouse_repo.clone(),
         stock_movement_service.clone(),
     ));
 
@@ -449,6 +520,35 @@ pub fn build_application_state(
         pool_auth.clone(),
         stock_movement_service.clone(),
     ));
+
+    // Batch service: FEFO (RF-021) + Quality Occurrences (RF-043)
+    let batch_stock_repo: Arc<dyn WarehouseBatchStockRepositoryPort> =
+        Arc::new(WarehouseBatchStockRepository::new(pool_auth.clone()));
+    let batch_quality_repo: Arc<dyn BatchQualityOccurrenceRepositoryPort> =
+        Arc::new(BatchQualityOccurrenceRepository::new(pool_auth.clone()));
+    let batch_service = Arc::new(BatchService::new(
+        pool_auth.clone(),
+        batch_stock_repo,
+        batch_quality_repo,
+        warehouse_repo.clone(),
+    ));
+
+    // Circuit breaker registry (RF-035 — Modo Degradado)
+    use application::external::{CircuitBreaker, CircuitBreakerRegistry};
+    let cb_registry = Arc::new(CircuitBreakerRegistry::new());
+    {
+        let comprasnet_failures: u32 = 5;
+        let comprasnet_recovery: u64 = 60;
+        let cb_comprasnet = Arc::new(CircuitBreaker::new(
+            "comprasnet",
+            comprasnet_failures,
+            comprasnet_recovery,
+        ));
+        let siorg_cb = Arc::new(CircuitBreaker::new("siorg", 3, 120));
+        cb_registry.register(cb_comprasnet);
+        cb_registry.register(siorg_cb);
+    }
+    let circuit_breaker_registry = cb_registry;
 
     // Asset management service (RF-AST-06/09/10/11/12 + RF-ADM-01/02/07/08)
     let transfer_repo: Arc<dyn VehicleDepartmentTransferRepositoryPort> =
@@ -531,6 +631,23 @@ pub fn build_application_state(
         vehicle_repo_for_reports,
     ));
 
+    // ÉPICO 4: Alertas, Dashboard, ABC, Legacy Import
+    let alert_repo: Arc<dyn StockAlertRepositoryPort> =
+        Arc::new(StockAlertRepository::new(pool_auth.clone()));
+    let alert_service = Arc::new(AlertService::new(alert_repo));
+
+    let dashboard_repo: Arc<dyn DashboardRepositoryPort> =
+        Arc::new(DashboardRepository::new(pool_auth.clone()));
+    let dashboard_service = Arc::new(DashboardService::new(dashboard_repo));
+
+    let abc_repo: Arc<dyn AbcAnalysisRepositoryPort> =
+        Arc::new(AbcAnalysisRepository::new(pool_auth.clone()));
+    let abc_analysis_service = Arc::new(AbcAnalysisService::new(abc_repo));
+
+    let legacy_import_repo: Arc<dyn LegacyImportRepositoryPort> =
+        Arc::new(LegacyImportRepository::new(pool_auth.clone()));
+    let legacy_import_service = Arc::new(LegacyImportService::new(legacy_import_repo));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -573,11 +690,19 @@ pub fn build_application_state(
         stock_movement_service,
         stock_transfer_service,
         warehouse_service,
+        inventory_service,
+        financial_event_publisher,
+        batch_service,
+        circuit_breaker_registry,
         odometer_service,
         asset_management_service,
         trip_service,
         maintenance_service,
         fleet_report_service,
+        alert_service,
+        dashboard_service,
+        abc_analysis_service,
+        legacy_import_service,
         config,
         field_encryption_key: enc_key,
 

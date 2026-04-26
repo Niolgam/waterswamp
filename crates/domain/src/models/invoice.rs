@@ -320,3 +320,11 @@ pub struct RejectInvoicePayload {
 pub struct CancelInvoicePayload {
     pub notes: Option<String>,
 }
+
+/// RN-008 — Lançamento compensatório de NF lançada no estoque.
+/// Só é aceito dentro da janela de 24h após o posting.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CompensatoryReversalPayload {
+    /// Motivo obrigatório do estorno compensatório.
+    pub reason: String,
+}

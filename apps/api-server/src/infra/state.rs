@@ -20,9 +20,17 @@ use application::services::vehicle_fine_service::VehicleFineService;
 use application::services::invoice_service::InvoiceService;
 use application::services::invoice_adjustment_service::InvoiceAdjustmentService;
 use application::services::stock_movement_service::StockMovementService;
+use application::services::inventory_service::InventoryService;
 use application::services::stock_transfer_service::StockTransferService;
 use application::services::warehouse_service::WarehouseService;
+use application::services::financial_event_service::FinancialEventPublisher;
+use application::services::batch_service::BatchService;
 use application::services::odometer_service::OdometerService;
+use application::services::alert_service::AlertService;
+use application::services::dashboard_service::DashboardService;
+use application::services::abc_analysis_service::AbcAnalysisService;
+use application::services::legacy_import_service::LegacyImportService;
+use application::external::CircuitBreakerRegistry;
 use application::services::asset_management_service::AssetManagementService;
 use application::services::trip_service::TripService;
 use application::services::maintenance_service::MaintenanceService;
@@ -81,11 +89,19 @@ pub struct AppState {
     pub stock_movement_service: Arc<StockMovementService>,
     pub stock_transfer_service: Arc<StockTransferService>,
     pub warehouse_service: Arc<WarehouseService>,
+    pub inventory_service: Arc<InventoryService>,
+    pub financial_event_publisher: Arc<FinancialEventPublisher>,
+    pub batch_service: Arc<BatchService>,
+    pub circuit_breaker_registry: Arc<CircuitBreakerRegistry>,
     pub odometer_service: Arc<OdometerService>,
     pub asset_management_service: Arc<AssetManagementService>,
     pub trip_service: Arc<TripService>,
     pub maintenance_service: Arc<MaintenanceService>,
     pub fleet_report_service: Arc<FleetReportService>,
+    pub alert_service: Arc<AlertService>,
+    pub dashboard_service: Arc<DashboardService>,
+    pub abc_analysis_service: Arc<AbcAnalysisService>,
+    pub legacy_import_service: Arc<LegacyImportService>,
     pub config: Arc<Config>,
     /// AES-256-GCM key for field-level encryption (email, MFA secrets).
     pub field_encryption_key: [u8; 32],

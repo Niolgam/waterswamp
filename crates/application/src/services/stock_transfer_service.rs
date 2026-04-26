@@ -4,8 +4,9 @@ use crate::services::stock_movement_service::{
 };
 use chrono::Utc;
 use domain::models::warehouse::{
-    CancelTransferPayload, ConfirmTransferPayload, InitiateTransferPayload, RejectTransferPayload,
-    StockTransferDto, StockTransferItemDto, StockTransferStatus, StockTransferWithItemsDto,
+    CancelTransferPayload, ConfirmGovbrSignatureTransferPayload, ConfirmTransferPayload,
+    InitiateTransferPayload, RejectTransferPayload, StockTransferDto, StockTransferItemDto,
+    StockTransferStatus, StockTransferWithItemsDto,
 };
 use rust_decimal::Decimal;
 use sqlx::PgPool;
@@ -42,7 +43,10 @@ impl StockTransferService {
                 t.notes, t.rejection_reason, t.cancellation_reason,
                 t.initiated_by, t.confirmed_by, t.rejected_by, t.cancelled_by,
                 t.initiated_at, t.confirmed_at, t.rejected_at, t.cancelled_at,
-                t.expires_at, t.created_at, t.updated_at
+                t.expires_at, t.created_at, t.updated_at,
+                t.requires_govbr_signature,
+                t.govbr_signed_at,
+                t.govbr_signed_by
                FROM stock_transfers t
                LEFT JOIN warehouses sw ON sw.id = t.source_warehouse_id
                LEFT JOIN warehouses dw ON dw.id = t.destination_warehouse_id
@@ -82,7 +86,10 @@ impl StockTransferService {
                 t.notes, t.rejection_reason, t.cancellation_reason,
                 t.initiated_by, t.confirmed_by, t.rejected_by, t.cancelled_by,
                 t.initiated_at, t.confirmed_at, t.rejected_at, t.cancelled_at,
-                t.expires_at, t.created_at, t.updated_at
+                t.expires_at, t.created_at, t.updated_at,
+                t.requires_govbr_signature,
+                t.govbr_signed_at,
+                t.govbr_signed_by
                FROM stock_transfers t
                LEFT JOIN warehouses sw ON sw.id = t.source_warehouse_id
                LEFT JOIN warehouses dw ON dw.id = t.destination_warehouse_id
@@ -206,13 +213,15 @@ impl StockTransferService {
             .await
             .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
+        let requires_govbr = payload.requires_govbr_signature.unwrap_or(false);
+
         // Create transfer record
         let transfer_id: Uuid = sqlx::query_scalar(
             r#"INSERT INTO stock_transfers (
                 transfer_number, source_warehouse_id, destination_warehouse_id,
-                status, notes, initiated_by, expires_at
+                status, notes, initiated_by, expires_at, requires_govbr_signature
                ) VALUES (
-                '', $1, $2, 'PENDING', $3, $4, $5
+                '', $1, $2, 'PENDING', $3, $4, $5, $6
                ) RETURNING id"#,
         )
         .bind(source_warehouse_id)
@@ -220,6 +229,7 @@ impl StockTransferService {
         .bind(payload.notes.as_deref())
         .bind(initiated_by)
         .bind(expires_at)
+        .bind(requires_govbr)
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| ServiceError::Internal(e.to_string()))?;
@@ -337,7 +347,7 @@ impl StockTransferService {
     // ========================================================================
 
     /// Confirm receipt at destination warehouse (RF-018 step 2a).
-    /// Generates TRANSFER_IN movements for confirmed quantities.
+    /// If requires_govbr_signature, records quantities but defers TRANSFER_IN to govbr confirmation.
     pub async fn confirm_transfer(
         &self,
         transfer_id: Uuid,
@@ -353,7 +363,6 @@ impl StockTransferService {
             )));
         }
 
-        // Check if expired
         if let Some(expires_at) = transfer.transfer.expires_at {
             if Utc::now() > expires_at {
                 return Err(ServiceError::BadRequest(
@@ -362,13 +371,14 @@ impl StockTransferService {
             }
         }
 
+        let requires_govbr = transfer.transfer.requires_govbr_signature;
+
         let mut tx = self
             .pool
             .begin()
             .await
             .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
-        // Process TRANSFER_IN for each confirmed item
         for conf in &payload.items {
             if conf.quantity_confirmed <= Decimal::ZERO {
                 return Err(ServiceError::BadRequest(
@@ -376,7 +386,6 @@ impl StockTransferService {
                 ));
             }
 
-            // Find the corresponding transfer item
             let titem = transfer
                 .items
                 .iter()
@@ -395,46 +404,199 @@ impl StockTransferService {
                 )));
             }
 
-            // Get unit_price from the TRANSFER_OUT movement for this item
-            let source_price: Decimal =
+            if requires_govbr {
+                // Just record confirmed quantity; TRANSFER_IN deferred to govbr step
+                sqlx::query(
+                    "UPDATE stock_transfer_items SET quantity_confirmed = $2 WHERE id = $1",
+                )
+                .bind(conf.transfer_item_id)
+                .bind(conf.quantity_confirmed)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
+            } else {
+                let source_price: Decimal =
+                    sqlx::query_scalar("SELECT unit_price_base FROM stock_movements WHERE id = $1")
+                        .bind(titem.source_movement_id)
+                        .fetch_optional(&mut *tx)
+                        .await
+                        .map_err(|e| ServiceError::Internal(e.to_string()))?
+                        .unwrap_or(Decimal::ZERO);
+
+                self.stock_movement_service
+                    .process_movement(
+                        &mut tx,
+                        ProcessMovementInput {
+                            warehouse_id: transfer.transfer.destination_warehouse_id,
+                            catalog_item_id: titem.catalog_item_id,
+                            movement_type: StockMovementType::TransferIn,
+                            unit_raw_id: titem.unit_raw_id,
+                            unit_conversion_id: None,
+                            quantity_raw: (conf.quantity_confirmed / titem.conversion_factor)
+                                .normalize(),
+                            conversion_factor: titem.conversion_factor,
+                            quantity_base: conf.quantity_confirmed,
+                            unit_price_base: source_price,
+                            invoice_id: None,
+                            invoice_item_id: None,
+                            requisition_id: None,
+                            requisition_item_id: None,
+                            related_warehouse_id: Some(transfer.transfer.source_warehouse_id),
+                            document_number: Some(transfer.transfer.transfer_number.clone()),
+                            notes: payload.notes.clone(),
+                            user_id: confirmed_by,
+                            batch_number: titem.batch_number.clone(),
+                            expiration_date: titem.expiration_date,
+                            divergence_justification: None,
+                        },
+                    )
+                    .await?;
+
+                let dest_movement_id: Uuid = sqlx::query_scalar(
+                    r#"SELECT id FROM stock_movements
+                       WHERE warehouse_id = $1 AND catalog_item_id = $2
+                         AND movement_type = 'TRANSFER_IN' AND user_id = $3
+                       ORDER BY created_at DESC LIMIT 1"#,
+                )
+                .bind(transfer.transfer.destination_warehouse_id)
+                .bind(titem.catalog_item_id)
+                .bind(confirmed_by)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+                sqlx::query(
+                    r#"UPDATE stock_transfer_items SET
+                        quantity_confirmed = $2,
+                        destination_movement_id = $3
+                       WHERE id = $1"#,
+                )
+                .bind(conf.transfer_item_id)
+                .bind(conf.quantity_confirmed)
+                .bind(dest_movement_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+                if let Some(src_mv) = titem.source_movement_id {
+                    sqlx::query(
+                        "UPDATE stock_movements SET related_movement_id = $1 WHERE id = $2",
+                    )
+                    .bind(dest_movement_id)
+                    .bind(src_mv)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+                    sqlx::query(
+                        "UPDATE stock_movements SET related_movement_id = $1 WHERE id = $2",
+                    )
+                    .bind(src_mv)
+                    .bind(dest_movement_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| ServiceError::Internal(e.to_string()))?;
+                }
+            }
+        }
+
+        let next_status = if requires_govbr {
+            "AWAITING_GOVBR_SIGNATURE"
+        } else {
+            "CONFIRMED"
+        };
+
+        sqlx::query(
+            r#"UPDATE stock_transfers SET
+                status = $3,
+                confirmed_by = $2,
+                confirmed_at = NOW(),
+                updated_at = NOW()
+               WHERE id = $1"#,
+        )
+        .bind(transfer_id)
+        .bind(confirmed_by)
+        .bind(next_status)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        self.get_transfer(transfer_id).await
+    }
+
+    // ========================================================================
+    // CONFIRM GOV.BR SIGNATURE (Step 2c — optional RF-049)
+    // ========================================================================
+
+    /// RF-049: Confirma assinatura Gov.br e gera TRANSFER_IN na warehouse de destino.
+    pub async fn confirm_govbr_signature_transfer(
+        &self,
+        transfer_id: Uuid,
+        _payload: ConfirmGovbrSignatureTransferPayload,
+        govbr_signed_by: Uuid,
+    ) -> Result<StockTransferWithItemsDto, ServiceError> {
+        let transfer = self.get_transfer(transfer_id).await?;
+
+        if transfer.transfer.status != StockTransferStatus::AwaitingGovbrSignature {
+            return Err(ServiceError::BadRequest(format!(
+                "Transferência não está aguardando assinatura Gov.br. Status atual: {:?}",
+                transfer.transfer.status
+            )));
+        }
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        for item in &transfer.items {
+            // Use quantity_confirmed if set, otherwise quantity_requested
+            let qty_in = item.quantity_confirmed.unwrap_or(item.quantity_requested);
+
+            let source_price: Decimal = if let Some(src_mv) = item.source_movement_id {
                 sqlx::query_scalar("SELECT unit_price_base FROM stock_movements WHERE id = $1")
-                    .bind(titem.source_movement_id)
+                    .bind(src_mv)
                     .fetch_optional(&mut *tx)
                     .await
                     .map_err(|e| ServiceError::Internal(e.to_string()))?
-                    .unwrap_or(Decimal::ZERO);
+                    .unwrap_or(Decimal::ZERO)
+            } else {
+                Decimal::ZERO
+            };
 
-            // Generate TRANSFER_IN movement at destination
             self.stock_movement_service
                 .process_movement(
                     &mut tx,
                     ProcessMovementInput {
                         warehouse_id: transfer.transfer.destination_warehouse_id,
-                        catalog_item_id: titem.catalog_item_id,
+                        catalog_item_id: item.catalog_item_id,
                         movement_type: StockMovementType::TransferIn,
-                        unit_raw_id: titem.unit_raw_id,
+                        unit_raw_id: item.unit_raw_id,
                         unit_conversion_id: None,
-                        quantity_raw: (conf.quantity_confirmed / titem.conversion_factor)
-                            .normalize(),
-                        conversion_factor: titem.conversion_factor,
-                        quantity_base: conf.quantity_confirmed,
-                        unit_price_base: source_price, // preserve cost from source
+                        quantity_raw: (qty_in / item.conversion_factor).normalize(),
+                        conversion_factor: item.conversion_factor,
+                        quantity_base: qty_in,
+                        unit_price_base: source_price,
                         invoice_id: None,
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
                         related_warehouse_id: Some(transfer.transfer.source_warehouse_id),
                         document_number: Some(transfer.transfer.transfer_number.clone()),
-                        notes: payload.notes.clone(),
-                        user_id: confirmed_by,
-                        batch_number: titem.batch_number.clone(),
-                        expiration_date: titem.expiration_date,
+                        notes: None,
+                        user_id: govbr_signed_by,
+                        batch_number: item.batch_number.clone(),
+                        expiration_date: item.expiration_date,
                         divergence_justification: None,
                     },
                 )
                 .await?;
 
-            // Get destination movement id
             let dest_movement_id: Uuid = sqlx::query_scalar(
                 r#"SELECT id FROM stock_movements
                    WHERE warehouse_id = $1 AND catalog_item_id = $2
@@ -442,35 +604,19 @@ impl StockTransferService {
                    ORDER BY created_at DESC LIMIT 1"#,
             )
             .bind(transfer.transfer.destination_warehouse_id)
-            .bind(titem.catalog_item_id)
-            .bind(confirmed_by)
+            .bind(item.catalog_item_id)
+            .bind(govbr_signed_by)
             .fetch_one(&mut *tx)
             .await
             .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
-            // Update transfer item with confirmed quantity and movement link
-            sqlx::query(
-                r#"UPDATE stock_transfer_items SET
-                    quantity_confirmed = $2,
-                    destination_movement_id = $3
-                   WHERE id = $1"#,
-            )
-            .bind(conf.transfer_item_id)
-            .bind(conf.quantity_confirmed)
-            .bind(dest_movement_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| ServiceError::Internal(e.to_string()))?;
-
-            // Link the two movements (related_movement_id)
-            if let Some(src_mv) = titem.source_movement_id {
+            if let Some(src_mv) = item.source_movement_id {
                 sqlx::query("UPDATE stock_movements SET related_movement_id = $1 WHERE id = $2")
                     .bind(dest_movement_id)
                     .bind(src_mv)
                     .execute(&mut *tx)
                     .await
                     .map_err(|e| ServiceError::Internal(e.to_string()))?;
-
                 sqlx::query("UPDATE stock_movements SET related_movement_id = $1 WHERE id = $2")
                     .bind(src_mv)
                     .bind(dest_movement_id)
@@ -480,17 +626,16 @@ impl StockTransferService {
             }
         }
 
-        // Update transfer status to CONFIRMED
         sqlx::query(
             r#"UPDATE stock_transfers SET
                 status = 'CONFIRMED',
-                confirmed_by = $2,
-                confirmed_at = NOW(),
+                govbr_signed_at = NOW(),
+                govbr_signed_by = $2,
                 updated_at = NOW()
                WHERE id = $1"#,
         )
         .bind(transfer_id)
-        .bind(confirmed_by)
+        .bind(govbr_signed_by)
         .execute(&mut *tx)
         .await
         .map_err(|e| ServiceError::Internal(e.to_string()))?;

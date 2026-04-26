@@ -6,8 +6,8 @@ use axum::{
     Json,
 };
 use domain::models::warehouse::{
-    CancelTransferPayload, ConfirmTransferPayload, InitiateTransferPayload, RejectTransferPayload,
-    StockTransferStatus,
+    CancelTransferPayload, ConfirmGovbrSignatureTransferPayload, ConfirmTransferPayload,
+    InitiateTransferPayload, RejectTransferPayload, StockTransferStatus,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -102,6 +102,22 @@ pub async fn reject_transfer(
     let transfer = state
         .stock_transfer_service
         .reject_transfer(id, payload, user.id)
+        .await?;
+
+    Ok(Json(serde_json::json!(transfer)))
+}
+
+/// POST /api/admin/transfers/:id/confirm-govbr-signature
+/// RF-049: Confirma assinatura Gov.br e gera TRANSFER_IN no destino
+pub async fn confirm_govbr_signature_transfer(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ConfirmGovbrSignatureTransferPayload>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let transfer = state
+        .stock_transfer_service
+        .confirm_govbr_signature_transfer(id, payload, user.id)
         .await?;
 
     Ok(Json(serde_json::json!(transfer)))

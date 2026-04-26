@@ -8,8 +8,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-// Regex for SEI process number validation (RF-039)
-// Default format: NNNNN.NNNNNN/YYYY-NN (e.g., 23108.012345/2026-07)
+// Format: NNNNN.NNNNNN/YYYY-NN (e.g., 23108.012345/2026-07)
 const SEI_REGEX: &str = r"^\d{5}\.\d{6}/\d{4}-\d{2}$";
 
 pub struct WarehouseService {
@@ -17,6 +16,7 @@ pub struct WarehouseService {
     warehouse_repo: Arc<dyn WarehouseRepositoryPort>,
     stock_repo: Arc<dyn WarehouseStockRepositoryPort>,
     stock_movement_service: Arc<StockMovementService>,
+    disposal_request_repo: Arc<dyn DisposalRequestRepositoryPort>,
 }
 
 impl WarehouseService {
@@ -25,12 +25,14 @@ impl WarehouseService {
         warehouse_repo: Arc<dyn WarehouseRepositoryPort>,
         stock_repo: Arc<dyn WarehouseStockRepositoryPort>,
         stock_movement_service: Arc<StockMovementService>,
+        disposal_request_repo: Arc<dyn DisposalRequestRepositoryPort>,
     ) -> Self {
         Self {
             pool,
             warehouse_repo,
             stock_repo,
             stock_movement_service,
+            disposal_request_repo,
         }
     }
 
@@ -213,7 +215,6 @@ impl WarehouseService {
         search: Option<String>,
         is_blocked: Option<bool>,
     ) -> Result<(Vec<WarehouseStockWithDetailsDto>, i64), ServiceError> {
-        // Ensure warehouse exists
         let _ = self
             .warehouse_repo
             .find_by_id(warehouse_id)
@@ -318,8 +319,8 @@ impl WarehouseService {
         payload: StandaloneEntryPayload,
         user_id: Uuid,
     ) -> Result<StandaloneEntryResult, ServiceError> {
-        // Validate warehouse exists
-        let _ = self
+        // Validate warehouse exists and check hierarchy (RN-001)
+        let warehouse = self
             .warehouse_repo
             .find_by_id(warehouse_id)
             .await
@@ -327,6 +328,13 @@ impl WarehouseService {
             .ok_or(ServiceError::NotFound(
                 "Almoxarifado não encontrado".to_string(),
             ))?;
+
+        if warehouse.warehouse_type == WarehouseType::Sector {
+            return Err(ServiceError::BadRequest(
+                "Entradas avulsas só são permitidas em almoxarifados do tipo CENTRAL (RN-001)."
+                    .to_string(),
+            ));
+        }
 
         if payload.origin_description.trim().is_empty() {
             return Err(ServiceError::BadRequest(
@@ -420,7 +428,6 @@ impl WarehouseService {
         payload: ReturnEntryPayload,
         user_id: Uuid,
     ) -> Result<ReturnEntryResult, ServiceError> {
-        // Validate warehouse exists
         let _ = self
             .warehouse_repo
             .find_by_id(warehouse_id)
@@ -436,7 +443,6 @@ impl WarehouseService {
             ));
         }
 
-        // Verify requisition exists and was fulfilled
         let req_status: Option<String> =
             sqlx::query_scalar("SELECT status::TEXT FROM requisitions WHERE id = $1")
                 .bind(payload.requisition_id)
@@ -494,7 +500,7 @@ impl WarehouseService {
                         quantity_raw: item.quantity_raw,
                         conversion_factor: item.conversion_factor,
                         quantity_base,
-                        unit_price_base: Decimal::ZERO, // uses current average cost
+                        unit_price_base: Decimal::ZERO,
                         invoice_id: None,
                         invoice_item_id: None,
                         requisition_id: Some(payload.requisition_id),
@@ -522,15 +528,14 @@ impl WarehouseService {
         })
     }
 
-    /// RF-016: Saída por Desfazimento/Baixa — disposal or write-off (LOSS).
-    /// Requires: justification, SEI process number, and technical opinion URL (RN-005).
-    pub async fn create_disposal_exit(
+    /// RF-016: Cria pedido de desfazimento em AWAITING_SIGNATURE — estoque não é deduzido ainda.
+    /// Gov.br signature required before stock deduction (RN-005, Ticket 1.1).
+    pub async fn create_disposal_request(
         &self,
         warehouse_id: Uuid,
-        payload: DisposalExitPayload,
+        payload: CreateDisposalRequestPayload,
         user_id: Uuid,
-    ) -> Result<DisposalExitResult, ServiceError> {
-        // Validate warehouse exists
+    ) -> Result<DisposalRequestWithItemsDto, ServiceError> {
         let _ = self
             .warehouse_repo
             .find_by_id(warehouse_id)
@@ -540,7 +545,6 @@ impl WarehouseService {
                 "Almoxarifado não encontrado".to_string(),
             ))?;
 
-        // Validate mandatory fields (RN-005)
         if payload.justification.trim().is_empty() {
             return Err(ServiceError::BadRequest(
                 "Justificativa é obrigatória para desfazimento (RN-005)".to_string(),
@@ -553,11 +557,10 @@ impl WarehouseService {
             ));
         }
 
-        // Validate SEI process number format (RF-039)
         let sei_regex = regex::Regex::new(SEI_REGEX).unwrap();
         if !sei_regex.is_match(&payload.sei_process_number) {
             return Err(ServiceError::BadRequest(format!(
-                "Número de processo SEI inválido. Formato esperado: NNNNN.NNNNNN/YYYY-NN (ex: 23108.012345/2026-07). Recebido: '{}'",
+                "Número de processo SEI inválido. Formato esperado: NNNNN.NNNNNN/YYYY-NN. Recebido: '{}'",
                 payload.sei_process_number
             )));
         }
@@ -568,20 +571,86 @@ impl WarehouseService {
             ));
         }
 
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| ServiceError::Internal(e.to_string()))?;
-
-        let count = payload.items.len();
         for item in &payload.items {
             if item.quantity_raw <= Decimal::ZERO {
                 return Err(ServiceError::BadRequest(
                     "Quantidade deve ser maior que zero".to_string(),
                 ));
             }
+        }
 
+        let request = self
+            .disposal_request_repo
+            .create(
+                warehouse_id,
+                &payload.sei_process_number,
+                &payload.justification,
+                &payload.technical_opinion_url,
+                payload.notes.as_deref(),
+                user_id,
+            )
+            .await
+            .map_err(ServiceError::from)?;
+
+        for item in &payload.items {
+            self.disposal_request_repo
+                .create_item(
+                    request.id,
+                    item.catalog_item_id,
+                    item.unit_raw_id,
+                    item.unit_conversion_id,
+                    item.quantity_raw,
+                    item.conversion_factor,
+                    item.batch_number.as_deref(),
+                    item.notes.as_deref(),
+                )
+                .await
+                .map_err(ServiceError::from)?;
+        }
+
+        self.disposal_request_repo
+            .find_with_items(request.id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::Internal(
+                "Falha ao buscar pedido de desfazimento criado".to_string(),
+            ))
+    }
+
+    /// RF-016: Confirma assinatura Gov.br e deduz estoque (LOSS) para cada item.
+    pub async fn confirm_disposal_signature(
+        &self,
+        request_id: Uuid,
+        signed_by: Uuid,
+    ) -> Result<DisposalRequestWithItemsDto, ServiceError> {
+        let with_items = self
+            .disposal_request_repo
+            .find_with_items(request_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound(
+                "Pedido de desfazimento não encontrado".to_string(),
+            ))?;
+
+        if with_items.request.status != DisposalRequestStatus::AwaitingSignature {
+            return Err(ServiceError::BadRequest(format!(
+                "Pedido não pode ser assinado. Status atual: {:?}",
+                with_items.request.status
+            )));
+        }
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+        let warehouse_id = with_items.request.warehouse_id;
+        let sei = with_items.request.sei_process_number.clone();
+        let justification = with_items.request.justification.clone();
+        let technical_opinion_url = with_items.request.technical_opinion_url.clone();
+
+        for item in &with_items.items {
             let quantity_base = item.quantity_raw * item.conversion_factor;
 
             self.stock_movement_service
@@ -596,37 +665,142 @@ impl WarehouseService {
                         quantity_raw: item.quantity_raw,
                         conversion_factor: item.conversion_factor,
                         quantity_base,
-                        unit_price_base: Decimal::ZERO, // uses average cost
+                        unit_price_base: Decimal::ZERO,
                         invoice_id: None,
                         invoice_item_id: None,
                         requisition_id: None,
                         requisition_item_id: None,
                         related_warehouse_id: None,
-                        document_number: Some(payload.sei_process_number.clone()),
+                        document_number: Some(sei.clone()),
                         notes: Some(format!(
-                            "DESFAZIMENTO — SEI: {} — Justificativa: {} — Parecer: {}",
-                            payload.sei_process_number,
-                            payload.justification,
-                            payload.technical_opinion_url
+                            "DESFAZIMENTO/GOV.BR — SEI: {} — Justificativa: {} — Parecer: {}",
+                            sei, justification, technical_opinion_url
                         )),
-                        user_id,
+                        user_id: signed_by,
                         batch_number: item.batch_number.clone(),
                         expiration_date: None,
                         divergence_justification: None,
                     },
                 )
                 .await?;
+
+            let movement_id: Uuid = sqlx::query_scalar(
+                r#"SELECT id FROM stock_movements
+                   WHERE warehouse_id = $1 AND catalog_item_id = $2
+                     AND movement_type = 'LOSS' AND user_id = $3
+                   ORDER BY created_at DESC LIMIT 1"#,
+            )
+            .bind(warehouse_id)
+            .bind(item.catalog_item_id)
+            .bind(signed_by)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| ServiceError::Internal(e.to_string()))?;
+
+            self.disposal_request_repo
+                .set_item_movement(item.id, movement_id)
+                .await
+                .map_err(ServiceError::from)?;
         }
+
+        self.disposal_request_repo
+            .transition_to_signed(request_id, signed_by)
+            .await
+            .map_err(ServiceError::from)?;
 
         tx.commit()
             .await
             .map_err(|e| ServiceError::Internal(e.to_string()))?;
 
-        Ok(DisposalExitResult {
-            movements_created: count,
-            sei_process_number: payload.sei_process_number,
-            warehouse_id,
-        })
+        self.disposal_request_repo
+            .find_with_items(request_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::Internal(
+                "Falha ao buscar pedido atualizado".to_string(),
+            ))
+    }
+
+    /// Cancela um pedido de desfazimento em AWAITING_SIGNATURE.
+    pub async fn cancel_disposal_request(
+        &self,
+        request_id: Uuid,
+        payload: CancelDisposalRequestPayload,
+        cancelled_by: Uuid,
+    ) -> Result<DisposalRequestWithItemsDto, ServiceError> {
+        if payload.cancellation_reason.trim().is_empty() {
+            return Err(ServiceError::BadRequest(
+                "Motivo de cancelamento é obrigatório".to_string(),
+            ));
+        }
+
+        let req = self
+            .disposal_request_repo
+            .find_by_id(request_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound(
+                "Pedido de desfazimento não encontrado".to_string(),
+            ))?;
+
+        if req.status == DisposalRequestStatus::Signed {
+            return Err(ServiceError::BadRequest(
+                "Pedido já assinado não pode ser cancelado".to_string(),
+            ));
+        }
+        if req.status == DisposalRequestStatus::Cancelled {
+            return Err(ServiceError::BadRequest(
+                "Pedido já está cancelado".to_string(),
+            ));
+        }
+
+        self.disposal_request_repo
+            .transition_to_cancelled(request_id, cancelled_by, &payload.cancellation_reason)
+            .await
+            .map_err(ServiceError::from)?;
+
+        self.disposal_request_repo
+            .find_with_items(request_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::Internal(
+                "Falha ao buscar pedido atualizado".to_string(),
+            ))
+    }
+
+    pub async fn get_disposal_request(
+        &self,
+        request_id: Uuid,
+    ) -> Result<DisposalRequestWithItemsDto, ServiceError> {
+        self.disposal_request_repo
+            .find_with_items(request_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound(
+                "Pedido de desfazimento não encontrado".to_string(),
+            ))
+    }
+
+    pub async fn list_disposal_requests(
+        &self,
+        warehouse_id: Uuid,
+        limit: i64,
+        offset: i64,
+        status: Option<DisposalRequestStatus>,
+    ) -> Result<(Vec<DisposalRequestDto>, i64), ServiceError> {
+        let _ = self
+            .warehouse_repo
+            .find_by_id(warehouse_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or(ServiceError::NotFound(
+                "Almoxarifado não encontrado".to_string(),
+            ))?;
+
+        self.disposal_request_repo
+            .list_by_warehouse(warehouse_id, limit, offset, status)
+            .await
+            .map_err(ServiceError::from)
     }
 
     /// List stock movements for a warehouse (audit trail).
@@ -638,7 +812,6 @@ impl WarehouseService {
         catalog_item_id: Option<Uuid>,
         movement_type: Option<String>,
     ) -> Result<(Vec<StockMovementDto>, i64), ServiceError> {
-        // Validate warehouse exists
         let _ = self
             .warehouse_repo
             .find_by_id(warehouse_id)
@@ -685,7 +858,7 @@ impl WarehouseService {
                LEFT JOIN users u ON u.id = sm.user_id
                WHERE sm.warehouse_id = $1
                  AND ($2::UUID IS NULL OR sm.catalog_item_id = $2)
-                 AND ($3::text IS NULL OR sm.movement_type::text = $3) 
+                 AND ($3::text IS NULL OR sm.movement_type::text = $3)
                ORDER BY sm.movement_date DESC
                LIMIT $4 OFFSET $5"#,
         )
@@ -715,14 +888,12 @@ impl WarehouseService {
     }
 
     /// RF-017: Saída por Ordem de Serviço — manual or OS-based exit (EXIT or LOSS).
-    /// Requires document_number (OS number) and justification.
     pub async fn create_manual_exit(
         &self,
         warehouse_id: Uuid,
         payload: ManualExitPayload,
         user_id: Uuid,
     ) -> Result<ManualExitResult, ServiceError> {
-        // Validate warehouse exists
         let _ = self
             .warehouse_repo
             .find_by_id(warehouse_id)
@@ -776,7 +947,7 @@ impl WarehouseService {
                         quantity_raw: item.quantity_raw,
                         conversion_factor: item.conversion_factor,
                         quantity_base,
-                        unit_price_base: Decimal::ZERO, // uses average cost
+                        unit_price_base: Decimal::ZERO,
                         invoice_id: None,
                         invoice_item_id: None,
                         requisition_id: None,
