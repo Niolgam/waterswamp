@@ -473,16 +473,19 @@ pub fn build_application_state(
         Arc::new(VehicleRepository::new(pool_auth.clone()));
     let odometer_service = Arc::new(OdometerService::new(odometer_repo.clone(), vehicle_repo_for_odometer));
 
-    // Trip service (RF-USO-01/02/03/04)
+    // Trip service (RF-USO-01/02/03/04 + RF-VIG-04)
     let trip_repo: Arc<dyn VehicleTripRepositoryPort> =
         Arc::new(VehicleTripRepository::new(pool_auth.clone()));
     let vehicle_repo_for_trips: Arc<dyn VehicleRepositoryPort> =
         Arc::new(VehicleRepository::new(pool_auth.clone()));
+    let driver_repo_for_trips: Arc<dyn DriverRepositoryPort> =
+        Arc::new(DriverRepository::new(pool_auth.clone()));
     let status_history_for_trips: Arc<dyn VehicleStatusHistoryRepositoryPort> =
         Arc::new(VehicleStatusHistoryRepository::new(pool_auth.clone()));
     let trip_service = Arc::new(TripService::new(
         trip_repo,
         vehicle_repo_for_trips,
+        driver_repo_for_trips,
         odometer_repo,
         status_history_for_trips,
     ));

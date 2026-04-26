@@ -9,10 +9,6 @@ use axum::{
 };
 use uuid::Uuid;
 
-// ============================
-// Helpers
-// ============================
-
 fn occ_response(msg: String) -> axum::response::Response {
     use axum::response::IntoResponse;
     (
@@ -27,9 +23,7 @@ fn occ_response(msg: String) -> axum::response::Response {
         .into_response()
 }
 
-// ============================
-// RF-USO-01: Listar / Criar viagem
-// ============================
+// ── RF-USO-01: List / Create ─────────────────────────────────────────────
 
 pub async fn list_trips(
     _user: CurrentUser,
@@ -70,9 +64,7 @@ pub async fn get_trip(
         .map_err(|e| (StatusCode::from(&e), e.to_string()))
 }
 
-// ============================
-// RF-USO-01: Aprovar / Rejeitar
-// ============================
+// ── RF-USO-01: Approve / Reject ──────────────────────────────────────────
 
 pub async fn review_trip(
     user: CurrentUser,
@@ -88,27 +80,23 @@ pub async fn review_trip(
     }
 }
 
-// ============================
-// RF-USO-02: Checkin
-// ============================
+// ── RF-VIG-04: Allocate (APROVADA → ALOCADA) ─────────────────────────────
 
-pub async fn checkin(
+pub async fn allocate_trip(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(payload): Json<CheckinPayload>,
+    Json(payload): Json<AllocateTripPayload>,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
-    match state.trip_service.checkin(id, payload, user.id).await {
+    match state.trip_service.allocate_trip(id, payload, user.id).await {
         Ok(t) => (StatusCode::OK, Json(t)).into_response(),
         Err(ServiceError::OptimisticLockConflict(msg)) => occ_response(msg),
         Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
     }
 }
 
-// ============================
-// RF-USO-03: Checkout
-// ============================
+// ── RF-USO-02: Check-out — vehicle departure (ALOCADA → EM_CURSO) ────────
 
 pub async fn checkout(
     user: CurrentUser,
@@ -124,9 +112,55 @@ pub async fn checkout(
     }
 }
 
-// ============================
-// RF-USO-04: Cancelar
-// ============================
+// ── RF-USO-03: Check-in — vehicle return (EM_CURSO → AGUARDANDO_PC) ──────
+
+pub async fn checkin(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<CheckinPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.trip_service.checkin(id, payload, user.id).await {
+        Ok(t) => (StatusCode::OK, Json(t)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => occ_response(msg),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+// ── RF-USO: Finalize (AGUARDANDO_PC → CONCLUIDA) ─────────────────────────
+
+pub async fn finalize_trip(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<FinalizeTripPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.trip_service.finalize_trip(id, payload, user.id).await {
+        Ok(t) => (StatusCode::OK, Json(t)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => occ_response(msg),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+// ── RF-ADM-06: Set conflict ───────────────────────────────────────────────
+
+pub async fn set_conflict(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<SetConflictPayload>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match state.trip_service.set_conflict(id, payload, user.id).await {
+        Ok(t) => (StatusCode::OK, Json(t)).into_response(),
+        Err(ServiceError::OptimisticLockConflict(msg)) => occ_response(msg),
+        Err(e) => (StatusCode::from(&e), e.to_string()).into_response(),
+    }
+}
+
+// ── RF-USO-04: Cancel ────────────────────────────────────────────────────
 
 pub async fn cancel_trip(
     user: CurrentUser,
