@@ -22,6 +22,11 @@ mod requisitions;
 mod suppliers;
 mod vehicle_fines;
 mod warehouse;
+mod batches;
+mod alerts;
+mod dashboard;
+mod abc_analysis;
+mod legacy_import;
 
 use crate::utils::*;
 
@@ -77,5 +82,10 @@ pub async fn seed_all_policies(enforcer: &mut Enforcer) -> Result<()> {
     fuelings::seed(enforcer).await?;
     vehicle_fines::seed(enforcer).await?;
     invoices::seed(enforcer).await?;
+    batches::seed(enforcer).await?;
+    alerts::seed(enforcer).await?;
+    dashboard::seed(enforcer).await?;
+    abc_analysis::seed(enforcer).await?;
+    legacy_import::seed(enforcer).await?;
     Ok(())
 }
