@@ -23,6 +23,7 @@ pub mod asset_management;
 pub mod trip;
 pub mod maintenance;
 pub mod report;
+pub mod financial_event;
 
 pub use auth::*;
 pub use budget_classifications::*;
@@ -49,3 +50,4 @@ pub use asset_management::*;
 pub use trip::*;
 pub use maintenance::*;
 pub use report::*;
+pub use financial_event::*;

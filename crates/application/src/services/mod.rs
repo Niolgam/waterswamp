@@ -24,3 +24,4 @@ pub mod trip_service;
 pub mod maintenance_service;
 pub mod fleet_report_service;
 pub mod inventory_service;
+pub mod financial_event_service;

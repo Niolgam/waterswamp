@@ -1,6 +1,7 @@
 use crate::errors::RepositoryError;
 use crate::models::supplier::*;
 use async_trait::async_trait;
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
 #[allow(clippy::too_many_arguments)]
@@ -48,4 +49,5 @@ pub trait SupplierRepositoryPort: Send + Sync {
         search: Option<String>,
         is_active: Option<bool>,
     ) -> Result<(Vec<SupplierWithDetailsDto>, i64), RepositoryError>;
+    async fn update_quality_score(&self, id: Uuid, score: Decimal) -> Result<(), RepositoryError>;
 }

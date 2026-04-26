@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -21,6 +22,7 @@ pub struct SupplierDto {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub is_active: bool,
+    pub quality_score: Decimal,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub created_by: Option<Uuid>,
@@ -44,6 +46,7 @@ pub struct SupplierWithDetailsDto {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub is_active: bool,
+    pub quality_score: Decimal,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

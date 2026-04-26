@@ -23,6 +23,7 @@ use application::services::stock_movement_service::StockMovementService;
 use application::services::inventory_service::InventoryService;
 use application::services::stock_transfer_service::StockTransferService;
 use application::services::warehouse_service::WarehouseService;
+use application::services::financial_event_service::FinancialEventPublisher;
 use application::services::odometer_service::OdometerService;
 use application::services::asset_management_service::AssetManagementService;
 use application::services::trip_service::TripService;
@@ -83,6 +84,7 @@ pub struct AppState {
     pub stock_transfer_service: Arc<StockTransferService>,
     pub warehouse_service: Arc<WarehouseService>,
     pub inventory_service: Arc<InventoryService>,
+    pub financial_event_publisher: Arc<FinancialEventPublisher>,
     pub odometer_service: Arc<OdometerService>,
     pub asset_management_service: Arc<AssetManagementService>,
     pub trip_service: Arc<TripService>,

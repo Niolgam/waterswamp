@@ -27,3 +27,4 @@ pub mod asset_management_repository;
 pub mod trip_repository;
 pub mod maintenance_repository;
 pub mod report_repository;
+pub mod financial_event_repository;

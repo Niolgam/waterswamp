@@ -1,4 +1,6 @@
 use crate::errors::ServiceError;
+use crate::external::comprasnet_empenho_client::ComprasnetEmpenhoClient;
+use crate::services::financial_event_service::FinancialEventPublisher;
 use crate::services::stock_movement_service::StockMovementService;
 use chrono::Utc;
 use domain::{
@@ -15,6 +17,9 @@ pub struct InvoiceService {
     invoice_repo: Arc<dyn InvoiceRepositoryPort>,
     invoice_item_repo: Arc<dyn InvoiceItemRepositoryPort>,
     stock_movement_service: Arc<StockMovementService>,
+    /// Optional Comprasnet empenho client — present when validation is configured
+    empenho_client: Option<Arc<ComprasnetEmpenhoClient>>,
+    financial_event_publisher: Option<Arc<FinancialEventPublisher>>,
 }
 
 impl InvoiceService {
@@ -29,6 +34,118 @@ impl InvoiceService {
             invoice_repo,
             invoice_item_repo,
             stock_movement_service,
+            empenho_client: None,
+            financial_event_publisher: None,
+        }
+    }
+
+    pub fn with_empenho_client(mut self, client: Arc<ComprasnetEmpenhoClient>) -> Self {
+        self.empenho_client = Some(client);
+        self
+    }
+
+    pub fn with_financial_event_publisher(
+        mut self,
+        publisher: Arc<FinancialEventPublisher>,
+    ) -> Self {
+        self.financial_event_publisher = Some(publisher);
+        self
+    }
+
+    /// Checks Comprasnet empenho balance for a commitment number (RF-030/RN-002).
+    /// Returns Ok(()) if validation is disabled, empenho is sufficient, or strict_mode=false.
+    /// Returns Err(ServiceError::BadRequest) if empenho is exceeded and strict_mode=true.
+    async fn validate_empenho_balance(
+        &self,
+        commitment_number: &str,
+        total_value: Decimal,
+        invoice_id_hint: Option<Uuid>,
+        created_by: Option<Uuid>,
+    ) -> Result<(), ServiceError> {
+        let client = match &self.empenho_client {
+            Some(c) => c,
+            None => return Ok(()),
+        };
+
+        // Check if validation is enabled in system_settings
+        let enabled: Option<bool> = sqlx::query_scalar(
+            "SELECT (value::text)::boolean FROM system_settings WHERE key = 'comprasnet.empenho_validation_enabled'",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?
+        .flatten();
+
+        if !enabled.unwrap_or(false) {
+            return Ok(());
+        }
+
+        let strict_mode: Option<bool> = sqlx::query_scalar(
+            "SELECT (value::text)::boolean FROM system_settings WHERE key = 'comprasnet.empenho_strict_mode'",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ServiceError::Internal(e.to_string()))?
+        .flatten();
+        let strict = strict_mode.unwrap_or(true);
+
+        match client.validate_empenho(commitment_number, total_value).await {
+            Ok(result) => {
+                if !result.is_sufficient {
+                    // Publish insufficiency event (fire-and-forget)
+                    if let Some(ref pub_) = self.financial_event_publisher {
+                        let _ = pub_
+                            .publish_empenho_insuficiente(
+                                commitment_number,
+                                result.available_balance,
+                                total_value,
+                            )
+                            .await;
+                    }
+                    return Err(ServiceError::BadRequest(format!(
+                        "Saldo do empenho '{}' insuficiente. \
+                         Disponível: R$ {:.2}, Solicitado: R$ {:.2} (RN-002).",
+                        commitment_number, result.available_balance, total_value
+                    )));
+                }
+
+                // Publish validation success event
+                if let Some(ref pub_) = self.financial_event_publisher {
+                    if let Some(inv_id) = invoice_id_hint {
+                        if let Some(user_id) = created_by {
+                            let _ = pub_
+                                .publish_empenho_validado(
+                                    inv_id,
+                                    commitment_number,
+                                    result.available_balance,
+                                    total_value,
+                                    user_id,
+                                )
+                                .await;
+                        }
+                    }
+                }
+
+                Ok(())
+            }
+            Err(e) => {
+                tracing::warn!(
+                    commitment_number = commitment_number,
+                    error = %e,
+                    "Comprasnet empenho API unavailable"
+                );
+                if strict {
+                    Err(ServiceError::BadRequest(format!(
+                        "Não foi possível validar o empenho '{}' na API Comprasnet: {}. \
+                         Operação bloqueada (modo estrito ativo). \
+                         Configure 'comprasnet.empenho_strict_mode=false' para modo permissivo.",
+                        commitment_number, e
+                    )))
+                } else {
+                    // Permissive mode: log and continue
+                    Ok(())
+                }
+            }
         }
     }
 
@@ -144,6 +261,20 @@ impl InvoiceService {
         }
 
         let total_value = total_products + total_freight - total_discount;
+
+        // RF-030/RN-002: Validate empenho balance via Comprasnet if commitment_number provided
+        if let Some(ref cn) = payload.commitment_number {
+            if !cn.trim().is_empty() {
+                self.validate_empenho_balance(
+                    cn.trim(),
+                    total_value,
+                    Some(invoice.id),
+                    created_by,
+                )
+                .await?;
+            }
+        }
+
         self.invoice_repo
             .recalculate_totals(invoice.id, total_products, total_value)
             .await

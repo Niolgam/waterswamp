@@ -16,6 +16,7 @@ use application::services::{
     driver_service::DriverService,
     fueling_service::FuelingService,
     geo_regions_service::GeoRegionsService,
+    financial_event_service::FinancialEventPublisher,
     invoice_adjustment_service::InvoiceAdjustmentService,
     invoice_service::InvoiceService,
     mfa_service::MfaService,
@@ -67,6 +68,7 @@ use domain::ports::{
     VehicleTransmissionTypeRepositoryPort, WarehouseRepositoryPort, WarehouseStockRepositoryPort,
 };
 use domain::ports::warehouse::{DisposalRequestRepositoryPort, InventorySessionRepositoryPort};
+use domain::ports::financial_event::FinancialEventRepositoryPort;
 use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
@@ -109,6 +111,7 @@ use persistence::repositories::{
     trip_repository::VehicleTripRepository,
     maintenance_repository::MaintenanceOrderRepository,
     report_repository::FleetReportRepository,
+    financial_event_repository::FinancialEventRepository,
     asset_management_repository::{
         VehicleDepartmentTransferRepository,
         DepreciationConfigRepository,
@@ -416,6 +419,33 @@ pub fn build_application_state(
         vehicle_fine_status_history_repo,
     ));
 
+    // Financial event repository and publisher (RF-028)
+    let financial_event_repo: Arc<dyn FinancialEventRepositoryPort> =
+        Arc::new(FinancialEventRepository::new(pool_auth.clone()));
+    let financial_event_publisher = Arc::new(FinancialEventPublisher::new(financial_event_repo));
+
+    // Comprasnet empenho client (RF-030) — optional, only when base URL is configured
+    let comprasnet_empenho_client = {
+        use application::external::ComprasnetEmpenhoClient;
+        let base_url = std::env::var("COMPRASNET_EMPENHO_API_URL")
+            .unwrap_or_default();
+        let api_token = std::env::var("COMPRASNET_EMPENHO_API_TOKEN").ok();
+        if !base_url.is_empty() {
+            match ComprasnetEmpenhoClient::new(base_url, api_token) {
+                Ok(client) => {
+                    tracing::info!("Comprasnet empenho client initialized (RF-030)");
+                    Some(Arc::new(client))
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize Comprasnet empenho client: {}. Empenho validation disabled.", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
     // Invoice repositories and service
     let invoice_repo: Arc<dyn InvoiceRepositoryPort> =
         Arc::new(InvoiceRepository::new(pool_auth.clone()));
@@ -423,18 +453,29 @@ pub fn build_application_state(
         Arc::new(InvoiceItemRepository::new(pool_auth.clone()));
     let invoice_adjustment_repo: Arc<dyn InvoiceAdjustmentRepositoryPort> =
         Arc::new(InvoiceAdjustmentRepository::new(pool_auth.clone()));
-    let invoice_service = Arc::new(InvoiceService::new(
+
+    let mut invoice_svc_builder = InvoiceService::new(
         pool_auth.clone(),
         invoice_repo.clone(),
         invoice_item_repo,
         stock_movement_service.clone(),
-    ));
-    let invoice_adjustment_service = Arc::new(InvoiceAdjustmentService::new(
-        pool_auth.clone(),
-        invoice_repo,
-        invoice_adjustment_repo,
-        stock_movement_service.clone(),
-    ));
+    )
+    .with_financial_event_publisher(financial_event_publisher.clone());
+    if let Some(ref empenho_client) = comprasnet_empenho_client {
+        invoice_svc_builder = invoice_svc_builder.with_empenho_client(empenho_client.clone());
+    }
+    let invoice_service = Arc::new(invoice_svc_builder);
+
+    let invoice_adjustment_service = Arc::new(
+        InvoiceAdjustmentService::new(
+            pool_auth.clone(),
+            invoice_repo,
+            invoice_adjustment_repo,
+            stock_movement_service.clone(),
+        )
+        .with_financial_event_publisher(financial_event_publisher.clone())
+        .with_supplier_service(supplier_service.clone()),
+    );
 
     // Warehouse repositories and service
     let warehouse_repo: Arc<dyn WarehouseRepositoryPort> =
@@ -589,6 +630,7 @@ pub fn build_application_state(
         stock_transfer_service,
         warehouse_service,
         inventory_service,
+        financial_event_publisher,
         odometer_service,
         asset_management_service,
         trip_service,

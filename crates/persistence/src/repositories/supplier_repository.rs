@@ -4,6 +4,7 @@ use domain::{
     models::supplier::*,
     ports::supplier::*,
 };
+use rust_decimal::Decimal;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -236,5 +237,17 @@ impl SupplierRepositoryPort for SupplierRepository {
             .map_err(map_db_error)?;
 
         Ok((items, total))
+    }
+
+    async fn update_quality_score(&self, id: Uuid, score: Decimal) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "UPDATE suppliers SET quality_score = $2, updated_at = NOW() WHERE id = $1",
+        )
+        .bind(id)
+        .bind(score)
+        .execute(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+        Ok(())
     }
 }

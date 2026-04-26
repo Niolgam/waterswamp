@@ -3,6 +3,7 @@ use domain::{
     models::supplier::*,
     ports::supplier::*,
 };
+use rust_decimal::Decimal;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -104,6 +105,36 @@ pub struct SupplierService {
 impl SupplierService {
     pub fn new(supplier_repo: Arc<dyn SupplierRepositoryPort>) -> Self {
         Self { supplier_repo }
+    }
+
+    /// RF-039: Applies a configurable quality penalty to the supplier after a glosa.
+    /// Default penalty: 10 points. Score is clamped to [0, 100].
+    pub async fn penalize_quality_score(&self, supplier_id: Uuid) -> Result<(), ServiceError> {
+        let current = self
+            .supplier_repo
+            .find_by_id(supplier_id)
+            .await
+            .map_err(ServiceError::from)?;
+
+        let Some(supplier) = current else {
+            return Ok(());
+        };
+
+        // Default penalty: 10 points per glosa
+        let penalty = Decimal::new(10, 0);
+        let new_score = (supplier.quality_score - penalty).max(Decimal::ZERO);
+        self.supplier_repo
+            .update_quality_score(supplier_id, new_score)
+            .await
+            .map_err(ServiceError::from)
+    }
+
+    /// RF-039: Resets the supplier quality score (e.g., after successful audit period).
+    pub async fn reset_quality_score(&self, supplier_id: Uuid) -> Result<(), ServiceError> {
+        self.supplier_repo
+            .update_quality_score(supplier_id, Decimal::new(100, 0))
+            .await
+            .map_err(ServiceError::from)
     }
 
     pub async fn create_supplier(
