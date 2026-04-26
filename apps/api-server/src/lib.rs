@@ -16,6 +16,7 @@ use application::services::{
     driver_service::DriverService,
     fueling_service::FuelingService,
     geo_regions_service::GeoRegionsService,
+    batch_service::BatchService,
     financial_event_service::FinancialEventPublisher,
     invoice_adjustment_service::InvoiceAdjustmentService,
     invoice_service::InvoiceService,
@@ -69,6 +70,7 @@ use domain::ports::{
 };
 use domain::ports::warehouse::{DisposalRequestRepositoryPort, InventorySessionRepositoryPort};
 use domain::ports::financial_event::FinancialEventRepositoryPort;
+use domain::ports::batch::{WarehouseBatchStockRepositoryPort, BatchQualityOccurrenceRepositoryPort};
 use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
@@ -112,6 +114,7 @@ use persistence::repositories::{
     maintenance_repository::MaintenanceOrderRepository,
     report_repository::FleetReportRepository,
     financial_event_repository::FinancialEventRepository,
+    batch_repository::{WarehouseBatchStockRepository, BatchQualityOccurrenceRepository},
     asset_management_repository::{
         VehicleDepartmentTransferRepository,
         DepreciationConfigRepository,
@@ -496,7 +499,7 @@ pub fn build_application_state(
     let inventory_service = Arc::new(InventoryService::new(
         pool_auth.clone(),
         inventory_session_repo,
-        warehouse_repo,
+        warehouse_repo.clone(),
         stock_movement_service.clone(),
     ));
 
@@ -505,6 +508,35 @@ pub fn build_application_state(
         pool_auth.clone(),
         stock_movement_service.clone(),
     ));
+
+    // Batch service: FEFO (RF-021) + Quality Occurrences (RF-043)
+    let batch_stock_repo: Arc<dyn WarehouseBatchStockRepositoryPort> =
+        Arc::new(WarehouseBatchStockRepository::new(pool_auth.clone()));
+    let batch_quality_repo: Arc<dyn BatchQualityOccurrenceRepositoryPort> =
+        Arc::new(BatchQualityOccurrenceRepository::new(pool_auth.clone()));
+    let batch_service = Arc::new(BatchService::new(
+        pool_auth.clone(),
+        batch_stock_repo,
+        batch_quality_repo,
+        warehouse_repo.clone(),
+    ));
+
+    // Circuit breaker registry (RF-035 — Modo Degradado)
+    use application::external::{CircuitBreaker, CircuitBreakerRegistry};
+    let cb_registry = Arc::new(CircuitBreakerRegistry::new());
+    {
+        let comprasnet_failures: u32 = 5;
+        let comprasnet_recovery: u64 = 60;
+        let cb_comprasnet = Arc::new(CircuitBreaker::new(
+            "comprasnet",
+            comprasnet_failures,
+            comprasnet_recovery,
+        ));
+        let siorg_cb = Arc::new(CircuitBreaker::new("siorg", 3, 120));
+        cb_registry.register(cb_comprasnet);
+        cb_registry.register(siorg_cb);
+    }
+    let circuit_breaker_registry = cb_registry;
 
     // Asset management service (RF-AST-06/09/10/11/12 + RF-ADM-01/02/07/08)
     let transfer_repo: Arc<dyn VehicleDepartmentTransferRepositoryPort> =
@@ -631,6 +663,8 @@ pub fn build_application_state(
         warehouse_service,
         inventory_service,
         financial_event_publisher,
+        batch_service,
+        circuit_breaker_registry,
         odometer_service,
         asset_management_service,
         trip_service,

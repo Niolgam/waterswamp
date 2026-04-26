@@ -28,3 +28,4 @@ pub mod trip_repository;
 pub mod maintenance_repository;
 pub mod report_repository;
 pub mod financial_event_repository;
+pub mod batch_repository;

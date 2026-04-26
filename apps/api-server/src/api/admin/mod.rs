@@ -1,4 +1,5 @@
 pub mod audit;
+pub mod batches;
 pub mod policies;
 pub mod requisitions;
 pub mod transfers;
@@ -44,5 +45,7 @@ pub fn router() -> Router<AppState> {
         .nest("/inventory-sessions", inventory_sessions::session_router())
         .nest("/disposal-requests", warehouses::disposal_requests_router())
         .merge(transfers::router())
+        .merge(batches::batch_router())
+        .nest("/warehouses", batches::warehouse_batch_router())
         .layer(admin_rate_limiter())
 }
