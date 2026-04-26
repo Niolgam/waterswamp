@@ -29,3 +29,7 @@ pub mod maintenance_repository;
 pub mod report_repository;
 pub mod financial_event_repository;
 pub mod batch_repository;
+pub mod alert_repository;
+pub mod dashboard_repository;
+pub mod abc_analysis_repository;
+pub mod legacy_import_repository;

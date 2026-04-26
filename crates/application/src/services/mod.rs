@@ -26,3 +26,7 @@ pub mod fleet_report_service;
 pub mod inventory_service;
 pub mod financial_event_service;
 pub mod batch_service;
+pub mod alert_service;
+pub mod dashboard_service;
+pub mod abc_analysis_service;
+pub mod legacy_import_service;

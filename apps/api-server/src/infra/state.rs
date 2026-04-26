@@ -26,6 +26,10 @@ use application::services::warehouse_service::WarehouseService;
 use application::services::financial_event_service::FinancialEventPublisher;
 use application::services::batch_service::BatchService;
 use application::services::odometer_service::OdometerService;
+use application::services::alert_service::AlertService;
+use application::services::dashboard_service::DashboardService;
+use application::services::abc_analysis_service::AbcAnalysisService;
+use application::services::legacy_import_service::LegacyImportService;
 use application::external::CircuitBreakerRegistry;
 use application::services::asset_management_service::AssetManagementService;
 use application::services::trip_service::TripService;
@@ -94,6 +98,10 @@ pub struct AppState {
     pub trip_service: Arc<TripService>,
     pub maintenance_service: Arc<MaintenanceService>,
     pub fleet_report_service: Arc<FleetReportService>,
+    pub alert_service: Arc<AlertService>,
+    pub dashboard_service: Arc<DashboardService>,
+    pub abc_analysis_service: Arc<AbcAnalysisService>,
+    pub legacy_import_service: Arc<LegacyImportService>,
     pub config: Arc<Config>,
     /// AES-256-GCM key for field-level encryption (email, MFA secrets).
     pub field_encryption_key: [u8; 32],

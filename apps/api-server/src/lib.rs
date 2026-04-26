@@ -40,6 +40,10 @@ use application::services::{
     vehicle_fine_service::VehicleFineService,
     vehicle_service::VehicleService,
     warehouse_service::WarehouseService,
+    alert_service::AlertService,
+    dashboard_service::DashboardService,
+    abc_analysis_service::AbcAnalysisService,
+    legacy_import_service::LegacyImportService,
 };
 use domain::ports::{
     AuthRepositoryPort, BudgetClassificationRepositoryPort, BuildingRepositoryPort,
@@ -71,6 +75,10 @@ use domain::ports::{
 use domain::ports::warehouse::{DisposalRequestRepositoryPort, InventorySessionRepositoryPort};
 use domain::ports::financial_event::FinancialEventRepositoryPort;
 use domain::ports::batch::{WarehouseBatchStockRepositoryPort, BatchQualityOccurrenceRepositoryPort};
+use domain::ports::alert::StockAlertRepositoryPort;
+use domain::ports::dashboard::DashboardRepositoryPort;
+use domain::ports::abc_analysis::AbcAnalysisRepositoryPort;
+use domain::ports::legacy_import::LegacyImportRepositoryPort;
 use persistence::repositories::{
     auth_repository::AuthRepository,
     budget_classifications_repository::BudgetClassificationRepository,
@@ -115,6 +123,10 @@ use persistence::repositories::{
     report_repository::FleetReportRepository,
     financial_event_repository::FinancialEventRepository,
     batch_repository::{WarehouseBatchStockRepository, BatchQualityOccurrenceRepository},
+    alert_repository::StockAlertRepository,
+    dashboard_repository::DashboardRepository,
+    abc_analysis_repository::AbcAnalysisRepository,
+    legacy_import_repository::LegacyImportRepository,
     asset_management_repository::{
         VehicleDepartmentTransferRepository,
         DepreciationConfigRepository,
@@ -619,6 +631,23 @@ pub fn build_application_state(
         vehicle_repo_for_reports,
     ));
 
+    // ÉPICO 4: Alertas, Dashboard, ABC, Legacy Import
+    let alert_repo: Arc<dyn StockAlertRepositoryPort> =
+        Arc::new(StockAlertRepository::new(pool_auth.clone()));
+    let alert_service = Arc::new(AlertService::new(alert_repo));
+
+    let dashboard_repo: Arc<dyn DashboardRepositoryPort> =
+        Arc::new(DashboardRepository::new(pool_auth.clone()));
+    let dashboard_service = Arc::new(DashboardService::new(dashboard_repo));
+
+    let abc_repo: Arc<dyn AbcAnalysisRepositoryPort> =
+        Arc::new(AbcAnalysisRepository::new(pool_auth.clone()));
+    let abc_analysis_service = Arc::new(AbcAnalysisService::new(abc_repo));
+
+    let legacy_import_repo: Arc<dyn LegacyImportRepositoryPort> =
+        Arc::new(LegacyImportRepository::new(pool_auth.clone()));
+    let legacy_import_service = Arc::new(LegacyImportService::new(legacy_import_repo));
+
     // Cache com TTL e tamanho máximo para políticas do Casbin
     let policy_cache = Cache::builder()
         .max_capacity(10_000) // Máximo 10k entries
@@ -670,6 +699,10 @@ pub fn build_application_state(
         trip_service,
         maintenance_service,
         fleet_report_service,
+        alert_service,
+        dashboard_service,
+        abc_analysis_service,
+        legacy_import_service,
         config,
         field_encryption_key: enc_key,
 

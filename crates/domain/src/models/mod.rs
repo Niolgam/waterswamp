@@ -27,6 +27,10 @@ pub mod maintenance;
 pub mod report;
 pub mod financial_event;
 pub mod batch;
+pub mod alert;
+pub mod dashboard;
+pub mod abc_analysis;
+pub mod legacy_import;
 
 pub use audit::*;
 pub use auth::*;
@@ -57,3 +61,7 @@ pub use maintenance::*;
 pub use report::*;
 pub use financial_event::*;
 pub use batch::*;
+pub use alert::*;
+pub use dashboard::*;
+pub use abc_analysis::*;
+pub use legacy_import::*;
