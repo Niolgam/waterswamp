@@ -77,13 +77,13 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
         let result = sqlx::query_as::<_, VehicleTripDto>(
             r#"
             UPDATE vehicle_trips
-            SET status      = 'APROVADA',
+            SET status       = 'APROVADA',
                 aprovado_por = $2,
                 aprovado_em  = NOW(),
                 version      = version + 1,
                 updated_by   = $2,
                 updated_at   = NOW()
-            WHERE id = $1 AND version = $3 AND status = 'PENDENTE'
+            WHERE id = $1 AND version = $3 AND status = 'SOLICITADA'
             RETURNING *
             "#,
         )
@@ -107,14 +107,14 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
         let result = sqlx::query_as::<_, VehicleTripDto>(
             r#"
             UPDATE vehicle_trips
-            SET status         = 'REJEITADA',
+            SET status          = 'REJEITADA',
                 motivo_rejeicao = $2,
                 aprovado_por    = $3,
                 aprovado_em     = NOW(),
                 version         = version + 1,
                 updated_by      = $3,
                 updated_at      = NOW()
-            WHERE id = $1 AND version = $4 AND status = 'PENDENTE'
+            WHERE id = $1 AND version = $4 AND status = 'SOLICITADA'
             RETURNING *
             "#,
         )
@@ -129,36 +129,96 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
         result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle_trip:{}", id)))
     }
 
-    async fn checkin(
+    async fn allocate(
+        &self,
+        trip_id: Uuid,
+        vehicle_id: Uuid,
+        driver_id: Uuid,
+        allocated_by: Uuid,
+        version: i32,
+    ) -> Result<VehicleTripDto, RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(map_db_error)?;
+
+        // Pessimistic lock: fail immediately if another transaction holds the lock.
+        let lock_ok = sqlx::query(
+            "SELECT id FROM vehicles WHERE id = $1 FOR UPDATE NOWAIT",
+        )
+        .bind(vehicle_id)
+        .execute(&mut *tx)
+        .await;
+
+        if lock_ok.is_err() {
+            let _ = tx.rollback().await;
+            return Err(RepositoryError::OptimisticLockConflict(
+                format!("vehicle:{} is locked by a concurrent allocation", vehicle_id),
+            ));
+        }
+
+        let update_result = sqlx::query_as::<_, VehicleTripDto>(
+            r#"
+            UPDATE vehicle_trips
+            SET status       = 'ALOCADA',
+                driver_id    = $3,
+                allocated_at = NOW(),
+                allocated_by = $4,
+                version      = version + 1,
+                updated_by   = $4,
+                updated_at   = NOW()
+            WHERE id = $1 AND version = $5 AND status = 'APROVADA'
+            RETURNING *
+            "#,
+        )
+        .bind(trip_id)
+        .bind(vehicle_id)
+        .bind(driver_id)
+        .bind(allocated_by)
+        .bind(version)
+        .fetch_optional(&mut *tx)
+        .await;
+
+        // Rollback automatically on drop if we return early.
+        let result = match update_result {
+            Ok(row) => row,
+            Err(e) => {
+                drop(tx); // triggers rollback
+                return Err(map_db_error(e));
+            }
+        };
+
+        tx.commit().await.map_err(map_db_error)?;
+
+        result.ok_or_else(|| {
+            RepositoryError::OptimisticLockConflict(format!("vehicle_trip:{}", trip_id))
+        })
+    }
+
+    async fn checkout(
         &self,
         id: Uuid,
-        driver_id: Uuid,
         odometer_departure: i64,
-        checkin_odometer_id: Option<Uuid>,
-        checkin_by: Uuid,
+        checkout_odometer_id: Option<Uuid>,
+        checkout_by: Uuid,
         version: i32,
     ) -> Result<VehicleTripDto, RepositoryError> {
         let result = sqlx::query_as::<_, VehicleTripDto>(
             r#"
             UPDATE vehicle_trips
-            SET status              = 'CHECKIN',
-                driver_id           = $2,
-                checkin_km          = $3,
-                checkin_odometer_id = $4,
-                checkin_por         = $5,
-                checkin_em          = NOW(),
-                version             = version + 1,
-                updated_by          = $5,
-                updated_at          = NOW()
-            WHERE id = $1 AND version = $6 AND status = 'APROVADA'
+            SET status               = 'EM_CURSO',
+                checkout_km          = $2,
+                checkout_odometer_id = $3,
+                checkout_por         = $4,
+                checkout_em          = NOW(),
+                version              = version + 1,
+                updated_by           = $4,
+                updated_at           = NOW()
+            WHERE id = $1 AND version = $5 AND status = 'ALOCADA'
             RETURNING *
             "#,
         )
         .bind(id)
-        .bind(driver_id)
         .bind(odometer_departure)
-        .bind(checkin_odometer_id)
-        .bind(checkin_by)
+        .bind(checkout_odometer_id)
+        .bind(checkout_by)
         .bind(version)
         .fetch_optional(&self.pool)
         .await
@@ -167,36 +227,97 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
         result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle_trip:{}", id)))
     }
 
-    async fn checkout(
+    async fn checkin(
         &self,
         id: Uuid,
         odometer_return: i64,
-        checkout_odometer_id: Option<Uuid>,
-        checkout_by: Uuid,
+        checkin_odometer_id: Option<Uuid>,
+        checkin_by: Uuid,
         notes: Option<&str>,
         version: i32,
     ) -> Result<VehicleTripDto, RepositoryError> {
         let result = sqlx::query_as::<_, VehicleTripDto>(
             r#"
             UPDATE vehicle_trips
-            SET status               = 'CONCLUIDA',
-                checkout_km          = $2,
-                checkout_odometer_id = $3,
-                checkout_por         = $4,
-                checkout_em          = NOW(),
-                notes                = COALESCE($5, notes),
-                version              = version + 1,
-                updated_by           = $4,
-                updated_at           = NOW()
-            WHERE id = $1 AND version = $6 AND status = 'CHECKIN'
+            SET status              = 'AGUARDANDO_PC',
+                checkin_km          = $2,
+                checkin_odometer_id = $3,
+                checkin_por         = $4,
+                checkin_em          = NOW(),
+                waiting_pc_at       = NOW(),
+                notes               = COALESCE($5, notes),
+                version             = version + 1,
+                updated_by          = $4,
+                updated_at          = NOW()
+            WHERE id = $1 AND version = $6 AND status = 'EM_CURSO'
             RETURNING *
             "#,
         )
         .bind(id)
         .bind(odometer_return)
-        .bind(checkout_odometer_id)
-        .bind(checkout_by)
+        .bind(checkin_odometer_id)
+        .bind(checkin_by)
         .bind(notes)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+
+        result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle_trip:{}", id)))
+    }
+
+    async fn finalize(
+        &self,
+        id: Uuid,
+        finalized_by: Uuid,
+        version: i32,
+    ) -> Result<VehicleTripDto, RepositoryError> {
+        let result = sqlx::query_as::<_, VehicleTripDto>(
+            r#"
+            UPDATE vehicle_trips
+            SET status     = 'CONCLUIDA',
+                version    = version + 1,
+                updated_by = $2,
+                updated_at = NOW()
+            WHERE id = $1 AND version = $3 AND status = 'AGUARDANDO_PC'
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(finalized_by)
+        .bind(version)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_db_error)?;
+
+        result.ok_or_else(|| RepositoryError::OptimisticLockConflict(format!("vehicle_trip:{}", id)))
+    }
+
+    async fn set_conflict(
+        &self,
+        id: Uuid,
+        reason: &str,
+        conflict_by: Uuid,
+        version: i32,
+    ) -> Result<VehicleTripDto, RepositoryError> {
+        let result = sqlx::query_as::<_, VehicleTripDto>(
+            r#"
+            UPDATE vehicle_trips
+            SET status          = 'CONFLITO_MANUAL',
+                conflict_reason = $2,
+                conflict_at     = NOW(),
+                conflict_by     = $3,
+                version         = version + 1,
+                updated_by      = $3,
+                updated_at      = NOW()
+            WHERE id = $1 AND version = $4
+              AND status NOT IN ('CONCLUIDA', 'REJEITADA', 'CANCELADA', 'CONFLITO_MANUAL')
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(reason)
+        .bind(conflict_by)
         .bind(version)
         .fetch_optional(&self.pool)
         .await
@@ -222,7 +343,8 @@ impl VehicleTripRepositoryPort for VehicleTripRepository {
                 version             = version + 1,
                 updated_by          = $3,
                 updated_at          = NOW()
-            WHERE id = $1 AND version = $4 AND status IN ('PENDENTE', 'APROVADA')
+            WHERE id = $1 AND version = $4
+              AND status IN ('SOLICITADA', 'APROVADA', 'ALOCADA')
             RETURNING *
             "#,
         )

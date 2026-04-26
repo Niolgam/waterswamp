@@ -4,6 +4,7 @@ use domain::{
     models::trip::*,
     models::vehicle::{AllocationStatus, OperationalStatus},
     models::odometer::{FonteLeitura, StatusLeitura},
+    ports::driver::DriverRepositoryPort,
     ports::trip::VehicleTripRepositoryPort,
     ports::vehicle::{VehicleRepositoryPort, VehicleStatusHistoryRepositoryPort},
     ports::odometer::OdometerReadingRepositoryPort,
@@ -15,6 +16,7 @@ use uuid::Uuid;
 pub struct TripService {
     trip_repo: Arc<dyn VehicleTripRepositoryPort>,
     vehicle_repo: Arc<dyn VehicleRepositoryPort>,
+    driver_repo: Arc<dyn DriverRepositoryPort>,
     odometer_repo: Arc<dyn OdometerReadingRepositoryPort>,
     #[allow(dead_code)]
     status_history_repo: Arc<dyn VehicleStatusHistoryRepositoryPort>,
@@ -24,10 +26,11 @@ impl TripService {
     pub fn new(
         trip_repo: Arc<dyn VehicleTripRepositoryPort>,
         vehicle_repo: Arc<dyn VehicleRepositoryPort>,
+        driver_repo: Arc<dyn DriverRepositoryPort>,
         odometer_repo: Arc<dyn OdometerReadingRepositoryPort>,
         status_history_repo: Arc<dyn VehicleStatusHistoryRepositoryPort>,
     ) -> Self {
-        Self { trip_repo, vehicle_repo, odometer_repo, status_history_repo }
+        Self { trip_repo, vehicle_repo, driver_repo, odometer_repo, status_history_repo }
     }
 
     // ── RF-USO-01: Request trip ─────────────────────────────────────────────
@@ -42,12 +45,6 @@ impl TripService {
             .await
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Veículo não encontrado".to_string()))?;
-
-        if vehicle.allocation_status != AllocationStatus::Livre {
-            return Err(ServiceError::Conflict(
-                "Veículo indisponível para programação (allocation_status ≠ LIVRE)".to_string(),
-            ));
-        }
 
         if vehicle.operational_status != OperationalStatus::Ativo {
             return Err(ServiceError::Conflict(
@@ -72,7 +69,7 @@ impl TripService {
             .map_err(ServiceError::from)
     }
 
-    // ── RF-USO-01: Approve / Reject ─────────────────────────────────────────
+    // ── RF-USO-01: Review (approve / reject) ────────────────────────────────
 
     pub async fn review_trip(
         &self,
@@ -86,9 +83,9 @@ impl TripService {
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
 
-        if trip.status != TripStatus::Pending {
+        if trip.status != TripStatus::Requested {
             return Err(ServiceError::BadRequest(
-                "Apenas viagens PENDING podem ser revisadas".to_string(),
+                "Apenas viagens SOLICITADA podem ser revisadas".to_string(),
             ));
         }
 
@@ -108,13 +105,13 @@ impl TripService {
         }
     }
 
-    // ── RF-USO-02: Checkin ──────────────────────────────────────────────────
+    // ── RF-VIG-04: Allocate trip (APROVADA → ALOCADA) ───────────────────────
 
-    pub async fn checkin(
+    pub async fn allocate_trip(
         &self,
         trip_id: Uuid,
-        payload: CheckinPayload,
-        user_id: Uuid,
+        payload: AllocateTripPayload,
+        allocator_id: Uuid,
     ) -> Result<VehicleTripDto, ServiceError> {
         let trip = self.trip_repo
             .find_by_id(trip_id)
@@ -124,16 +121,102 @@ impl TripService {
 
         if trip.status != TripStatus::Approved {
             return Err(ServiceError::BadRequest(
-                "Checkin só é possível em viagens APPROVED".to_string(),
+                "Apenas viagens APROVADA podem ser alocadas".to_string(),
             ));
         }
 
-        // Register odometer reading (source: CHECKIN_GESTOR, always VALIDATED)
+        let vehicle = self.vehicle_repo
+            .find_by_id(trip.vehicle_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or_else(|| ServiceError::NotFound("Veículo não encontrado".to_string()))?;
+
+        if vehicle.allocation_status != AllocationStatus::Livre {
+            return Err(ServiceError::Conflict(
+                "Veículo não está disponível (allocation_status ≠ LIVRE)".to_string(),
+            ));
+        }
+
+        if vehicle.operational_status != OperationalStatus::Ativo {
+            return Err(ServiceError::Conflict(
+                "Veículo inoperante — não pode ser alocado".to_string(),
+            ));
+        }
+
+        // Allocate trip with pessimistic vehicle lock (FOR UPDATE NOWAIT).
+        let allocated = self.trip_repo
+            .allocate(trip_id, trip.vehicle_id, payload.driver_id, allocator_id, payload.version)
+            .await
+            .map_err(ServiceError::from)?;
+
+        // Mark vehicle as reserved.
+        let _ = self.vehicle_repo
+            .change_allocation_status(
+                trip.vehicle_id,
+                AllocationStatus::Reservado,
+                vehicle.version,
+                Some(allocator_id),
+            )
+            .await
+            .map_err(ServiceError::from)?;
+
+        Ok(allocated)
+    }
+
+    // ── RF-USO-02: Checkout — vehicle departure (ALOCADA → EM_CURSO) ────────
+
+    pub async fn checkout(
+        &self,
+        trip_id: Uuid,
+        payload: CheckoutPayload,
+        user_id: Uuid,
+    ) -> Result<VehicleTripDto, ServiceError> {
+        let trip = self.trip_repo
+            .find_by_id(trip_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
+
+        if trip.status != TripStatus::Allocated {
+            return Err(ServiceError::BadRequest(
+                "Check-out só é possível em viagens ALOCADA".to_string(),
+            ));
+        }
+
+        // ── CA-04: Validate driver CNH (RN-FSM-02) ──────────────────────────
+        let driver_id = trip.driver_id.ok_or_else(|| {
+            ServiceError::BadRequest("Condutor não designado na viagem".to_string())
+        })?;
+
+        let driver = self.driver_repo
+            .find_by_id(driver_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or_else(|| ServiceError::NotFound("Condutor não encontrado".to_string()))?;
+
+        if !driver.is_active {
+            return Err(ServiceError::BadRequest(
+                "Condutor está inativo — check-out bloqueado".to_string(),
+            ));
+        }
+
+        // Block if CNH expires before planned return date.
+        if let Some(planned_return) = trip.planned_return {
+            let return_date = planned_return.date_naive();
+            if driver.cnh_expiration < return_date {
+                return Err(ServiceError::BadRequest(format!(
+                    "CNH do condutor vence em {} — antes do retorno previsto em {}. Check-out bloqueado.",
+                    driver.cnh_expiration, return_date
+                )));
+            }
+        }
+
+        // ── CA-03: Register odometer — source CheckoutCondutor (Peso 3) ─────
         let odometer = self.odometer_repo
             .create(
                 trip.vehicle_id,
                 Decimal::from(payload.odometer_departure),
-                FonteLeitura::CheckinGestor,
+                FonteLeitura::CheckoutCondutor,
                 Some(trip_id),
                 Utc::now(),
                 StatusLeitura::Validado,
@@ -156,9 +239,8 @@ impl TripService {
             .map_err(ServiceError::from)?;
 
         self.trip_repo
-            .checkin(
+            .checkout(
                 trip_id,
-                payload.driver_id,
                 payload.odometer_departure,
                 Some(odometer.id),
                 user_id,
@@ -168,12 +250,12 @@ impl TripService {
             .map_err(ServiceError::from)
     }
 
-    // ── RF-USO-03: Checkout ─────────────────────────────────────────────────
+    // ── RF-USO-03: Checkin — vehicle return (EM_CURSO → AGUARDANDO_PC) ──────
 
-    pub async fn checkout(
+    pub async fn checkin(
         &self,
         trip_id: Uuid,
-        payload: CheckoutPayload,
+        payload: CheckinPayload,
         user_id: Uuid,
     ) -> Result<VehicleTripDto, ServiceError> {
         let trip = self.trip_repo
@@ -182,13 +264,13 @@ impl TripService {
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
 
-        if trip.status != TripStatus::Checkin {
+        if trip.status != TripStatus::InProgress {
             return Err(ServiceError::BadRequest(
-                "Checkout só é possível em viagens em CHECKIN".to_string(),
+                "Check-in só é possível em viagens EM_CURSO".to_string(),
             ));
         }
 
-        if let Some(km_departure) = trip.checkin_km {
+        if let Some(km_departure) = trip.checkout_km {
             if payload.odometer_return < km_departure {
                 return Err(ServiceError::BadRequest(format!(
                     "odometer_return ({}) deve ser >= odometer_departure ({})",
@@ -197,12 +279,12 @@ impl TripService {
             }
         }
 
-        // Register odometer reading (source: CHECKOUT_CONDUTOR, always VALIDATED)
+        // ── CA-03: Register odometer — source CheckinCondutor (Peso 2) ──────
         let odometer = self.odometer_repo
             .create(
                 trip.vehicle_id,
                 Decimal::from(payload.odometer_return),
-                FonteLeitura::CheckoutCondutor,
+                FonteLeitura::CheckinCondutor,
                 Some(trip_id),
                 Utc::now(),
                 StatusLeitura::Validado,
@@ -225,7 +307,7 @@ impl TripService {
             .map_err(ServiceError::from)?;
 
         self.trip_repo
-            .checkout(
+            .checkin(
                 trip_id,
                 payload.odometer_return,
                 Some(odometer.id),
@@ -233,6 +315,52 @@ impl TripService {
                 payload.notes.as_deref(),
                 payload.version,
             )
+            .await
+            .map_err(ServiceError::from)
+    }
+
+    // ── RF-USO: Finalize (AGUARDANDO_PC → CONCLUIDA) ────────────────────────
+
+    pub async fn finalize_trip(
+        &self,
+        trip_id: Uuid,
+        payload: FinalizeTripPayload,
+        user_id: Uuid,
+    ) -> Result<VehicleTripDto, ServiceError> {
+        let trip = self.trip_repo
+            .find_by_id(trip_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
+
+        if trip.status != TripStatus::AwaitingAccounting {
+            return Err(ServiceError::BadRequest(
+                "Finalização só é possível em viagens AGUARDANDO_PC".to_string(),
+            ));
+        }
+
+        self.trip_repo
+            .finalize(trip_id, user_id, payload.version)
+            .await
+            .map_err(ServiceError::from)
+    }
+
+    // ── RF-ADM-06: Set manual conflict ──────────────────────────────────────
+
+    pub async fn set_conflict(
+        &self,
+        trip_id: Uuid,
+        payload: SetConflictPayload,
+        user_id: Uuid,
+    ) -> Result<VehicleTripDto, ServiceError> {
+        self.trip_repo
+            .find_by_id(trip_id)
+            .await
+            .map_err(ServiceError::from)?
+            .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
+
+        self.trip_repo
+            .set_conflict(trip_id, &payload.conflict_reason, user_id, payload.version)
             .await
             .map_err(ServiceError::from)
     }
@@ -251,10 +379,32 @@ impl TripService {
             .map_err(ServiceError::from)?
             .ok_or_else(|| ServiceError::NotFound("Viagem não encontrada".to_string()))?;
 
-        if !matches!(trip.status, TripStatus::Pending | TripStatus::Approved) {
+        if !matches!(trip.status, TripStatus::Requested | TripStatus::Approved | TripStatus::Allocated) {
             return Err(ServiceError::BadRequest(
-                "Cancelamento só é possível em viagens PENDING ou APPROVED".to_string(),
+                "Cancelamento só é possível em viagens SOLICITADA, APROVADA ou ALOCADA".to_string(),
             ));
+        }
+
+        // If the vehicle was reserved, release it back to LIVRE.
+        if trip.status == TripStatus::Allocated {
+            let vehicle = self.vehicle_repo
+                .find_by_id(trip.vehicle_id)
+                .await
+                .map_err(ServiceError::from)?;
+
+            if let Some(v) = vehicle {
+                if v.allocation_status == AllocationStatus::Reservado {
+                    let _ = self.vehicle_repo
+                        .change_allocation_status(
+                            trip.vehicle_id,
+                            AllocationStatus::Livre,
+                            v.version,
+                            Some(user_id),
+                        )
+                        .await
+                        .map_err(ServiceError::from)?;
+                }
+            }
         }
 
         self.trip_repo
@@ -263,7 +413,7 @@ impl TripService {
             .map_err(ServiceError::from)
     }
 
-    // ── RF-USO-04: Fetch and list ───────────────────────────────────────────
+    // ── Fetch and list ──────────────────────────────────────────────────────
 
     pub async fn get_trip(&self, id: Uuid) -> Result<VehicleTripDto, ServiceError> {
         self.trip_repo
